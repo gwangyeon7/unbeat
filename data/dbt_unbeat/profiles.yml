@@ -1,0 +1,7 @@
+unbeat:
+  target: dev
+  outputs:
+    dev:
+      type: duckdb
+      path: "../unbeat.duckdb"
+      threads: 4

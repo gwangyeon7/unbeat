@@ -2,3 +2,4 @@ duckdb
 pymysql
 python-dotenv
 pandas
+dbt-duckdb

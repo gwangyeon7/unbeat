@@ -1,0 +1,21 @@
+version: 2
+
+models:
+  - name: stg_events
+    description: "정제된 이벤트 staging 테이블. 모든 mart의 유일한 입력 소스."
+    columns:
+      - name: id
+        tests:
+          - unique
+          - not_null
+      - name: session_id
+        tests:
+          - not_null
+      - name: event_type
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['search', 'recommend_click']
+      - name: created_at
+        tests:
+          - not_null

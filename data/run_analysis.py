@@ -50,11 +50,27 @@ def run_cohort_retention(con):
     print(retention_pct.fillna("-").to_string())
 
 
+def run_weather_correlation(con):
+    print("\n=== 4) 외부 데이터(날씨) x 검색 활동 ===")
+    tables = [t[0] for t in con.execute("SHOW TABLES").fetchall()]
+    if "weather_daily" not in tables:
+        print("weather_daily 테이블이 없어요. fetch_weather.py를 먼저 실행하세요.")
+        return
+
+    df = con.execute(read_sql("weather_vs_search.sql")).df()
+    print(df.to_string(index=False))
+
+    if len(df) > 2:
+        corr = df["precipitation_mm"].corr(df["search_count"])
+        print(f"\n강수량 vs 검색량 상관계수: {corr:.2f} (1에 가까울수록 같이 늘고, -1에 가까울수록 반대로 움직임)")
+
+
 def main():
     con = duckdb.connect(DUCKDB_PATH, read_only=True)
     try:
         run_funnel(con)
         run_cohort_retention(con)
+        run_weather_correlation(con)
     finally:
         con.close()
 

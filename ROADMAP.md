@@ -23,7 +23,7 @@ Unbeat: Spotify API 기반으로 새로운 음악을 찾아주는 서비스.
 - [x] dbt-duckdb로 변환 레이어 구성 (staging → mart), 데이터 품질 테스트 — `dbt run`/`dbt test` 실행 확인, 테스트 13개 전부 통과
 - [x] AARRR / 퍼널 / 코호트 분석 (SQL 기반) — 검색→클릭 전환율, 주간 코호트 리텐션 확인
 - [ ] Redis로 추천 결과 캐싱
-- [ ] 외부 데이터 소스 1개 추가 연동 (날씨 API 또는 공휴일 API)
+- [x] 외부 데이터 소스 1개 추가 연동 (Open-Meteo 날씨 API, 키 불필요) — weather_daily 테이블 적재 + 검색량 상관관계 분석까지 확인
 
 ---
 

@@ -20,7 +20,7 @@ Unbeat: Spotify API 기반으로 새로운 음악을 찾아주는 서비스.
 - [x] 이벤트 로깅 추가 (검색/추천클릭 이벤트, MariaDB `unbeat.events` 테이블에 적재, 익명 session_id로 사용자 구분)
 - [x] MySQL 또는 PostgreSQL에 원본 데이터 적재 (MariaDB `unbeat.events`에 search/recommend_click 이벤트 적재 확인)
 - [x] DuckDB로 분석 웨어하우스 구축 (Snowflake 대체) — `data/etl_load.py`로 MariaDB -> DuckDB 적재 확인
-- [ ] dbt-duckdb로 변환 레이어 구성 (staging → mart), 데이터 품질 테스트
+- [x] dbt-duckdb로 변환 레이어 구성 (staging → mart), 데이터 품질 테스트 — `dbt run`/`dbt test` 실행 확인, 테스트 13개 전부 통과
 - [x] AARRR / 퍼널 / 코호트 분석 (SQL 기반) — 검색→클릭 전환율, 주간 코호트 리텐션 확인
 - [ ] Redis로 추천 결과 캐싱
 - [ ] 외부 데이터 소스 1개 추가 연동 (날씨 API 또는 공휴일 API)

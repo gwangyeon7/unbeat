@@ -1,0 +1,33 @@
+version: 2
+
+models:
+  - name: mart_session_first_seen
+    description: "세션별 첫 방문 주 (코호트 배정 기준)"
+    columns:
+      - name: session_id
+        tests:
+          - unique
+          - not_null
+      - name: cohort_week
+        tests:
+          - not_null
+
+  - name: mart_funnel_weekly
+    description: "주차별 검색->추천클릭 퍼널 전환율"
+    columns:
+      - name: week
+        tests:
+          - not_null
+      - name: click_rate_pct
+        tests:
+          - not_null
+
+  - name: mart_cohort_retention
+    description: "주간 코호트별 리텐션 원본 카운트 (앱단에서 % 변환)"
+    columns:
+      - name: cohort_week
+        tests:
+          - not_null
+      - name: weeks_since_signup
+        tests:
+          - not_null

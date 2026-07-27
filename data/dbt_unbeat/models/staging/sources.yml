@@ -1,0 +1,8 @@
+version: 2
+
+sources:
+  - name: raw
+    schema: main
+    tables:
+      - name: raw_events
+        description: "etl_load.py가 MariaDB에서 그대로 복사해온 이벤트 원본 테이블. 정제되지 않은 데이터."

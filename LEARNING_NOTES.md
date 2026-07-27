@@ -103,7 +103,22 @@
 
 ---
 
+## 6. dbt-duckdb 변환 레이어 (staging -> mart)
+
+**뭘 했나**: `data/dbt_unbeat/`에 dbt 프로젝트를 만들어서, `etl_load.py`가 그대로 복사해온 지저분한 원본(`raw_events`)을 정제된 staging 테이블로 만들고, 그 위에 분석용 mart 테이블(퍼널, 코호트)을 쌓음. 이전에 `data/sql/*.sql` + `run_analysis.py`로 만든 건 "손으로 짠 SQL 스크립트"였다면, 이번 건 그걸 dbt라는 정식 변환 프레임워크로 다시 구조화한 것.
+
+**왜 dbt를 썼나**: 페이타랩 우대사항에 "dbt를 활용한 데이터 품질 관리 및 카탈로그 구축"이 명시돼 있음. 그리고 실무적으로도, `run_analysis.py`처럼 SQL을 스크립트에 흩어놓으면 (1) 어떤 모델이 어떤 모델을 참조하는지 추적이 안 되고 (2) 데이터 품질을 검증할 방법이 없음. dbt는 이 두 문제를 `ref()`(모델 간 의존관계를 코드로 명시)와 `tests`(데이터 품질을 선언적으로 검증)로 해결함.
+
+**어떻게 동작하나**:
+- **staging 레이어** (`models/staging/stg_events.sql`): `raw_events` 원본을 정제(공백 제거, 소문자 통일)하는 단 하나의 지점. **왜 staging을 따로 두나**: mart 모델이 여러 개인데 각자 원본의 지저분함(트리밍, 캐스팅)을 처리하게 하면 로직이 중복되고, 나중에 원본 스키마가 바뀌면 모든 mart를 다 고쳐야 함. staging 하나만 원본과 맞닿게 하고, 나머지는 전부 staging만 보게 하면 변경 지점이 하나로 줄어듦.
+- **`sources.yml`**: dbt한테 "raw_events는 내가 만드는 테이블이 아니라 외부(ETL)에서 이미 만들어진 테이블"이라고 선언하는 파일. 이렇게 선언해두면 dbt가 "이 소스 테이블이 언제 마지막으로 갱신됐는지" 같은 걸 추적할 수 있음(freshness 체크, 지금은 안 썼지만 실무에서 많이 씀).
+- **mart 레이어**: `mart_session_first_seen`(세션별 첫 방문 주 = 코호트 배정 기준), `mart_funnel_weekly`(주차별 퍼널), `mart_cohort_retention`(코호트별 리텐션 원본 카운트). 전부 `{{ ref('stg_events') }}`처럼 다른 모델을 이름으로 참조 — dbt가 이 참조 관계를 보고 실행 순서(의존성 그래프, DAG)를 알아서 정함. 실제로 `dbt run` 로그를 보면 `stg_events`가 제일 먼저 만들어지고, 그다음 나머지 mart들이 만들어지는 걸 볼 수 있음.
+- **`schema.yml` 테스트**: `not_null`(빈 값 없어야 함), `unique`(중복 없어야 함), `accepted_values`(event_type이 'search'/'recommend_click' 둘 중 하나여야 함) 같은 데이터 품질 규칙을 SQL 안 짜고 YAML로 선언. `dbt test` 한 번으로 13개 규칙을 한꺼번에 검증함 — 이게 "데이터 품질 관리"의 실제 형태.
+
+**면접에서 말할 포인트**: "raw SQL 스크립트랑 dbt의 차이가 뭐냐"고 물으면 — 의존성 관리(ref)와 선언적 데이터 품질 테스트(schema.yml)가 핵심 차이라고 답하면 됨. 실제로 이 프로젝트에서 두 버전(`data/sql/` 순수 SQL 버전과 `dbt_unbeat/` dbt 버전)을 다 만들어봤기 때문에, 그 차이를 직접 겪은 경험으로 설명할 수 있음.
+
+---
+
 ## 다음에 이어서 정리할 것
-- dbt-duckdb 변환 레이어 (staging -> mart)
 - 외부 데이터 소스 1개 추가 연동
 - Kotlin/Spring Boot 서비스 (Phase 2)

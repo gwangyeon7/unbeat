@@ -1,0 +1,20 @@
+# macOS
+.DS_Store
+
+# Python (backend, data)
+venv/
+__pycache__/
+*.pyc
+.cache
+
+# 민감정보 - API 키, DB 비밀번호 등 (절대 커밋 금지)
+.env
+.env.*
+!.env.example
+
+# 생성되는 분석 데이터 파일 (스크립트로 재생성 가능)
+data/unbeat.duckdb
+
+# Node / Next.js (frontend에도 별도 .gitignore 있지만 루트에서 한 번 더 방어)
+node_modules/
+.next/

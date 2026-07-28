@@ -22,7 +22,7 @@ Unbeat: Spotify API 기반으로 새로운 음악을 찾아주는 서비스.
 - [x] DuckDB로 분석 웨어하우스 구축 (Snowflake 대체) — `data/etl_load.py`로 MariaDB -> DuckDB 적재 확인
 - [x] dbt-duckdb로 변환 레이어 구성 (staging → mart), 데이터 품질 테스트 — `dbt run`/`dbt test` 실행 확인, 테스트 13개 전부 통과
 - [x] AARRR / 퍼널 / 코호트 분석 (SQL 기반) — 검색→클릭 전환율, 주간 코호트 리텐션 확인
-- [ ] Redis로 추천 결과 캐싱
+- [x] Redis로 추천 결과 캐싱 — 브라우저에서 cached:false -> cached:true 전환 실제 확인
 - [x] 외부 데이터 소스 1개 추가 연동 (Open-Meteo 날씨 API, 키 불필요) — weather_daily 테이블 적재 + 검색량 상관관계 분석까지 확인
 
 ---
@@ -30,7 +30,7 @@ Unbeat: Spotify API 기반으로 새로운 음악을 찾아주는 서비스.
 ## Phase 2. Kotlin / Spring Boot (3~4주)
 **타겟 공고:** 바디코디, 드림어스, 포스타입
 
-- [ ] "플레이리스트/즐겨찾기" 도메인을 별도 서비스로 분리 (Spring Boot + JPA + MySQL)
+- [x] "플레이리스트/즐겨찾기" 도메인을 별도 서비스로 분리 (Spring Boot + JPA + MySQL) — 별표 클릭→즐겨찾기 저장→새로고침해도 유지 실제 확인
 - [ ] Spring Batch로 정기 배치 구현 (예: 주간 추천 갱신)
 - [ ] 구독/프리미엄 결제 모의 플로우 추가 (바디코디의 결제/정산 도메인 커버)
 - [ ] JUnit 기반 테스트 코드 작성

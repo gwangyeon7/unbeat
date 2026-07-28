@@ -18,3 +18,7 @@ spring:
     properties:
       hibernate:
         format_sql: true
+
+# 즐겨찾기 트랙의 무드/장르 태그를 가져오기 위해 Last.fm을 직접 호출할 때 씀 (LastFmTagClient)
+lastfm:
+  api-key: ${LASTFM_API_KEY:}

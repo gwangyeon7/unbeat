@@ -45,3 +45,26 @@ export function addFavorite(artistName: string, imageUrl: string | null): Promis
 export function removeFavorite(id: number): Promise<void> {
   return playlistFetch<void>(`/favorites/${id}`, { method: "DELETE" });
 }
+
+export type FavoriteTrack = {
+  id: number;
+  artistName: string;
+  trackName: string;
+  tags: string[];
+  createdAt: string;
+};
+
+export function getFavoriteTracks(): Promise<FavoriteTrack[]> {
+  return playlistFetch<FavoriteTrack[]>("/favorite-tracks");
+}
+
+export function addFavoriteTrack(artistName: string, trackName: string): Promise<FavoriteTrack> {
+  return playlistFetch<FavoriteTrack>("/favorite-tracks", {
+    method: "POST",
+    body: JSON.stringify({ artistName, trackName }),
+  });
+}
+
+export function removeFavoriteTrack(id: number): Promise<void> {
+  return playlistFetch<void>(`/favorite-tracks/${id}`, { method: "DELETE" });
+}

@@ -143,5 +143,42 @@
 
 여기까지 페이타랩/디자이노블 타겟의 Phase 1이 전부 끝남: Last.fm 연동, Next.js 프론트, MariaDB 이벤트 로깅, Redis 캐싱, DuckDB+dbt 분석 웨어하우스, AARRR/퍼널/코호트 분석, 외부 날씨 API 연동까지.
 
+---
+
+## 8. Phase 2 시작 — 즐겨찾기 서비스 (Spring Boot + Kotlin + JPA)
+
+**뭘 했나**: `playlist-service/`라는 폴더에 완전히 새로운 Spring Boot(Kotlin) 서비스를 만듦. "아티스트 즐겨찾기(찜)" 기능 하나만 담당하고, 기존 FastAPI 백엔드(포트 8000)와는 별개 프로세스로 포트 8081에서 돈다. 프론트엔드(`ArtistCard.tsx`의 별표 버튼, `page.tsx`의 "내 즐겨찾기" 목록)도 이 서비스를 호출하도록 같이 연결함.
+
+**왜 즐겨찾기부터 했나 (제품 관점)**: Unbeat은 "검색 -> 추천"만 있고 한 번 본 아티스트를 다시 찾으려면 매번 검색해야 하는 구조였음. 즐겨찾기는 사용자가 실제로 쓸 법한 자연스러운 다음 기능이고(음악 서비스에 없으면 이상한 기능), 억지로 JD 맞추려고 낀 기능이 아님 — 날씨 API 때와 같은 기준으로 먼저 "제품에 필요한가"를 통과시킨 것.
+
+**왜 이걸 Kotlin/Spring Boot로 했나 (JD 관점)**: 바디코디/드림어스/포스타입 세 공고가 공통으로 Java/Kotlin + Spring Boot + JPA + MySQL을 요구함. 기존 FastAPI에 기능만 하나 더 얹는 게 아니라, 아예 별도 서비스로 분리해서 만든 이유는 로드맵 Phase 2 목표 자체가 "폴리글랏 마이크로서비스 경험"이라서 — 한 회사 안에서도 팀/도메인마다 다른 언어 스택을 쓰는 경우가 실무에 흔하고, 그걸 미니 버전으로 직접 겪어보는 게 목적.
+
+**어떻게 동작하나**:
+- **DB는 새로 안 만들고 기존 MariaDB `unbeat` 데이터베이스를 그대로 재사용**함. 대신 테이블(`favorites`)은 이 서비스만 씀 — "서비스마다 자기 데이터는 자기가 소유한다(서비스별 데이터 소유권 분리)"는 마이크로서비스 원칙을 아주 작은 스케일로 흉내낸 것. 같은 물리 DB를 쓰긴 하지만 FastAPI 쪽 코드는 `favorites` 테이블을 절대 직접 안 건드림.
+- **엔티티/JPA**: `Favorite.kt`가 `@Entity`. `session_id + artist_name` 조합에 `@UniqueConstraint`를 걸어서 같은 아티스트를 중복 찜 못 하게 DB 레벨에서 막음. `spring.jpa.hibernate.ddl-auto: update`로 앱을 처음 띄울 때 테이블을 자동 생성 — 포트폴리오/개발 단계라 빠르게 가는 선택이고, 운영 환경이었다면 Flyway/Liquibase 같은 마이그레이션 도구로 스키마 변경 이력을 관리했을 거라는 것도 인지하고 있음.
+- **세션 식별 방식 통일**: 로그인 기능이 없는 건 FastAPI 서비스와 동일해서, 여기도 브라우저가 만든 `X-Session-Id` 헤더로 사용자를 구분함. 언어/프레임워크는 다르지만(Python/FastAPI vs Kotlin/Spring Boot) "익명 사용자를 어떻게 식별하는가"라는 설계는 서비스 전체에서 하나로 맞춤 — 이게 폴리글랏 아키텍처에서 중요한 지점(개별 서비스는 자유롭게 기술을 고르되, 서비스 간 계약(contract)은 일관되게 유지).
+- **API**: `GET /favorites`(내 즐겨찾기 목록), `POST /favorites`(추가, 이미 있으면 중복 저장 안 하고 기존 걸 그대로 반환 — 멱등하게 설계해서 프론트에서 실수로 두 번 눌러도 안전), `DELETE /favorites/{id}`(삭제, 근데 요청자의 session_id랑 실제 소유자가 다르면 거부 — 로그인은 없지만 최소한의 "내 것만 지울 수 있다"는 소유권 체크는 넣음).
+- **레이어 구조**: Controller(HTTP 요청/응답만 담당) -> Service(비즈니스 로직: 중복 체크, 소유권 체크) -> Repository(Spring Data JPA가 자동 구현하는 DB 접근 인터페이스). Spring Boot의 표준 3계층 구조를 그대로 따름.
+- **JUnit 테스트**: `FavoriteServiceTest.kt`에 Service 계층 단위 테스트 3개 작성 — "중복 추가 시 기존 것 반환", "새 아티스트는 저장", "다른 세션은 삭제 불가". Repository는 Mockito로 가짜(mock) 객체를 만들어서, 실제 DB 없이도 비즈니스 로직만 빠르게 검증할 수 있게 함 (단위 테스트의 핵심: 외부 의존성을 격리).
+- **프론트 연결**: `frontend/lib/playlistApi.ts`를 `lib/api.ts`와 별도로 만듦 — 이유는 위와 같은 논리로, 이 프론트가 결국 서로 다른 두 백엔드(FastAPI 8000, Spring Boot 8081)를 호출한다는 걸 코드 구조로도 드러내기 위함. `ArtistCard.tsx`의 별표 버튼을 누르면 `page.tsx`의 `handleToggleFavorite`가 이미 찜한 상태인지 보고 추가/삭제를 알아서 판단.
+- **장애 격리**: 즐겨찾기 목록을 못 불러와도(`playlist-service`가 꺼져있어도) 검색/추천 같은 핵심 기능은 그대로 동작하게 만듦 (`useEffect`에서 `getFavorites()` 실패를 조용히 무시) — Redis/이벤트로깅 때와 같은 원칙: 부가 기능의 장애가 핵심 기능을 끌고 내려가면 안 됨.
+
+**라이브 검증 완료**: IntelliJ에서 실행 중 두 가지 실제 이슈를 겪고 고쳤음 —
+1. IntelliJ 2025.3.1이 최신 Gradle 9를 쓰는데, `io.spring.dependency-management`(1.1.4, 2024년 말 릴리즈)가 Gradle 9의 내부 API 변경(`LenientConfiguration`)이랑 안 맞아서 동기화가 깨짐. 그 플러그인을 빼고 Gradle 기본 `platform()` 기능으로 Spring Boot BOM을 직접 끌어오는 방식으로 교체, Spring Boot도 Gradle 9를 정식 지원하는 4.1.0으로 올려서 해결.
+2. Hibernate가 "Unable to determine Dialect without JDBC metadata" 에러를 냄 — MariaDB가 JDBC 메타데이터에 자기 버전을 MySQL 호환 형식(`5.5.5-MariaDB-...`)으로 보고하는데, 최신 Hibernate의 자동 dialect 감지가 이걸 못 알아채는 문제. `spring.jpa.database-platform`을 `org.hibernate.dialect.MariaDBDialect`로 명시해서 해결.
+
+그 다음 프론트(3000)+백엔드(FastAPI, 8000)+playlist-service(8081)를 다 띄우고, 브라우저에서 "아이유" 검색 → 별표 클릭 → ★로 바뀜 → 새로고침해도 "내 즐겨찾기"에 유지되는 것까지 실제로 확인함.
+
+**면접에서 말할 포인트 추가**: "최신 버전 스택을 쓸 때 라이브러리 간 호환성 문제를 어떻게 진단했나"라는 질문에 실제 사례로 답할 수 있음 — 에러 메시지(NoSuchMethodError, 특정 API 이름)를 보고 "어떤 두 컴포넌트의 버전이 서로 안 맞는지"를 추론한 다음, 최신 버전으로 맞춰 올리거나(Spring Boot) 아예 그 레이어를 걷어내고 더 기본적인 방식(Gradle 네이티브 platform())으로 우회하는 두 가지 해결 전략을 각각 언제 쓰는지 설명하면 좋음.
+
+**면접에서 말할 포인트**:
+- "왜 기존 FastAPI에 안 붙이고 새 서비스로 분리했나" -> 폴리글랏 마이크로서비스 경험을 의도적으로 쌓으려는 선택이었다고 설명.
+- "두 서비스가 같은 DB를 쓰는데 문제 없나" -> 지금은 포트폴리오 규모라 같은 물리 DB를 공유하지만, 테이블 단위로 소유권을 나눠서 서로 남의 테이블을 안 건드리게 설계했고, 서비스가 커지면 DB 자체도 분리하는 게 정석이라는 것까지 같이 설명하면 좋음.
+- "멱등성을 왜 신경썼나" -> 프론트에서 버튼 연타/네트워크 재시도 같은 상황에서도 데이터가 깨지지 않게 하려고.
+
+---
+
 ## 다음에 이어서 정리할 것
-- Kotlin/Spring Boot 서비스 (Phase 2) — 플레이리스트/즐겨찾기, Spring Batch, 결제 모의 플로우
+- 즐겨찾기 서비스 라이브 검증 완료되면 로드맵 체크 + 결과 기록
+- Spring Batch로 정기 배치 (Phase 2 다음 항목)
+- 구독/결제 모의 플로우, JUnit 테스트 확장

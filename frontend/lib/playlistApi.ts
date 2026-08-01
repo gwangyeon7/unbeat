@@ -51,20 +51,32 @@ export type FavoriteTrack = {
   artistName: string;
   trackName: string;
   tags: string[];
+  url: string | null;
   createdAt: string;
+  lastOpenedAt: string | null;
 };
 
 export function getFavoriteTracks(): Promise<FavoriteTrack[]> {
   return playlistFetch<FavoriteTrack[]>("/favorite-tracks");
 }
 
-export function addFavoriteTrack(artistName: string, trackName: string): Promise<FavoriteTrack> {
+export function addFavoriteTrack(
+  artistName: string,
+  trackName: string,
+  trackUrl: string | null
+): Promise<FavoriteTrack> {
   return playlistFetch<FavoriteTrack>("/favorite-tracks", {
     method: "POST",
-    body: JSON.stringify({ artistName, trackName }),
+    body: JSON.stringify({ artistName, trackName, trackUrl }),
   });
 }
 
 export function removeFavoriteTrack(id: number): Promise<void> {
   return playlistFetch<void>(`/favorite-tracks/${id}`, { method: "DELETE" });
+}
+
+// 즐겨찾기한 곡 카드를 클릭해서 원곡 링크로 나갈 때 "재생 의도" 신호로 기록.
+// 나중에 "몇 개월간 안 열어본 곡" 자동 분류 배치의 입력 데이터가 됨.
+export function markFavoriteTrackOpened(id: number): Promise<FavoriteTrack> {
+  return playlistFetch<FavoriteTrack>(`/favorite-tracks/${id}/open`, { method: "PATCH" });
 }

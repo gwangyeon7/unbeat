@@ -4,6 +4,8 @@ import com.unbeat.playlist.favoritetrack.dto.FavoriteTrackRequest
 import com.unbeat.playlist.lastfm.LastFmTagClient
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertNotNull
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Test
 import org.mockito.Mockito.never
 import org.mockito.kotlin.any
@@ -76,5 +78,30 @@ class FavoriteTrackServiceTest {
 
         assertFalse(removed)
         verify(repository, never()).delete(any<FavoriteTrack>())
+    }
+
+    @Test
+    fun `즐겨찾기 곡을 클릭하면 lastOpenedAt이 갱신된다`() {
+        val track = FavoriteTrack(sessionId = "s1", artistName = "IU", trackName = "Blueming")
+            .apply { id = 1L }
+        whenever(repository.findById(1L)).thenReturn(Optional.of(track))
+        whenever(repository.save(any())).thenAnswer { it.arguments[0] }
+
+        val result = service.markOpened("s1", 1L)
+
+        assertNotNull(result)
+        assertNotNull(result!!.lastOpenedAt)
+    }
+
+    @Test
+    fun `다른 세션의 즐겨찾기 곡은 open으로 갱신할 수 없다`() {
+        val track = FavoriteTrack(sessionId = "owner", artistName = "IU", trackName = "Blueming")
+            .apply { id = 1L }
+        whenever(repository.findById(1L)).thenReturn(Optional.of(track))
+
+        val result = service.markOpened("stranger", 1L)
+
+        assertNull(result)
+        verify(repository, never()).save(any())
     }
 }

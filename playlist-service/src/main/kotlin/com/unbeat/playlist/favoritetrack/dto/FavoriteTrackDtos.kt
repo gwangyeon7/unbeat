@@ -2,7 +2,8 @@ package com.unbeat.playlist.favoritetrack.dto
 
 data class FavoriteTrackRequest(
     val artistName: String,
-    val trackName: String
+    val trackName: String,
+    val trackUrl: String? = null
 )
 
 data class FavoriteTrackResponse(
@@ -10,5 +11,7 @@ data class FavoriteTrackResponse(
     val artistName: String,
     val trackName: String,
     val tags: List<String>,
-    val createdAt: String
+    val url: String?,
+    val createdAt: String,
+    val lastOpenedAt: String?
 )

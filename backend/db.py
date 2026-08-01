@@ -49,3 +49,30 @@ def log_event(session_id: str, event_type: str, artist_name: str, result_count: 
                 )
     except Exception as e:
         print(f"[event-log] 이벤트 적재 실패 (무시하고 진행): {e}")
+
+
+def get_recent_searches(session_id: str, limit: int = 5) -> list:
+    """이 세션이 최근 검색한 아티스트명을 최신순 중복 없이 가져옴 (사이드바 '최근 검색' 위젯용).
+
+    같은 아티스트를 여러 번 검색했으면 가장 최근 것만 남기기 위해
+    아티스트별 최신 검색 시각으로 그룹핑한 뒤 정렬한다.
+    """
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT artist_name, MAX(created_at) AS last_searched_at
+                    FROM events
+                    WHERE session_id = %s AND event_type = 'search'
+                    GROUP BY artist_name
+                    ORDER BY last_searched_at DESC
+                    LIMIT %s
+                    """,
+                    (session_id, limit),
+                )
+                rows = cursor.fetchall()
+                return [row["artist_name"] for row in rows]
+    except Exception as e:
+        print(f"[recent-searches] 조회 실패 (빈 목록으로 대체): {e}")
+        return []

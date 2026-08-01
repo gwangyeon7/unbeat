@@ -24,7 +24,7 @@ export default function SearchBar({ onSearch, isLoading }: SearchBarProps) {
         type="text"
         value={value}
         onChange={(e) => setValue(e.target.value)}
-        placeholder="아티스트 이름을 검색해보세요 (예: 아이유)"
+        placeholder="아티스트 또는 곡 제목을 검색해보세요 (예: 아이유, Blueming)"
         className="flex-1 rounded-lg border border-white/10 bg-white/5 px-4 py-3 text-sm outline-none focus:border-accent"
       />
       <button

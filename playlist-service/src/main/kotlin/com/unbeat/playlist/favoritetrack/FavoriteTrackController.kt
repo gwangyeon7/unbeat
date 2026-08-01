@@ -5,6 +5,7 @@ import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.DeleteMapping
 import org.springframework.web.bind.annotation.GetMapping
+import org.springframework.web.bind.annotation.PatchMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
@@ -36,6 +37,21 @@ class FavoriteTrackController(private val favoriteTrackService: FavoriteTrackSer
     ): ResponseEntity<Any> {
         val removed = favoriteTrackService.remove(sessionId, id)
         return if (removed) ResponseEntity.noContent().build()
+        else ResponseEntity.status(HttpStatus.NOT_FOUND).build()
+    }
+
+    /**
+     * 즐겨찾기한 곡 카드를 눌러 원곡 링크로 나갈 때 프론트에서 호출.
+     * "재생" 자체는 관측 불가능하니 이 클릭을 재생 의도 신호로 기록해서,
+     * 나중에 "안 듣는 곡" 자동 분류 배치의 입력으로 쓴다.
+     */
+    @PatchMapping("/{id}/open")
+    fun markOpened(
+        @RequestHeader("X-Session-Id") sessionId: String,
+        @PathVariable id: Long
+    ): ResponseEntity<Any> {
+        val response = favoriteTrackService.markOpened(sessionId, id)
+        return if (response != null) ResponseEntity.ok(response)
         else ResponseEntity.status(HttpStatus.NOT_FOUND).build()
     }
 }

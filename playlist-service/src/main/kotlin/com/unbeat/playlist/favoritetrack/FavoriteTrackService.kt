@@ -4,6 +4,7 @@ import com.unbeat.playlist.favoritetrack.dto.FavoriteTrackRequest
 import com.unbeat.playlist.favoritetrack.dto.FavoriteTrackResponse
 import com.unbeat.playlist.lastfm.LastFmTagClient
 import org.springframework.stereotype.Service
+import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 
 @Service
@@ -33,7 +34,8 @@ class FavoriteTrackService(
                 sessionId = sessionId,
                 artistName = request.artistName,
                 trackName = request.trackName,
-                tags = tags.joinToString(",").ifBlank { null }
+                tags = tags.joinToString(",").ifBlank { null },
+                url = request.trackUrl
             )
         )
         return saved.toResponse()
@@ -46,11 +48,24 @@ class FavoriteTrackService(
         return true
     }
 
+    /**
+     * 즐겨찾기한 곡 카드를 클릭해서 원곡 링크로 나갈 때 호출됨 — "재생 의도" 신호를 기록.
+     * 다른 세션 소유 곡을 갱신 못 하게 소유권 체크는 remove()와 동일하게 적용.
+     */
+    fun markOpened(sessionId: String, favoriteTrackId: Long): FavoriteTrackResponse? {
+        val track = favoriteTrackRepository.findById(favoriteTrackId).orElse(null) ?: return null
+        if (track.sessionId != sessionId) return null
+        track.lastOpenedAt = LocalDateTime.now()
+        return favoriteTrackRepository.save(track).toResponse()
+    }
+
     private fun FavoriteTrack.toResponse() = FavoriteTrackResponse(
         id = id!!,
         artistName = artistName,
         trackName = trackName,
         tags = tags?.split(",")?.filter { it.isNotBlank() } ?: emptyList(),
-        createdAt = createdAt.format(DateTimeFormatter.ISO_LOCAL_DATE_TIME)
+        url = url,
+        createdAt = createdAt.format(DateTimeFormatter.ISO_LOCAL_DATE_TIME),
+        lastOpenedAt = lastOpenedAt?.format(DateTimeFormatter.ISO_LOCAL_DATE_TIME)
     )
 }

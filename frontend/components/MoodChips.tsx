@@ -18,12 +18,14 @@ type MoodChipsProps = {
 
 export default function MoodChips({ selectedTag, onSelect }: MoodChipsProps) {
   return (
-    <div className="flex w-full max-w-xl flex-wrap gap-2">
+    // flex-wrap이었을 때 칩 8개가 한 줄에 다 안 들어가서 마지막("출퇴근길") 하나만 다음 줄에
+    // 외로이 떨어지는 게 어색하다는 피드백 -> 유튜브 뮤직처럼 한 줄 가로 스크롤로 변경
+    <div className="flex w-full max-w-xl gap-2 overflow-x-auto pb-1">
       {MOODS.map((mood) => (
         <button
           key={mood.tag}
           onClick={() => onSelect(mood.tag)}
-          className={`rounded-full border px-4 py-2 text-sm transition ${
+          className={`shrink-0 rounded-full border px-4 py-2 text-sm transition ${
             selectedTag === mood.tag
               ? "border-accent bg-accent/10 text-accent"
               : "border-white/10 bg-white/5 hover:border-white/30"

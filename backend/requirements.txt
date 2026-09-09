@@ -5,3 +5,17 @@ requests
 pymysql
 redis
 rapidfuzz
+anthropic
+# 띄어쓰기 없는 한글 검색어 교정용(§45). PyPI에 없어서 git URL로 설치 — TensorFlow/Keras를
+# 딸려오는 무거운 패키지라(설치 용량 ~300MB) 설치가 오래 걸릴 수 있음, 정상.
+# PyKoSpacing의 setup.py가 macOS(Darwin)에서는 의도적으로 의존성 목록을 빈 리스트로 반환하게
+# 만들어져 있어서(Apple Silicon TensorFlow 설치 이슈를 우회하려는 것으로 보임), Mac에서
+# `pip install`을 돌리면 numpy/tensorflow가 하나도 안 깔리고 pykospacing만 설치되는 함정이
+# 있음 — 직접 겪어서 확인함. 그래서 여기서 numpy/tensorflow를 명시적으로 먼저 선언해둠.
+numpy
+tensorflow
+git+https://github.com/haven-jeon/PyKoSpacing.git
+
+# 띄어쓰기 없는 영문 검색어 교정용(§52) — 위 PyKoSpacing의 영문 버전. PyPI에 있고 순수 파이썬
+# (영어 단어 빈도 목록 하나만 내장, TensorFlow 같은 무거운 의존성 없음)이라 설치가 훨씬 가벼움.
+wordninja

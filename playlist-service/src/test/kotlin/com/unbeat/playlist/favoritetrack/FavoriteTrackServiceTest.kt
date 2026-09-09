@@ -12,6 +12,7 @@ import org.mockito.kotlin.any
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
+import java.time.LocalDateTime
 import java.util.Optional
 
 class FavoriteTrackServiceTest {
@@ -103,5 +104,37 @@ class FavoriteTrackServiceTest {
 
         assertNull(result)
         verify(repository, never()).save(any())
+    }
+
+    @Test
+    fun `lastOpenedAt이 기준보다 오래됐으면 정리 후보에 포함된다`() {
+        val stale = FavoriteTrack(
+            sessionId = "s1", artistName = "IU", trackName = "Blueming",
+            lastOpenedAt = LocalDateTime.now().minusMonths(7)
+        ).apply { id = 1L }
+        val recent = FavoriteTrack(
+            sessionId = "s1", artistName = "IVE", trackName = "LOVE DIVE",
+            lastOpenedAt = LocalDateTime.now().minusMonths(1)
+        ).apply { id = 2L }
+        whenever(repository.findBySessionIdOrderByCreatedAtDesc("s1")).thenReturn(listOf(stale, recent))
+
+        val result = service.findStale("s1", months = 6)
+
+        assertEquals(1, result.size)
+        assertEquals(1L, result[0].id)
+    }
+
+    @Test
+    fun `lastOpenedAt이 없으면 즐겨찾기한 시점(createdAt)을 기준으로 판단한다`() {
+        val neverOpenedButOld = FavoriteTrack(
+            sessionId = "s1", artistName = "잔나비", trackName = "주저하는 연인들을 위해",
+            createdAt = LocalDateTime.now().minusMonths(8), lastOpenedAt = null
+        ).apply { id = 3L }
+        whenever(repository.findBySessionIdOrderByCreatedAtDesc("s1")).thenReturn(listOf(neverOpenedButOld))
+
+        val result = service.findStale("s1", months = 6)
+
+        assertEquals(1, result.size)
+        assertEquals(3L, result[0].id)
     }
 }

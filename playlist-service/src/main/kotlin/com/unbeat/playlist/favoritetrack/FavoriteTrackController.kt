@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestHeader
 import org.springframework.web.bind.annotation.RequestMapping
+import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
 
 @RestController
@@ -20,6 +21,15 @@ class FavoriteTrackController(private val favoriteTrackService: FavoriteTrackSer
     @GetMapping
     fun list(@RequestHeader("X-Session-Id") sessionId: String) =
         favoriteTrackService.list(sessionId)
+
+    // "즐겨찾기했는데 오래 안 들은 곡"을 찾아서 사용자에게 지워도 될지 물어보는 정리 기능용.
+    // 기본 6개월 — "몇 달이 적당한가"는 정답이 없는 판단이라, 무작정 정한 값이 아니라
+    // 나중에 조정할 여지를 남기려고 쿼리 파라미터로 뺌(프론트는 지금은 6으로만 호출).
+    @GetMapping("/stale")
+    fun stale(
+        @RequestHeader("X-Session-Id") sessionId: String,
+        @RequestParam(defaultValue = "6") months: Long
+    ) = favoriteTrackService.findStale(sessionId, months)
 
     @PostMapping
     fun add(

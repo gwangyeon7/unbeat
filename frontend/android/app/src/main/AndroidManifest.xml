@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <application
+        android:allowBackup="true"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@style/AppTheme">
+
+        <activity
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode|navigation|density"
+            android:name=".MainActivity"
+            android:label="@string/title_activity_main"
+            android:theme="@style/AppTheme.NoActionBarLaunch"
+            android:launchMode="singleTask"
+            android:exported="true">
+
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+        </activity>
+
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths"></meta-data>
+        </provider>
+
+        <!-- cordova-plugin-background-mode(LEARNING_NOTES SS72)이 자기 모듈 manifest에 이
+             서비스를 foregroundServiceType 없이 선언하는데, targetSdkVersion 36(API 34+ 규칙)
+             에서는 그 타입이 없는 포그라운드 서비스를 시작하면 MissingForegroundServiceTypeException
+             으로 즉시 죽음. 같은 android:name으로 여기서 다시 선언해서 매니페스트 병합 시 이
+             속성이 합쳐지게 함(플러그인 소스를 직접 못 고치니 앱 매니페스트에서 덮어쓰는 방법). -->
+        <service
+            android:name="de.appplant.cordova.plugin.background.ForegroundService"
+            android:foregroundServiceType="mediaPlayback" />
+
+        <!-- (§73 추가) 실제 유튜브 iframe 재생을 담당하는 우리 자체 포그라운드 서비스.
+             cordova-plugin-background-mode의 서비스는 이제 알림 용도로도 안 씀(중복 알림
+             방지 — MiniPlayer.tsx에서 backgroundMode.enable/disable 호출을 제거함). -->
+        <service
+            android:name=".PlaybackService"
+            android:foregroundServiceType="mediaPlayback"
+            android:exported="false" />
+    </application>
+
+    <!-- Permissions -->
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <!-- 위 서비스가 mediaPlayback 타입이라고 선언했으니, 그 타입을 실제로 쓸 수 있다는 권한도
+         API 34+에서 별도로 명시해야 함 (FOREGROUND_SERVICE 자체는 cordova-plugin-background-mode
+         모듈 매니페스트에 이미 있지만, 타입별 권한은 앱 쪽에서 추가해야 함) -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <!-- (§72 추가) Android 13(API 33)부터는 알림을 "보여주는" 것 자체에 런타임 권한이 필요함.
+         이게 없으면 enable()이 에러 없이 성공해도 알림이 그냥 조용히 안 뜸(포그라운드 서비스
+         자체는 살아있지만 알림바에는 안 보임). MainActivity에서 앱 시작 시 이 권한을 요청함. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+</manifest>

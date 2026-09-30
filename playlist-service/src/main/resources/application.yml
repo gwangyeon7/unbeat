@@ -1,12 +1,24 @@
 server:
-  port: 8081
+  # Render는 컨테이너가 바인딩할 포트를 PORT 환경변수로 내려주므로(고정된 8081을 못 씀),
+  # 없으면(로컬 개발) 기존 기본값 8081을 그대로 씀.
+  port: ${PORT:8081}
 
 spring:
   datasource:
-    url: jdbc:mysql://127.0.0.1:3306/unbeat?useSSL=false&serverTimezone=Asia/Seoul&characterEncoding=UTF-8
+    # 예전엔 호스트/포트가 127.0.0.1:3306으로 하드코딩돼 있었는데, Render처럼 DB가 다른
+    # 컨테이너/호스트에서 도는 배포 환경에서는 그대로 못 씀 — DB_HOST/DB_PORT를 환경변수로
+    # 받고 로컬 개발 기본값만 127.0.0.1:3306으로 유지.
+    url: jdbc:mysql://${DB_HOST:127.0.0.1}:${DB_PORT:3306}/${DB_NAME:unbeat}?useSSL=false&serverTimezone=Asia/Seoul&characterEncoding=UTF-8
     username: ${DB_USER:unbeat}
     password: ${DB_PASSWORD:}
     driver-class-name: com.mysql.cj.jdbc.Driver
+    hikari:
+      # Render 배포 초기(컨테이너 막 기동 직후)에 DB가 순간적으로 응답이 늦어서 첫 연결
+      # 시도가 실패하면 기본 설정으론 앱 전체가 죽어버림 — initialization-fail-timeout을
+      # -1로 주면 첫 연결이 실패해도 앱은 정상적으로 뜨고, 이후 실제 쿼리가 들어올 때
+      # 백그라운드에서 계속 재시도함. 일시적인 연결 문제 때문에 컨테이너가 죽는 걸 방지.
+      initialization-fail-timeout: -1
+      connection-timeout: 30000
   jpa:
     # MariaDB가 JDBC 메타데이터에 자기 버전을 MySQL 호환 형식(5.5.5-MariaDB-...)으로 보고하는데,
     # 최신 Hibernate의 자동 dialect 감지가 이걸 못 알아채서 방언을 명시적으로 지정해줘야 함.

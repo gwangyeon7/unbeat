@@ -16,11 +16,12 @@ services:
     name: unbeat-backend
     runtime: docker
     rootDir: backend
-    # dockerfilePath/dockerContext는 기본값이 "저장소 루트" 기준이라(rootDir를 따라가지 않음),
-    # 모노레포에서 이 서비스만의 하위 폴더를 빌드 컨텍스트로 쓰려면 명시적으로 지정해야 함.
-    # backend/Dockerfile 안의 COPY 구문들이 backend/ 자체를 컨텍스트로 가정하고 쓰여 있음.
-    dockerfilePath: backend/Dockerfile
-    dockerContext: backend
+    # rootDir을 지정하면 dockerfilePath/dockerContext는 "저장소 루트"가 아니라
+    # rootDir 기준 상대경로로 다시 계산된다(실제 배포 시 backend/backend로 겹쳐서 실패하는 걸
+    # 확인함 - 예전 주석은 반대로 잘못 가정하고 있었음). 그래서 rootDir 안에서부터의
+    # 상대경로만 적어야 한다.
+    dockerfilePath: Dockerfile
+    dockerContext: .
     plan: free
     region: singapore
     healthCheckPath: /
@@ -80,8 +81,9 @@ services:
     name: unbeat-playlist
     runtime: docker
     rootDir: playlist-service
-    dockerfilePath: playlist-service/Dockerfile
-    dockerContext: playlist-service
+    # backend 서비스와 같은 이유로 rootDir 기준 상대경로로 수정.
+    dockerfilePath: Dockerfile
+    dockerContext: .
     plan: free
     region: singapore
     healthCheckPath: /actuator/health

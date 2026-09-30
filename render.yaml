@@ -130,6 +130,10 @@ services:
       mountPath: /var/lib/mysql
       sizeGB: 1
     envVars:
+      # Render는 pserv의 포트를 명시 안 하면 다른 서비스가 fromService로 가져가는
+      # property: port 값이 MariaDB 실제 포트(3306)와 안 맞아 Connection refused가 남.
+      - key: PORT
+        value: 3306
       - key: MARIADB_DATABASE
         value: unbeat
       - key: MARIADB_USER

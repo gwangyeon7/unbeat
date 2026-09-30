@@ -26,16 +26,13 @@ services:
     region: singapore
     healthCheckPath: /
     envVars:
+      # fromService(property: host/port)로 가져오는 값이 Blueprint sync 타이밍에 따라
+      # 갱신이 안 되는 문제를 겪어서(대시보드에서 확인해보니 실제 주소가
+      # unbeat-mariadb:3306으로 고정이라), 아예 고정값으로 직접 박아넣음.
       - key: DB_HOST
-        fromService:
-          name: unbeat-mariadb
-          type: pserv
-          property: host
+        value: unbeat-mariadb
       - key: DB_PORT
-        fromService:
-          name: unbeat-mariadb
-          type: pserv
-          property: port
+        value: "3306"
       - key: DB_USER
         fromService:
           name: unbeat-mariadb
@@ -88,16 +85,13 @@ services:
     region: singapore
     healthCheckPath: /actuator/health
     envVars:
+      # fromService(property: host/port)로 가져오는 값이 Blueprint sync 타이밍에 따라
+      # 갱신이 안 되는 문제를 겪어서(대시보드에서 확인해보니 실제 주소가
+      # unbeat-mariadb:3306으로 고정이라), 아예 고정값으로 직접 박아넣음.
       - key: DB_HOST
-        fromService:
-          name: unbeat-mariadb
-          type: pserv
-          property: host
+        value: unbeat-mariadb
       - key: DB_PORT
-        fromService:
-          name: unbeat-mariadb
-          type: pserv
-          property: port
+        value: "3306"
       - key: DB_USER
         fromService:
           name: unbeat-mariadb

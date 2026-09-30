@@ -34,3 +34,12 @@ spring:
 # 즐겨찾기 트랙의 무드/장르 태그를 가져오기 위해 Last.fm을 직접 호출할 때 씀 (LastFmTagClient)
 lastfm:
   api-key: ${LASTFM_API_KEY:}
+
+# Render의 healthCheckPath(/actuator/health)가 기본 설정으론 DB 연결까지 확인하는데,
+# DB 연결이 간헐적으로 끊기는 상황에서 헬스체크마다 걸려서 배포 자체가 "Timed Out"으로
+# 실패하는 문제가 있었음 — 헬스체크에서 DB 체크를 빼서 앱만 떠있으면 배포가 통과되게 함.
+# (DB 연결 자체는 hikari.initialization-fail-timeout=-1 덕분에 앱을 안 죽이고 계속 재시도함)
+management:
+  health:
+    db:
+      enabled: false

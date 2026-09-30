@@ -1,0 +1,146 @@
+# unbeat 백엔드 배포용 Render Blueprint.
+#
+# 사용법: Render 대시보드 -> New -> Blueprint -> 이 저장소 선택 -> render.yaml 자동 인식.
+# `sync: false`로 표시된 값은 여기 안 적혀 있고, Blueprint 최초 생성 시 대시보드에서
+# 직접 입력해야 함(API 키를 git에 커밋하지 않기 위함) — LASTFM_API_KEY 등은 backend/.env에
+# 있는 실제 값을 그대로 옮겨 입력하면 됨.
+#
+# 비용: unbeat-backend/unbeat-playlist/unbeat-redis는 plan: free라 0원.
+# unbeat-mariadb만 퍼시스턴트 디스크가 필요해서 유료 최소 플랜(0.5c-512mb, 예전 이름
+# "starter")을 써야 함 — 대략 월 $7 수준. (Render는 디스크가 무료 플랜에서 아예 지원 안 됨,
+# https://render.com/docs/disks 참고)
+
+services:
+  # FastAPI 메인 백엔드 (검색/추천/무드탐색/이벤트 로깅) — backend/Dockerfile로 빌드
+  - type: web
+    name: unbeat-backend
+    runtime: docker
+    rootDir: backend
+    # dockerfilePath/dockerContext는 기본값이 "저장소 루트" 기준이라(rootDir를 따라가지 않음),
+    # 모노레포에서 이 서비스만의 하위 폴더를 빌드 컨텍스트로 쓰려면 명시적으로 지정해야 함.
+    # backend/Dockerfile 안의 COPY 구문들이 backend/ 자체를 컨텍스트로 가정하고 쓰여 있음.
+    dockerfilePath: backend/Dockerfile
+    dockerContext: backend
+    plan: free
+    region: singapore
+    healthCheckPath: /
+    envVars:
+      - key: DB_HOST
+        fromService:
+          name: unbeat-mariadb
+          type: pserv
+          property: host
+      - key: DB_PORT
+        fromService:
+          name: unbeat-mariadb
+          type: pserv
+          property: port
+      - key: DB_USER
+        fromService:
+          name: unbeat-mariadb
+          type: pserv
+          envVarKey: MARIADB_USER
+      - key: DB_PASSWORD
+        fromService:
+          name: unbeat-mariadb
+          type: pserv
+          envVarKey: MARIADB_PASSWORD
+      - key: DB_NAME
+        fromService:
+          name: unbeat-mariadb
+          type: pserv
+          envVarKey: MARIADB_DATABASE
+      - key: REDIS_HOST
+        fromService:
+          name: unbeat-redis
+          type: keyvalue
+          property: host
+      - key: REDIS_PORT
+        fromService:
+          name: unbeat-redis
+          type: keyvalue
+          property: port
+      - key: LASTFM_API_KEY
+        sync: false
+      - key: LASTFM_SHARED_SECRET
+        sync: false
+      - key: YOUTUBE_API_KEY
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: ADMIN_SECRET
+        sync: false
+      # Vercel에 프론트 배포하고 나온 실제 주소(예: https://unbeat.vercel.app)로
+      # 나중에 채워 넣을 값 — 지금은 빈 값으로 두고 프론트 배포 후 대시보드에서 채움.
+      - key: ALLOWED_ORIGINS
+        value: ""
+
+  # Kotlin/Spring Boot 즐겨찾기·재생목록 서비스 — playlist-service/Dockerfile로 빌드
+  - type: web
+    name: unbeat-playlist
+    runtime: docker
+    rootDir: playlist-service
+    dockerfilePath: playlist-service/Dockerfile
+    dockerContext: playlist-service
+    plan: free
+    region: singapore
+    healthCheckPath: /actuator/health
+    envVars:
+      - key: DB_HOST
+        fromService:
+          name: unbeat-mariadb
+          type: pserv
+          property: host
+      - key: DB_PORT
+        fromService:
+          name: unbeat-mariadb
+          type: pserv
+          property: port
+      - key: DB_USER
+        fromService:
+          name: unbeat-mariadb
+          type: pserv
+          envVarKey: MARIADB_USER
+      - key: DB_PASSWORD
+        fromService:
+          name: unbeat-mariadb
+          type: pserv
+          envVarKey: MARIADB_PASSWORD
+      - key: DB_NAME
+        fromService:
+          name: unbeat-mariadb
+          type: pserv
+          envVarKey: MARIADB_DATABASE
+      - key: LASTFM_API_KEY
+        sync: false
+
+  # MariaDB — db/Dockerfile로 공식 mariadb 이미지에 backend/schema.sql만 얹어서 빌드.
+  # 컨테이너 최초 기동 시 자동으로 스키마가 적용됨(공식 이미지의 initdb.d 기능).
+  # 데이터는 퍼시스턴트 디스크에 저장 — 이 서비스만 유료 플랜이 필요한 이유가 이 디스크 때문.
+  - type: pserv
+    name: unbeat-mariadb
+    runtime: docker
+    dockerfilePath: db/Dockerfile
+    plan: 0.5c-512mb
+    region: singapore
+    disk:
+      name: unbeat-mariadb-data
+      mountPath: /var/lib/mysql
+      sizeGB: 1
+    envVars:
+      - key: MARIADB_DATABASE
+        value: unbeat
+      - key: MARIADB_USER
+        value: unbeat
+      - key: MARIADB_PASSWORD
+        generateValue: true
+      - key: MARIADB_ROOT_PASSWORD
+        generateValue: true
+
+  # Redis — 캐시 전용(검색결과/빠른선곡 등)이라 재시작 시 데이터 날아가도 무방.
+  # 무료 Key Value는 외부 IP 허용 목록이 필수 필드라 빈 목록(내부 전용)으로 둠.
+  - type: keyvalue
+    name: unbeat-redis
+    plan: free
+    region: singapore
+    ipAllowList: []

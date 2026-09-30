@@ -83,7 +83,10 @@ services:
     dockerContext: .
     plan: free
     region: singapore
-    healthCheckPath: /actuator/health
+    # /actuator/health는 DB 상태까지 확인하다가 DB 연결이 간헐적으로 불안정할 때 응답 없이
+    # 멈춰서(hang) 배포가 "Timed Out"으로 실패하는 문제가 있었음(management.health.db.enabled
+    # =false로도 해결 안 됨) — DB랑 전혀 무관한 /healthz(HealthController)로 교체.
+    healthCheckPath: /healthz
     envVars:
       # fromService(property: host/port)로 가져오는 값이 Blueprint sync 타이밍에 따라
       # 갱신이 안 되는 문제를 겪어서(대시보드에서 확인해보니 실제 주소가

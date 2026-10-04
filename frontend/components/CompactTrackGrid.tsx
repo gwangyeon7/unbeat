@@ -55,10 +55,14 @@ export default function CompactTrackGrid({
   }
 
   if (scrollable) {
+    // (모바일 레이아웃 개선, 2026-10-04) "앱(좁은 화면)으로 보면 빠른 선곡 쪽이 답답하다"는
+    // 피드백 — 데스크톱/모바일 구분 없이 카드 폭을 220px 고정으로 쓰다 보니, 44px 썸네일 +
+    // 플러스/즐겨찾기 버튼 2개가 항상 자리를 차지해서 좁은 화면에선 제목/아티스트 텍스트가
+    // 많이 눌렸던 것. 버튼을 없애는 대신(기능 유지), sm 미만 화면에서만 카드 폭을 260px로
+    // 넓혀 숨 쉴 공간을 줌 — 한 화면에 보이는 카드 수는 줄어도 가로 스크롤은 그대로라 손실 없음.
     return (
       <div
-        className="grid w-full auto-cols-[minmax(220px,1fr)] grid-flow-col grid-rows-3 gap-x-4 overflow-x-auto pb-2"
-        style={{ scrollbarWidth: "thin" }}
+        className="scrollbar-none grid w-full auto-cols-[minmax(260px,1fr)] grid-flow-col grid-rows-3 gap-x-4 overflow-x-auto pb-2 sm:auto-cols-[minmax(220px,1fr)]"
       >
         {tracks.map(renderRow)}
       </div>

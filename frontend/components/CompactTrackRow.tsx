@@ -70,7 +70,7 @@ export default function CompactTrackRow({
               onAddToPlaylist();
             }}
             aria-label="재생목록에 추가"
-            className="rounded-full px-1.5 py-1 text-sm text-white/50 hover:bg-white/10 hover:text-white"
+            className="rounded-full px-1 py-1 text-sm text-white/50 hover:bg-white/10 hover:text-white sm:px-1.5"
           >
             ＋
           </button>
@@ -82,7 +82,7 @@ export default function CompactTrackRow({
             onToggleFavorite();
           }}
           aria-label={isFavorite ? "즐겨찾기 해제" : "즐겨찾기 추가"}
-          className="rounded-full px-1.5 py-1 text-sm text-yellow-400 hover:bg-white/10"
+          className="rounded-full px-1 py-1 text-sm text-yellow-400 hover:bg-white/10 sm:px-1.5"
         >
           {isFavorite ? "★" : "☆"}
         </button>

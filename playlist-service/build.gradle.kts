@@ -24,6 +24,9 @@ dependencies {
 
 	implementation("org.springframework.boot:spring-boot-starter-web")
 	implementation("org.springframework.boot:spring-boot-starter-data-jpa")
+	// Render의 헬스체크(render.yaml healthCheckPath: /actuator/health)가 찌를 엔드포인트용.
+	// 기본 설정만으로 /actuator/health가 웹에 노출됨(추가 코드 불필요).
+	implementation("org.springframework.boot:spring-boot-starter-actuator")
 	implementation("org.jetbrains.kotlin:kotlin-reflect")
 	runtimeOnly("com.mysql:mysql-connector-j")
 

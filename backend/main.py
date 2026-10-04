@@ -283,9 +283,15 @@ class UTF8JSONResponse(JSONResponse):
 
 app = FastAPI(default_response_class=UTF8JSONResponse)
 
+# 로컬 개발용 기본값은 그대로 두고, 배포 환경(Vercel 등)의 실제 프론트 도메인은
+# ALLOWED_ORIGINS 환경변수(콤마 구분)로 추가할 수 있게 함 — Vercel URL이 정해지면
+# 코드 재배포 없이 Render 대시보드에서 환경변수만 추가하면 됨.
+_default_origins = ["http://localhost:3000", "http://127.0.0.1:3000"]
+_extra_origins = [o.strip() for o in os.getenv("ALLOWED_ORIGINS", "").split(",") if o.strip()]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_origins=_default_origins + _extra_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

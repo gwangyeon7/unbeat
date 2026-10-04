@@ -18,4 +18,9 @@ COPY --from=build /app/build/libs/*.jar app.jar
 
 # Render는 컨테이너가 리슨할 포트를 PORT 환경변수로 줌 — application.yml의
 # server.port가 ${PORT:8081}로 이미 이걸 읽도록 되어 있어서 별도 인자 없이 그대로 실행.
-CMD ["java", "-jar", "app.jar"]
+#
+# 임시 디버깅: Spring Boot가 뜨기 직전에 DB_HOST:DB_PORT로 순수 TCP 연결을 먼저 테스트해서
+# 로그에 성공/실패를 명확히 찍음. MariaDB 쪽 로그(헬스체크 트래픽과 뒤섞여 애매함)에 기대지
+#않고 playlist 컨테이너 자신의 로그에서 바로 원인(네트워크 불통 vs 인증/설정 문제)을 구분하기
+# 위함 — 원인 확인되면 이 블록은 제거하고 CMD를 다시 ["java", "-jar", "app.jar"]로 되돌릴 것.
+CMD ["bash", "-c", "echo \"[DB CHECK] host=${DB_HOST} port=${DB_PORT}\"; timeout 5 bash -c \"cat < /dev/null > /dev/tcp/${DB_HOST}/${DB_PORT}\" && echo '[DB CHECK] TCP OK - reached DB host/port' || echo '[DB CHECK] TCP FAILED - could not reach DB host/port'; exec java -jar app.jar"]

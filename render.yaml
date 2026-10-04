@@ -26,16 +26,13 @@ services:
     region: singapore
     healthCheckPath: /
     envVars:
+      # fromService(property: host/port)로 가져오는 값이 Blueprint sync 타이밍에 따라
+      # 갱신이 안 되는 문제를 겪어서(대시보드에서 확인해보니 실제 주소가
+      # unbeat-mariadb:3306으로 고정이라), 아예 고정값으로 직접 박아넣음.
       - key: DB_HOST
-        fromService:
-          name: unbeat-mariadb
-          type: pserv
-          property: host
+        value: unbeat-mariadb
       - key: DB_PORT
-        fromService:
-          name: unbeat-mariadb
-          type: pserv
-          property: port
+        value: "3306"
       - key: DB_USER
         fromService:
           name: unbeat-mariadb
@@ -71,10 +68,11 @@ services:
         sync: false
       - key: ADMIN_SECRET
         sync: false
-      # Vercel에 프론트 배포하고 나온 실제 주소(예: https://unbeat.vercel.app)로
-      # 나중에 채워 넣을 값 — 지금은 빈 값으로 두고 프론트 배포 후 대시보드에서 채움.
+      # Vercel 프론트 실제 배포 주소. 대시보드에서 API로 먼저 넣었다가, 이 값이 빈 문자열로
+      # 남아있으면 다음 git push 때 Blueprint sync가 다시 ""로 덮어써버리는 걸 확인해서
+      # (실제로 CORS가 재발했음) 아예 여기 실제 값을 박아넣음.
       - key: ALLOWED_ORIGINS
-        value: ""
+        value: "https://unbeat-delta.vercel.app,https://unbeat.org,https://www.unbeat.org"
 
   # Kotlin/Spring Boot 즐겨찾기·재생목록 서비스 — playlist-service/Dockerfile로 빌드
   - type: web
@@ -86,18 +84,18 @@ services:
     dockerContext: .
     plan: free
     region: singapore
-    healthCheckPath: /actuator/health
+    # /actuator/health는 DB 상태까지 확인하다가 DB 연결이 간헐적으로 불안정할 때 응답 없이
+    # 멈춰서(hang) 배포가 "Timed Out"으로 실패하는 문제가 있었음(management.health.db.enabled
+    # =false로도 해결 안 됨) — DB랑 전혀 무관한 /healthz(HealthController)로 교체.
+    healthCheckPath: /healthz
     envVars:
+      # fromService(property: host/port)로 가져오는 값이 Blueprint sync 타이밍에 따라
+      # 갱신이 안 되는 문제를 겪어서(대시보드에서 확인해보니 실제 주소가
+      # unbeat-mariadb:3306으로 고정이라), 아예 고정값으로 직접 박아넣음.
       - key: DB_HOST
-        fromService:
-          name: unbeat-mariadb
-          type: pserv
-          property: host
+        value: unbeat-mariadb
       - key: DB_PORT
-        fromService:
-          name: unbeat-mariadb
-          type: pserv
-          property: port
+        value: "3306"
       - key: DB_USER
         fromService:
           name: unbeat-mariadb
@@ -115,6 +113,9 @@ services:
           envVarKey: MARIADB_DATABASE
       - key: LASTFM_API_KEY
         sync: false
+      # backend와 동일한 이유 — Vercel 프론트에서 즐겨찾기/재생목록 API를 호출할 수 있게 함.
+      - key: ALLOWED_ORIGINS
+        value: "https://unbeat-delta.vercel.app,https://unbeat.org,https://www.unbeat.org"
 
   # MariaDB — db/Dockerfile로 공식 mariadb 이미지에 backend/schema.sql만 얹어서 빌드.
   # 컨테이너 최초 기동 시 자동으로 스키마가 적용됨(공식 이미지의 initdb.d 기능).
@@ -130,6 +131,10 @@ services:
       mountPath: /var/lib/mysql
       sizeGB: 1
     envVars:
+      # Render는 pserv의 포트를 명시 안 하면 다른 서비스가 fromService로 가져가는
+      # property: port 값이 MariaDB 실제 포트(3306)와 안 맞아 Connection refused가 남.
+      - key: PORT
+        value: 3306
       - key: MARIADB_DATABASE
         value: unbeat
       - key: MARIADB_USER

@@ -137,6 +137,14 @@ export default function Home() {
   // 추가 피드백을 받고, 재생/진행바 UI는 전부 MiniPlayer가 자체적으로 그림 — 여긴 videoId만 넘겨줌.
   const [nowPlaying, setNowPlaying] = useState<NowPlayingTrack | null>(null);
 
+  // (Task #44-3) "믹스" 시작 버튼 2개(하이라이트 믹스/전체 믹스) 전용 신호 — "빠른 선곡" 풀에서
+  // 무작위 곡 하나를 골라 바로 재생 시작. MiniPlayer의 번개 토글 버튼(지금 재생 중인 곡 하나를
+  // 대상으로 하이라이트 모드를 켜고 끄는 용도)과는 별개의 독립된 진입점으로 만들어달라는 요청 —
+  // id를 매번 올려서 MiniPlayer에 내려주면, 그 안의 전용 effect가 반응해 하이라이트 모드를
+  // 켜거나(highlight: true) 끔(false, 평소 전곡 재생).
+  const mixRequestIdRef = useRef(0);
+  const [mixRequest, setMixRequest] = useState<{ id: number; highlight: boolean } | null>(null);
+
   // "다음 트랙" 큐 — 유튜브 뮤직처럼 곡이 끝나면 비슷한 곡으로 자동으로 이어졌으면 좋겠다는
   // 피드백으로 추가. 항상 "지금 재생 중인 곡과 비슷한 곡" 목록이라, 곡이 바뀔 때마다 다시 채움
   // (고정된 재생목록을 미리 만들어두는 게 아니라 라디오처럼 그때그때 이어지는 방식).
@@ -592,6 +600,28 @@ export default function Home() {
     }
   }
 
+  // (Task #44-3) "믹스" 버튼 — 무드 칩을 선택해둔 상태면 "신나는 곡 듣다가 갑자기 발라드
+  // 나오면 안 된다"는 요청대로 그 무드의 곡 목록(국내+해외)을 셔플해서 고정 큐로 재생 —
+  // 재생목록 "이어재생"과 똑같은 manualNext 방식이라, 곡이 끝나도 유사곡 추천(장르 무관)으로
+  // 안 새고 같은 무드 안에서만 순서대로 이어짐. 무드를 선택 안 해뒀으면 기존처럼 "빠른 선곡"
+  // 풀(없으면 글로벌 차트)에서 무작위 시작 + 평소의 유사곡 라디오 큐로 이어짐.
+  // highlight가 true면 재생 시작과 동시에 MiniPlayer의 연속 하이라이트 모드도 같이 켜서, 그
+  // 뒤로는 하이라이트만 이어서 계속 재생됨 — false면 평소처럼 전곡이 이어짐.
+  function handleStartMix(highlight: boolean) {
+    const moodPool = [...domesticMoodTracks, ...internationalMoodTracks];
+    if (selectedMood && moodPool.length > 0) {
+      const [first, ...rest] = shuffleArray(moodPool);
+      handlePlay(first, { manualNext: rest });
+    } else {
+      const pool = quickPickTracks.length > 0 ? quickPickTracks : chartTracks;
+      if (pool.length === 0) return;
+      const randomTrack = pool[Math.floor(Math.random() * pool.length)];
+      handlePlay(randomTrack);
+    }
+    mixRequestIdRef.current += 1;
+    setMixRequest({ id: mixRequestIdRef.current, highlight });
+  }
+
   // (§47, §48) append=false(기본값)면 예전처럼 큐를 완전히 새로 채움 — 검색/차트/즐겨찾기 등
   // 큐 바깥에서 새 곡을 골랐을 때. append=true는 "같은 라디오 세션이 이어지는 중"일 때만
   // (자동 이어재생, 또는 큐 안의 곡을 직접 클릭) 쓰여서, 기존 큐에서 방금 재생 시작한 곡만
@@ -672,9 +702,38 @@ export default function Home() {
       if (nowPlaying) refreshQueue(nowPlaying.artist, nowPlaying.name);
       return;
     }
-    const next = withOverride(queue[0]);
-    if (next) {
-      handlePlay(next, { fromQueue: true });
+    if (nativeOverride) {
+      // 안드로이드 헤드리스 웹뷰가 이미 재생을 시작한 곡이라 영상 존재가 보장됨 — 검색/스킵
+      // 없이 바로 반영.
+      const next = withOverride(queue[0]);
+      if (next) handlePlay(next, { fromQueue: true });
+      return;
+    }
+    // (버그 수정) 큐 맨 앞 곡의 유튜브 영상을 못 찾으면 거기서 완전히 멈춰버리던 문제 발견
+    // (§44 하이라이트 연속재생 라이브 확인 중 — 일반 자동 이어재생에도 원래 있던 한계였는데,
+    // 연속 하이라이트가 자동전환을 훨씬 자주 트리거해서 더 쉽게 드러남). 재생 가능한 곡을
+    // 찾을 때까지 큐를 순서대로 넘겨가며 시도하도록 변경.
+    playFirstPlayableFromQueue(queue);
+  }
+
+  // handleTrackEnded 전용 헬퍼 — 큐를 앞에서부터 순서대로 시도해서 유튜브 영상이 실제로
+  // 있는 첫 곡을 재생. 건너뛴 곡은 큐에서 따로 제거하지 않음(다음에 또 맨 앞으로 와도 똑같이
+  // 건너뛰어질 뿐이라 무해하고, 상태 동기화를 단순하게 유지하기 위함). 끝까지 하나도 못
+  // 찾으면 기존과 동일하게 에러만 띄우고 지금 재생 중이던 곡은 그대로 유지.
+  async function playFirstPlayableFromQueue(candidates: Track[]) {
+    for (const t of candidates) {
+      try {
+        const { videoId } = await searchYoutubeVideo(t.artist, t.name);
+        if (videoId) {
+          handlePlay({ ...t, videoId }, { fromQueue: true });
+          return;
+        }
+      } catch {
+        // 이 후보만 실패 처리하고 다음 후보로 계속 시도.
+      }
+    }
+    if (candidates.length > 0) {
+      setError("다음 트랙 중 재생 가능한 영상을 찾지 못했어요.");
     }
   }
 
@@ -1002,7 +1061,39 @@ export default function Home() {
           실제 Claude Haiku 4.5 LLM 추천으로 교체함([[학습노트 38번]], 실패 시에만 셔플로 폴백). */}
       {quickPickTracks.length > 0 && (
         <div className="w-full max-w-xl">
-          <p className="mb-2 text-xs text-white/40">빠른 선곡</p>
+          <div className="mb-2 flex items-center justify-between">
+            <p className="text-xs text-white/40">빠른 선곡</p>
+            {/* (Task #44-3) "믹스" 버튼 2개 — 특정 곡을 고르지 않고 눌러서 바로 무작위 재생을
+                시작하는 전용 진입점. MiniPlayer 안의 번개 토글(지금 재생 중인 곡 하나에 대해
+                하이라이트 모드를 켜고 끔)과는 다른, "처음부터 하이라이트/전곡 중 하나를 골라
+                믹스를 시작"하는 버튼이 따로 있었으면 좋겠다는 요청으로 추가. */}
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => handleStartMix(true)}
+                className="rounded-full border border-white/10 px-2.5 py-1 text-[11px] text-white/60 hover:border-white/30 hover:text-white"
+                title={
+                  selectedMood
+                    ? `"${selectedMoodLabel}" 무드 안에서만 하이라이트를 이어서 재생`
+                    : "즐겨찾기 기반 추천 곡들의 하이라이트만 이어서 재생"
+                }
+              >
+                하이라이트 믹스
+              </button>
+              <button
+                type="button"
+                onClick={() => handleStartMix(false)}
+                className="rounded-full border border-white/10 px-2.5 py-1 text-[11px] text-white/60 hover:border-white/30 hover:text-white"
+                title={
+                  selectedMood
+                    ? `"${selectedMoodLabel}" 무드 안에서만 전곡 재생`
+                    : "즐겨찾기 기반 추천 곡으로 전곡 재생 시작"
+                }
+              >
+                전체 믹스
+              </button>
+            </div>
+          </div>
           <CompactTrackGrid
             tracks={quickPickTracks}
             isFavorite={isTrackFavorite}
@@ -1275,6 +1366,7 @@ export default function Home() {
         onNativeAutoAdvance={(data) =>
           handleTrackEnded({ videoId: data.videoId, name: data.title, artist: data.artist })
         }
+        mixRequest={mixRequest}
         queue={queue}
         onSelectQueueTrack={(t) => handlePlay(t, { fromQueue: true })}
         onSaveQueueToPlaylist={(tracks) =>

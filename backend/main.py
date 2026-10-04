@@ -316,13 +316,26 @@ ANTHROPIC_MODEL = "claude-haiku-4-5-20251001"  # 추천 하나에 몇백 토큰�
 
 
 def lastfm_get(params: dict):
-    """Last.fm API 공통 호출 헬퍼. OAuth 없이 api_key만 있으면 read 메서드 사용 가능."""
+    """Last.fm API 공통 호출 헬퍼. OAuth 없이 api_key만 있으면 read 메서드 사용 가능.
+
+    (속도 개선, 2026-10-04) "무드 곡 불러오는 데 30초나 걸린다"는 제보로 원인을 추적하다가,
+    이 함수가 파일 안 다른 requests.get 호출들(iTunes/유튜브/LRCLIB 등은 전부 timeout=3~5초)과
+    달리 타임아웃이 아예 없었던 걸 발견 — Last.fm이 순간적으로 느려지면 이 호출 하나가 수십 초를
+    그냥 먹어버릴 수 있고, discover_by_mood 경로에서 tag.getTopTracks/_resolve_curated_tracks(큐레이션
+    보충)의 track.search가 전부 이 함수를 거치므로 체감 지연의 실제 범인일 가능성이 가장 높음.
+    타임아웃/연결 실패를 기존 "Last.fm API 요청 실패"와 같은 HTTPException으로 변환해서, 이미
+    HTTPException만 잡고 있던 호출부(예: _resolve_single_curated_track)들이 그대로 정상 동작하게 함.
+    """
     params = {
         **params,
         "api_key": LASTFM_API_KEY,
         "format": "json",
     }
-    res = requests.get(LASTFM_BASE_URL, params=params)
+    try:
+        res = requests.get(LASTFM_BASE_URL, params=params, timeout=5)
+    except requests.exceptions.RequestException as e:
+        print(f"[lastfm] 요청 타임아웃/연결 실패 params={params}: {e}")
+        raise HTTPException(status_code=504, detail="Last.fm API 응답 지연")
     if res.status_code != 200:
         print(f"[lastfm] 요청 실패 ({res.status_code}) params={params}: {res.text[:200]}")
         raise HTTPException(status_code=res.status_code, detail="Last.fm API 요청 실패")
@@ -1570,7 +1583,19 @@ def _strip_title_annotations(title: str) -> str:
 
 
 def _search_lrclib(params: dict):
-    res = requests.get(LRCLIB_SEARCH_URL, params=params)
+    # (속도 개선, 2026-10-04) 이것도 lastfm_get과 같은 이유로 타임아웃이 없었음 — 게다가
+    # _lookup_lyrics는 실패할 때마다 이 함수를 최대 4번 "순차로" 재시도하므로(정확 매칭 →
+    # 자유 검색 → 표기 제거 후 정확 매칭 → 자유 검색), LRCLIB이 잠깐이라도 느려지면 한 곡의
+    # 가사 확인 자체가 몇 분까지도 걸릴 수 있었음. 무드 탐색은 후보 수십 곡을 한꺼번에
+    # _lyrics_availability_map으로 확인하니, 스레드풀 안 여러 작업이 동시에 이 지연을 겪으면서
+    # "무드 하나 불러오는 데 30초" 체감으로 이어진 것으로 보임. 다른 LRCLIB 폴백(lyrics.ovh,
+    # timeout=4)과 맞춰 타임아웃을 주고, 실패/타임아웃이면 그냥 "이 방법으로는 못 찾음"으로
+    # 처리해서 다음 폴백 단계로 빠르게 넘어가게 함.
+    try:
+        res = requests.get(LRCLIB_SEARCH_URL, params=params, timeout=4)
+    except requests.exceptions.RequestException as e:
+        print(f"[lyrics] LRCLIB 요청 타임아웃/연결 실패 params={params}: {e}")
+        return None
     if res.status_code != 200:
         print(f"[lyrics] LRCLIB 요청 실패 ({res.status_code}) params={params}: {res.text[:200]}")
         return None
@@ -2004,48 +2029,70 @@ CURATED_DOMESTIC_MOOD_TRACKS: dict[str, list[tuple[str, str]]] = {
 }
 
 
+def _resolve_single_curated_track(pair: tuple[str, str]) -> Optional[dict]:
+    """_resolve_curated_tracks가 스레드풀로 병렬 호출하는 단일 (아티스트, 곡명) 처리 단위."""
+    artist, track_name = pair
+    cache_key = f"curated-track:v1:{artist.lower()}:{track_name.lower()}"
+    cached_track = get_cached(cache_key)
+    if cached_track is not None:
+        return cached_track
+    try:
+        search_data = lastfm_get(
+            {"method": "track.search", "track": track_name, "artist": artist, "limit": 1}
+        )
+    except HTTPException:
+        return None
+    matches = search_data.get("results", {}).get("trackmatches", {}).get("track", [])
+    if not matches:
+        return None
+    match = matches[0]
+    matched_artist = _clean_artist_name(match.get("artist", ""))
+    image = resolve_track_image(matched_artist, match["name"], match.get("image", []))
+    if not image:
+        image = _youtube_thumbnail_fallback(matched_artist, match["name"])
+    resolved_track = {
+        "name": match["name"],
+        "artist": matched_artist,
+        "listeners": match.get("listeners"),
+        "url": match.get("url"),
+        "image": image,
+    }
+    # 큐레이션 목록은 코드 수정 전엔 안 바뀌니 일반 태그 캐시(보통 몇 시간~하루)보다
+    # 길게 1주일 캐싱 — Last.fm/iTunes 호출을 그만큼 아낌.
+    set_cached(cache_key, resolved_track, ttl=60 * 60 * 24 * 7)
+    return resolved_track
+
+
 def _resolve_curated_tracks(pairs: list[tuple[str, str]]) -> list[dict]:
     """
     CURATED_DOMESTIC_MOOD_TRACKS의 (아티스트, 곡명) 쌍을 Last.fm track.search로 실제
     메타데이터(청취자 수/이미지/url)까지 채워서 반환. 곡 하나하나를 다시 검색하는 거라
-    _resolve_curated_tracks 자체 결과를 캐싱해서, 같은 무드를 다시 조회할 때 Last.fm/iTunes를
+    _resolve_single_curated_track 결과를 캐싱해서, 같은 무드를 다시 조회할 때 Last.fm/iTunes를
     다시 안 부르게 함(get_ai_quick_picks의 track.search 검증 패턴과 동일).
+
+    (속도 개선, 2026-10-04) "신나는 무드 곡 불러오는 데 로딩이 길다"는 제보 — 원인은 이 함수가
+    pairs(무드당 5~10곡)를 하나씩 순차로 처리하고 있었던 것. 대부분의 무드는 Last.fm 태그
+    데이터가 한국 아티스트엔 부족해서(§63/§64 참고) 거의 매번 이 큐레이션 폴백을 타는데, 캐시가
+    없는 곡마다 Last.fm track.search + iTunes 이미지 조회가 순서대로 기다려지면서 체감 지연의
+    가장 큰 원인이었음. `_tag_top_tracks`의 이미지 병렬 조회, `_lyrics_availability_map`의 가사
+    병렬 확인과 같은 패턴(ThreadPoolExecutor)으로 바꿔서, 캐시 없는 곡들도 한꺼번에 조회하도록
+    수정 — 순서는 executor.map이 입력 순서를 보존하므로 그대로 유지됨.
     """
+    if not pairs:
+        return []
+    with ThreadPoolExecutor(max_workers=min(len(pairs), 10)) as executor:
+        results = list(executor.map(_resolve_single_curated_track, pairs))
+
     resolved = []
     seen = set()
-    for artist, track_name in pairs:
-        cache_key = f"curated-track:v1:{artist.lower()}:{track_name.lower()}"
-        cached_track = get_cached(cache_key)
-        if cached_track is None:
-            try:
-                search_data = lastfm_get(
-                    {"method": "track.search", "track": track_name, "artist": artist, "limit": 1}
-                )
-            except HTTPException:
-                continue
-            matches = search_data.get("results", {}).get("trackmatches", {}).get("track", [])
-            if not matches:
-                continue
-            match = matches[0]
-            matched_artist = _clean_artist_name(match.get("artist", ""))
-            image = resolve_track_image(matched_artist, match["name"], match.get("image", []))
-            if not image:
-                image = _youtube_thumbnail_fallback(matched_artist, match["name"])
-            cached_track = {
-                "name": match["name"],
-                "artist": matched_artist,
-                "listeners": match.get("listeners"),
-                "url": match.get("url"),
-                "image": image,
-            }
-            # 큐레이션 목록은 코드 수정 전엔 안 바뀌니 일반 태그 캐시(보통 몇 시간~하루)보다
-            # 길게 1주일 캐싱 — Last.fm/iTunes 호출을 그만큼 아낌.
-            set_cached(cache_key, cached_track, ttl=60 * 60 * 24 * 7)
-        key = (cached_track["artist"].lower(), cached_track["name"].lower())
+    for track in results:
+        if track is None:
+            continue
+        key = (track["artist"].lower(), track["name"].lower())
         if key in seen:
             continue
         seen.add(key)
-        resolved.append(cached_track)
+        resolved.append(track)
     return resolved
 
 

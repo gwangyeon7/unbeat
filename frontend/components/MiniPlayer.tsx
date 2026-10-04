@@ -37,6 +37,12 @@ type MiniPlayerProps = {
   // 헤드리스 웹뷰가 스스로 다음 곡으로 넘어갔을 때 호출됨 — page.tsx가 handleTrackEnded와
   // 같은 큐 소비 로직을 native가 이미 재생 중인 곡 기준으로 다시 실행하도록 함.
   onNativeAutoAdvance?: (data: { videoId: string; title: string; artist: string }) => void;
+  // (Task #44-3) "믹스" 시작 버튼 전용 신호 — 토글 버튼(번개 아이콘)과는 별개의 독립 진입점으로
+  // 만들어달라는 요청. page.tsx가 믹스를 시작할 때마다 id를 1씩 올려서 내려주면, 이 컴포넌트가
+  // "새 신호가 왔다"고 판단해서 하이라이트 연속재생 모드를 강제로 켜거나(highlight: true) 끔.
+  // MiniPlayer가 이미 떠 있는 상태(다른 곡 재생 중)에서 믹스를 눌러도 동작해야 해서, 마운트
+  // 시점이 아니라 이 prop 변화를 감지하는 방식으로 구현.
+  mixRequest?: { id: number; highlight: boolean } | null;
 };
 
 // YouTube IFrame Player API는 <script> 태그로 전역에 한 번만 로드하면 됨.
@@ -86,6 +92,97 @@ function parseSyncedLyrics(synced: string): LyricLine[] {
   }
   return lines;
 }
+
+// (Task #44 고도화) "곡 길이의 35%" 규칙 대신, 동기화 가사에서 "가장 먼저 반복되는 가사 줄"의
+// 첫 등장 시점을 찾아 후렴구 시작점의 근사치로 씀 — 후렴은 보통 가사가 그대로 한 번 더
+// 나오므로, 그 줄이 "처음" 나온 지점이 곧 후렴이 처음 시작되는 지점이라는 논리. 동기화 가사가
+// 없거나 반복되는 줄이 전혀 없으면 null(호출부가 35% 규칙으로 폴백). 알려진 한계: "ooh"/"yeah"
+// 같은 짧은 추임새가 우연히 반복돼 오탐될 수 있음 — 순수 오디오 분석 없이 가사만으로 하는
+// 근사치라 포트폴리오 수준에서 감수 가능한 한계로 판단.
+//
+// (리드인 개선) 처음엔 chorusTime에서 그냥 고정 4초를 뺐는데, "하이라이트 누르자마자 노래가
+// 시작하면 어색하다, 가사 없는 멜로디 구간부터 틀면 더 자연스럽지 않냐"는 피드백 — 바로 앞
+// 가사 줄이 끝나고 후렴이 시작되기 전까지의 "간주" 구간을 활용하도록 변경. 바로 앞 줄의 보컬이
+// 정확히 언제 끝나는지는 모르므로(동기화 가사는 각 줄 "시작" 시각만 있음), 두 줄 사이 간격의
+// 절반만큼만(최대 HIGHLIGHT_LEAD_IN_MAX_SECONDS) 당겨서 "이전 줄 보컬에 걸칠 위험"과 "너무
+// 멀리 거슬러 올라가는 것" 사이를 절충함.
+// (추가 고도화) "60초마다 끊기는 것도 어색하다, 하이라이트(후렴) 끝나는 지점에서 자연스럽게
+// 넘어갔으면 좋겠다"는 피드백 — 고정 재생 길이 대신, 후렴 블록이 몇 줄짜리인지까지 추정해서
+// 그 블록이 끝나는 시점을 재생 종료 지점으로 씀. 추정 방법: 후렴 줄이 "처음 등장한 자리"와
+// "반복된다고 확인된 자리"부터 각각 한 줄씩 나란히 비교해서, 가사가 똑같이 이어지는 줄 수를
+// 센다(= 후렴 블록 길이). 그 블록이 끝나는(다음 줄부터 가사가 달라지는) 시점의 타임스탬프를
+// endTime으로 반환 — 못 찾으면(후렴이 곡의 마지막 블록이라 비교할 "다음 줄" 자체가 없는 경우
+// 등) null이라 호출부가 고정 길이로 폴백.
+type ChorusWindow = { chorusTime: number; leadInTime: number; endTime: number | null };
+
+// (버그 수정, 2026-10-04) "하이라이트 누르면 노래가 바로바로(몇 초 만에) 다음 곡으로 넘어간다"는
+// 제보 — 원인은 "oh"/"yeah" 같은 한두 글자짜리 추임새가 노래 초반에 우연히 한 번 더 나오는 걸
+// 이 함수가 "후렴 반복"으로 오인해버리는 것. 그러면 바로 다음 줄부터 가사가 달라지니 블록 길이가
+// 1줄로 잡혀서 재생 길이가 HIGHLIGHT_MIN_WINDOW_MS(15초)까지 눌리고, 그마저도 진짜 후렴이 아니라
+// 노래 극초반 아무 지점이라 "거의 즉시 넘어간다"는 체감으로 이어짐. 너무 짧은 줄은 후렴 후보에서
+// 제외하고, 매칭된 블록이 최소 2줄 이상 이어져야만(=진짜 후렴처럼 여러 줄이 통째로 반복) 그 반복을
+// 인정 — 둘 중 하나라도 안 맞으면 그 반복은 무시하고 계속 더 뒤쪽의 반복을 찾음(끝까지 못 찾으면
+// null 반환 → 호출부가 고정 60초 폴백으로 안전하게 처리).
+const MIN_CHORUS_LINE_LENGTH = 8;
+
+function findChorusWindow(syncedLyrics: string): ChorusWindow | null {
+  const lines = parseSyncedLyrics(syncedLyrics);
+  const firstSeenAt = new Map<string, number>(); // 정규화된 가사 줄 -> 그 줄의 인덱스(처음 등장)
+  for (let i = 0; i < lines.length; i++) {
+    const normalized = lines[i].text.trim().toLowerCase();
+    if (!normalized) continue;
+    const prevIndex = firstSeenAt.get(normalized);
+    if (prevIndex === undefined) {
+      firstSeenAt.set(normalized, i);
+      continue;
+    }
+    // 이미 한 번 나온 줄의 반복 — 후렴 후보. 너무 짧은 추임새면 신뢰도가 낮으니 건너뛰고 계속 탐색.
+    if (normalized.length < MIN_CHORUS_LINE_LENGTH) continue;
+
+    const chorusTime = lines[prevIndex].time;
+    const prevLineTime = prevIndex > 0 ? lines[prevIndex - 1].time : 0;
+    const gap = Math.max(0, chorusTime - prevLineTime);
+    const lead = Math.min(gap * 0.5, HIGHLIGHT_LEAD_IN_MAX_SECONDS);
+    const leadInTime = Math.max(0, chorusTime - lead);
+
+    let blockLen = 1;
+    while (
+      prevIndex + blockLen < lines.length &&
+      i + blockLen < lines.length &&
+      lines[prevIndex + blockLen].text.trim().toLowerCase() ===
+        lines[i + blockLen].text.trim().toLowerCase() &&
+      lines[prevIndex + blockLen].text.trim() !== ""
+    ) {
+      blockLen++;
+    }
+    // 한 줄만 우연히 일치(blockLen===1)한 경우 — 진짜 후렴(보통 여러 줄이 통째로 반복됨)이 아닐
+    // 가능성이 높으니 이 반복도 건너뛰고 계속 탐색.
+    if (blockLen < 2) continue;
+
+    const endIndex = prevIndex + blockLen;
+    const endTime = endIndex < lines.length ? lines[endIndex].time : null;
+    return { chorusTime, leadInTime, endTime };
+  }
+  return null;
+}
+
+// 하이라이트 미리듣기 재생 구간/리드인 상수.
+// 가사로 끝 지점을 못 찾았을 때(35% 규칙 폴백 등)만 쓰는 고정 재생 길이.
+const HIGHLIGHT_WINDOW_MS = 60_000;
+// 가사 기반으로 끝 지점을 찾았어도, 탐지 오류로 너무 짧거나(한 줄짜리 블록) 너무 길게(가사
+// 줄 간격이 넓은 곡) 나오는 극단값은 이 범위로 눌러줌.
+// (재생 길이 조정, 2026-10-04) blockLen>=2 가드를 추가한 뒤에도 "하이라이트가 짧게 느껴진다"는
+// 피드백 — 실제 후렴 블록이 2~3줄만 반복되고 끝나는 곡이 많아서, 탐지 자체는 정확해도 자연스러운
+// 길이가 15~20초 선에서 자주 잡힘. "뚝 끊기는 것보단 조금 더 들려주는 게 낫다"고 판단해 최소
+// 보장 길이를 15초 → 30초로 올림 — 탐지된 자연 종료 지점이 30초보다 짧으면 그 지점을 살짝 넘어
+// 다음 가사 줄까지 재생되지만(완전히 다음 소절로 들어갈 수 있음), 거의 즉시 끊기는 것보다는
+// 들을 만하다는 쪽으로 절충.
+const HIGHLIGHT_MIN_WINDOW_MS = 30_000;
+const HIGHLIGHT_MAX_WINDOW_MS = 90_000;
+// 가사가 없어 35% 규칙으로 폴백할 때만 쓰는 고정 리드인(간주 구간을 알 방법이 없어서 그냥 고정값).
+const HIGHLIGHT_LEAD_IN_SECONDS = 4;
+// 가사 기반 리드인의 최대 길이 — 두 가사 줄 사이 간격이 아무리 넓어도 이보다 멀리는 안 당김.
+const HIGHLIGHT_LEAD_IN_MAX_SECONDS = 6;
 
 function formatTime(seconds: number) {
   if (!Number.isFinite(seconds) || seconds < 0) return "0:00";
@@ -138,6 +235,20 @@ function VolumeIcon({ muted }: { muted: boolean }) {
           <path d="M19 6a9 9 0 0 1 0 12" />
         </>
       )}
+    </svg>
+  );
+}
+
+// (Task #44) "하이라이트 이어듣기" 토글 버튼 아이콘 — 번개(⚡) 모양으로 "짧게 핵심만" 느낌을 줌.
+function PreviewIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      className="h-4 w-4"
+      aria-hidden="true"
+    >
+      <path d="M13 2 4 14h6l-1 8 9-12h-6l1-8z" />
     </svg>
   );
 }
@@ -222,6 +333,7 @@ export default function MiniPlayer({
   onSelectQueueTrack,
   onSaveQueueToPlaylist,
   onNativeAutoAdvance,
+  mixRequest,
 }: MiniPlayerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const playerRef = useRef<any>(null);
@@ -236,6 +348,15 @@ export default function MiniPlayer({
   onActuallyPlayingRef.current = onActuallyPlaying;
   const onNativeAutoAdvanceRef = useRef(onNativeAutoAdvance);
   onNativeAutoAdvanceRef.current = onNativeAutoAdvance;
+  // (Task #44) player 생성 effect(deps []) 안의 handleStateChange 클로저에서 "지금 하이라이트
+  // 연속재생 모드인지"/"지금 트랙 videoId"를 항상 최신값으로 읽기 위한 ref들 — onEndedRef와
+  // 같은 이유(클로저가 마운트 시점 값을 영원히 기억하는 걸 피함).
+  const isPreviewingRef = useRef(false);
+  const trackVideoIdRef = useRef(track.videoId);
+  trackVideoIdRef.current = track.videoId;
+  // 하이라이트 모드 중 새 트랙이 재생 시작됐을 때 한 번만 하이라이트 지점으로 점프하기 위한 가드
+  // (같은 트랙에 대해 PLAYING 이벤트가 여러 번 올 수 있어서 트랙당 1회만 적용).
+  const highlightAppliedForVideoIdRef = useRef<string | null>(null);
   // (§73 후속) 헤드리스 웹뷰가 스스로 다음 곡으로 넘어간 직후, 그 결과로 page.tsx가
   // nowPlaying을 바꿔서 내려주는 track.videoId가 "네이티브가 이미 재생 중인 그 곡"과 같으면
   // 아래 트랙 전환 effect가 loadVideoById를 또 부르지 않도록 막는 가드.
@@ -249,6 +370,14 @@ export default function MiniPlayer({
   const [volume, setVolume] = useState(70);
   const [isMuted, setIsMuted] = useState(false);
   const [isQueueOpen, setIsQueueOpen] = useState(false);
+  // (Task #44) 하이라이트 연속 미리듣기 — 가사 기반(없으면 곡 길이 35% 규칙 폴백)으로 찾은
+  // 후렴 시작점 조금 전부터 60초 재생 후, 켜져 있는 동안엔 다음 곡의 하이라이트로 자연스럽게
+  // 이어짐(애플뮤직의 "하이라이트만 이어듣기" 참고 — 단, 진짜 오디오 크로스페이드는 유튜브
+  // iframe 구조상 범위 밖이라 하드컷으로 전환).
+  const [isPreviewing, setIsPreviewing] = useState(false);
+  isPreviewingRef.current = isPreviewing;
+  const previewTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const startHighlightPlaybackRef = useRef<() => void>(() => {});
   // 유튜브 뮤직의 확장 재생 화면(앨범아트 크게 + 다음 트랙/관련 항목/가사 탭)을 참고해서 추가.
   // 미니 플레이어 하단 바의 앨범아트나 곡 정보를 누르면 이 전체화면 오버레이가 열림.
   const [isExpanded, setIsExpanded] = useState(false);
@@ -330,6 +459,16 @@ export default function MiniPlayer({
           hasFiredPlayingRef.current = true;
           onActuallyPlayingRef.current?.();
         }
+        // (Task #44) 하이라이트 연속재생 모드 중 새 트랙이 막 재생을 시작했으면(곡이 바뀌어
+        // 처음(0초)부터 들리기 시작한 직후), 바로 그 트랙의 하이라이트 지점으로 점프 — 같은
+        // videoId에 대해 한 번만 적용(버퍼링 등으로 PLAYING이 여러 번 와도 중복 점프 방지).
+        if (
+          isPreviewingRef.current &&
+          highlightAppliedForVideoIdRef.current !== trackVideoIdRef.current
+        ) {
+          highlightAppliedForVideoIdRef.current = trackVideoIdRef.current;
+          startHighlightPlaybackRef.current?.();
+        }
       }
       if (e.data === YT_STATE.ENDED) {
         onEndedRef.current?.();
@@ -371,6 +510,11 @@ export default function MiniPlayer({
       cancelled = true;
       playerRef.current?.destroy?.();
       playerRef.current = null;
+      // (Task #44) 플레이어 자체가 사라질 때(곡 닫기 등) 미리듣기 타이머도 같이 정리.
+      if (previewTimeoutRef.current) {
+        clearTimeout(previewTimeoutRef.current);
+        previewTimeoutRef.current = null;
+      }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -391,6 +535,13 @@ export default function MiniPlayer({
     hasFiredPlayingRef.current = false;
     setCurrentTime(0);
     setIsPlaying(false);
+    // (Task #44) 곡이 바뀌면 이전 곡 기준으로 걸어둔 60초 타이머부터 정리 — 하이라이트 연속재생
+    // 모드가 켜져 있으면 새 곡이 재생을 시작하는 시점(위 handleStateChange)에 새 타이머가
+    // 다시 걸리고, 꺼져 있으면 그냥 일반 재생으로 시작됨(isPreviewing 상태 자체는 안 건드림).
+    if (previewTimeoutRef.current) {
+      clearTimeout(previewTimeoutRef.current);
+      previewTimeoutRef.current = null;
+    }
     playerRef.current.loadVideoById(track.videoId, track.name, track.artist);
   }, [track.videoId]);
 
@@ -444,6 +595,22 @@ export default function MiniPlayer({
     };
   }, [queue]);
 
+  // (Task #44-3) "믹스" 버튼(page.tsx)에서 오는 신호 — 번개 토글 버튼과 별개의 진입점. id가
+  // 바뀔 때만(같은 id 중복 무시) 반응해서, 하이라이트 연속재생 모드를 강제로 켜거나 끔. 실제
+  // 하이라이트 지점 점프는 여기서 바로 하지 않고 isPreviewing만 세팅 — page.tsx가 이 신호와
+  // 동시에 새 트랙도 재생시키므로, 그 트랙이 재생을 시작하는 시점(위 handleStateChange)에
+  // 기존 연속재생 로직이 자연스럽게 이어받아 하이라이트로 점프함.
+  const lastMixRequestIdRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (!mixRequest || lastMixRequestIdRef.current === mixRequest.id) return;
+    lastMixRequestIdRef.current = mixRequest.id;
+    if (previewTimeoutRef.current) {
+      clearTimeout(previewTimeoutRef.current);
+      previewTimeoutRef.current = null;
+    }
+    setIsPreviewing(mixRequest.highlight);
+  }, [mixRequest]);
+
   // 진행바용 재생 위치 폴링 (유튜브 API는 재생 위치 변경 이벤트가 따로 없어서 주기적으로 조회해야 함)
   useEffect(() => {
     if (!isPlaying) return;
@@ -458,6 +625,85 @@ export default function MiniPlayer({
     if (!playerRef.current) return;
     if (isPlaying) playerRef.current.pauseVideo?.();
     else playerRef.current.playVideo?.();
+  }
+
+  // (Task #44) 하이라이트 지점 계산 + 그 트랙 재생 — 버튼을 처음 누를 때와, 연속재생 모드 중
+  // 다음 트랙으로 넘어갔을 때(handleStateChange) 둘 다 이 함수를 재사용함. 가사(LRCLIB
+  // 동기화 가사)에서 "가장 먼저 반복되는 줄"을 찾아 그 지점에서 리드인(4초)만큼 앞으로
+  // 당겨서 재생 시작 — 뚝 끊기고 후렴으로 점프하는 대신 살짝 흐름을 타고 들어가게 함. 가사가
+  // 없거나 반복 줄을 못 찾으면 "곡 길이의 35%" 규칙으로 폴백(기존 1차 로직).
+  async function startHighlightPlayback() {
+    if (!playerRef.current) return;
+    const videoIdAtRequest = track.videoId;
+    const artistAtRequest = track.artist;
+    const nameAtRequest = track.name;
+
+    const dur = playerRef.current.getDuration?.() || duration || 0;
+    let start = dur ? dur * 0.35 : 0;
+    let usedLyricsBasedStart = false;
+    // 하이라이트 재생 길이 — 가사로 "블록이 끝나는 지점"을 찾으면 그 자연스러운 길이를 쓰고,
+    // 못 찾으면 고정 길이(HIGHLIGHT_WINDOW_MS)로 폴백.
+    let windowMs = HIGHLIGHT_WINDOW_MS;
+    try {
+      const result = await getLyrics(artistAtRequest, nameAtRequest);
+      // 가사 조회하는 동안 트랙이 바뀌었거나(연속재생 중 또 넘어감) 플레이어가 사라졌으면
+      // 늦게 도착한 이 응답으로 엉뚱한(새) 트랙을 건드리지 않도록 중단.
+      if (trackVideoIdRef.current !== videoIdAtRequest || !playerRef.current) return;
+      if (result?.syncedLyrics) {
+        const chorus = findChorusWindow(result.syncedLyrics);
+        if (chorus && chorus.chorusTime > 0 && (!dur || chorus.chorusTime < dur)) {
+          // leadInTime은 이미 "바로 앞 가사 줄과 후렴 사이 간주 구간"을 고려해 계산된 값이라,
+          // 아래 35% 폴백 전용 고정 리드인은 여기선 또 빼지 않음.
+          start = chorus.leadInTime;
+          usedLyricsBasedStart = true;
+          if (chorus.endTime != null && chorus.endTime > start) {
+            const naturalMs = (chorus.endTime - start) * 1000;
+            windowMs = Math.min(Math.max(naturalMs, HIGHLIGHT_MIN_WINDOW_MS), HIGHLIGHT_MAX_WINDOW_MS);
+          }
+        }
+      }
+    } catch {
+      // 가사 조회 실패 — 조용히 35% 규칙 폴백 유지.
+    }
+    if (trackVideoIdRef.current !== videoIdAtRequest || !playerRef.current) return;
+
+    if (!usedLyricsBasedStart) {
+      // 가사 기반으로 못 찾았을 때만(순수 35% 규칙) 고정 리드인 적용 — 간주 구간 위치를 알 길이
+      // 없어서 최선의 근사치.
+      start = Math.max(0, start - HIGHLIGHT_LEAD_IN_SECONDS);
+    }
+    if (previewTimeoutRef.current) clearTimeout(previewTimeoutRef.current);
+    playerRef.current.seekTo?.(start, true);
+    setCurrentTime(start);
+    playerRef.current.playVideo?.();
+    previewTimeoutRef.current = setTimeout(() => {
+      if (isPreviewingRef.current) {
+        // (Task #44-2) 연속 하이라이트 모드 — "곡이 자연스럽게 끝났을 때" 쓰던 기존 다음 곡
+        // 전환 로직(onEnded)을 그대로 재사용해서 다음 트랙으로 넘어감. 그 트랙이 재생을
+        // 시작하면 위 handleStateChange가 이 함수를 다시 불러 또 하이라이트로 점프함 —
+        // 유튜브 iframe 구조상 진짜 크로스페이드는 안 되고 하드컷으로 전환됨.
+        onEndedRef.current?.();
+      } else {
+        playerRef.current?.pauseVideo?.();
+      }
+      previewTimeoutRef.current = null;
+    }, windowMs);
+  }
+  startHighlightPlaybackRef.current = startHighlightPlayback;
+
+  function handleToggleHighlightMode() {
+    if (isPreviewing) {
+      // 끄기 — 지금 타이머만 취소하고 재생은 그대로 둠(멈추지 않음).
+      if (previewTimeoutRef.current) {
+        clearTimeout(previewTimeoutRef.current);
+        previewTimeoutRef.current = null;
+      }
+      setIsPreviewing(false);
+      return;
+    }
+    highlightAppliedForVideoIdRef.current = track.videoId;
+    setIsPreviewing(true);
+    startHighlightPlayback();
   }
 
   // Media Session API — 잠금화면/알림에 곡 정보와 재생/일시정지 컨트롤을 노출함. 그 자체로 배경
@@ -517,6 +763,12 @@ export default function MiniPlayer({
     const value = Number(e.currentTarget.value);
     setCurrentTime(value);
     playerRef.current?.seekTo?.(value, true);
+    // (Task #44) 사용자가 직접 진행바를 움직이면 "미리듣기 60초" 의도가 깨지므로 타이머 취소.
+    if (previewTimeoutRef.current) {
+      clearTimeout(previewTimeoutRef.current);
+      previewTimeoutRef.current = null;
+    }
+    setIsPreviewing(false);
   }
 
   // 가사 탭에서 특정 줄을 누르면 그 가사가 나오는 시점으로 바로 이동 — 진행바 탐색(handleSeek)과
@@ -602,6 +854,18 @@ export default function MiniPlayer({
           </button>
           <button
             type="button"
+            onClick={handleToggleHighlightMode}
+            disabled={!duration}
+            aria-label={isPreviewing ? "하이라이트 이어듣기 끄기" : "하이라이트 이어듣기"}
+            title={isPreviewing ? "하이라이트 이어듣기 끄기" : "하이라이트 이어듣기 (켜면 다음 곡도 하이라이트로 이어짐)"}
+            className={`shrink-0 rounded-full p-1.5 hover:bg-white/10 hover:text-white disabled:opacity-30 ${
+              isPreviewing ? "text-accent" : "text-white/50"
+            }`}
+          >
+            <PreviewIcon />
+          </button>
+          <button
+            type="button"
             onClick={onClose}
             aria-label="플레이어 닫기"
             className="shrink-0 rounded-full p-1.5 text-white/50 hover:bg-white/10 hover:text-white"
@@ -650,14 +914,28 @@ export default function MiniPlayer({
 
         {/* 가운데: 재생/일시정지 + 진행바 */}
         <div className="flex flex-col items-center gap-1.5">
-          <button
-            type="button"
-            onClick={togglePlay}
-            aria-label={isPlaying ? "일시정지" : "재생"}
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-sm text-black"
-          >
-            {isPlaying ? "❚❚" : "▶"}
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={togglePlay}
+              aria-label={isPlaying ? "일시정지" : "재생"}
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-sm text-black"
+            >
+              {isPlaying ? "❚❚" : "▶"}
+            </button>
+            <button
+              type="button"
+              onClick={handleToggleHighlightMode}
+              disabled={!duration}
+              aria-label={isPreviewing ? "하이라이트 이어듣기 끄기" : "하이라이트 이어듣기"}
+              title={isPreviewing ? "하이라이트 이어듣기 끄기" : "하이라이트 이어듣기 (켜면 다음 곡도 하이라이트로 이어짐)"}
+              className={`shrink-0 rounded-full p-1.5 hover:bg-white/10 hover:text-white disabled:opacity-30 ${
+                isPreviewing ? "text-accent" : "text-white/50"
+              }`}
+            >
+              <PreviewIcon />
+            </button>
+          </div>
           <div className="flex w-full items-center gap-2 text-[10px] text-white/40">
             <span className="w-8 shrink-0 text-right">{formatTime(currentTime)}</span>
             <input
@@ -846,6 +1124,18 @@ export default function MiniPlayer({
                   className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-white text-lg text-black"
                 >
                   {isPlaying ? "❚❚" : "▶"}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleToggleHighlightMode}
+                  disabled={!duration}
+                  aria-label={isPreviewing ? "하이라이트 이어듣기 끄기" : "하이라이트 이어듣기"}
+                  title={isPreviewing ? "하이라이트 이어듣기 끄기" : "하이라이트 이어듣기 (켜면 다음 곡도 하이라이트로 이어짐)"}
+                  className={`rounded-full p-2 hover:bg-white/10 disabled:opacity-30 ${
+                    isPreviewing ? "text-accent" : "text-white/50 hover:text-white"
+                  }`}
+                >
+                  <PreviewIcon />
                 </button>
               </div>
               <div className="flex w-full max-w-sm items-center gap-2 text-xs text-white/40">

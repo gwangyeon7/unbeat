@@ -20,7 +20,7 @@ export default function MoodChips({ selectedTag, onSelect }: MoodChipsProps) {
   return (
     // flex-wrap이었을 때 칩 8개가 한 줄에 다 안 들어가서 마지막("출퇴근길") 하나만 다음 줄에
     // 외로이 떨어지는 게 어색하다는 피드백 -> 유튜브 뮤직처럼 한 줄 가로 스크롤로 변경
-    <div className="flex w-full max-w-xl gap-2 overflow-x-auto pb-1">
+    <div className="scrollbar-none flex w-full max-w-xl gap-2 overflow-x-auto pb-1">
       {MOODS.map((mood) => (
         <button
           key={mood.tag}

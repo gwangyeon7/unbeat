@@ -1645,6 +1645,14 @@ def _lookup_lyrics(artist: str, track: str) -> dict:
     "최대한 많은 곡에서 가사가 나왔으면 좋겠다"는 요청으로, 한 번 실패해도 바로 포기하지 않고
     점점 느슨한 조건으로 최대 4단계까지 재시도함 — /similar-tracks, /recommend에서 쓰던 것과
     같은 "정확한 조건으로 먼저 찾고, 없으면 범위를 넓혀 재시도" 폴백 패턴.
+
+    (속도 개선, 2026-10-04) 원래는 1->2->3->4단계를 순서대로 "실패해야 다음 시도"했는데, LRCLIB이
+    느려지는 순간엔 최악의 경우 4번 연속으로 몇 초씩(각 호출 최대 4초 타임아웃) 기다려야 해서
+    무드 탐색처럼 수십 곡을 한꺼번에 확인하는 경로에서 체감 지연이 컸음("웹에서 봤을 땐 빨랐는데
+    왜 이러냐"는 제보 — 사실 그때그때 LRCLIB 응답 속도에 따라 들쭉날쭉했던 것). 결과 우선순위
+    (더 엄격한 조건 우선)는 그대로 유지하면서, 4가지 조회를 동시에 쏴서 가장 느린 것 1개만
+    기다리면 되도록 변경 — 다른 곳(이미지 조회, 가사 가용성 체크)에서 이미 쓰던 ThreadPoolExecutor
+    패턴 재사용.
     """
     if get_cached(_lyrics_blocklist_key(artist, track)) is not None:
         return {"found": False, "syncedLyrics": None, "plainLyrics": None, "takenDown": True}
@@ -1661,20 +1669,20 @@ def _lookup_lyrics(artist: str, track: str) -> dict:
     if cached is not None:
         return cached
 
-    match = _search_lrclib({"track_name": track, "artist_name": artist})
-
-    # 1) 정확 매칭 후보가 전부 인스트루멘탈로 등록돼 있던 경우가 실제로 있었음(같은 곡의 다른
-    #    등록본엔 가사가 있는데도) — 자유 검색어(q)로 다시 찾아봄.
-    if match is None:
-        match = _search_lrclib({"q": f"{artist} {track}"})
-
+    # 1) 원래 제목 정확 매칭, 2) 원래 제목 자유 검색(정확 매칭 후보가 전부 인스트루멘탈로 등록돼
+    # 있던 경우가 실제로 있었음), 3)/4) "(Prod. ...)"/"(Feat. ...)" 같은 부가 표기를 뗀 제목으로
+    # 정확 매칭 → 자유 검색. cleaned_track이 원래 제목과 같으면(뗄 표기가 없으면) 3)/4)는 아예
+    # 안 쏴서 불필요한 요청을 피함 — list 순서 = 우선순위(앞쪽일수록 더 엄격한 조건).
     cleaned_track = _strip_title_annotations(track)
-    if match is None and cleaned_track and cleaned_track.lower() != track.lower():
-        # 2) "(Prod. ...)"/"(Feat. ...)" 같은 부가 표기 때문에 제목이 안 맞을 수 있어서,
-        #    그 부분을 떼어내고 정확 매칭 → 자유 검색 순서로 한 번 더 시도.
-        match = _search_lrclib({"track_name": cleaned_track, "artist_name": artist})
-        if match is None:
-            match = _search_lrclib({"q": f"{artist} {cleaned_track}"})
+    has_cleaned = bool(cleaned_track) and cleaned_track.lower() != track.lower()
+    queries = [{"track_name": track, "artist_name": artist}, {"q": f"{artist} {track}"}]
+    if has_cleaned:
+        queries.append({"track_name": cleaned_track, "artist_name": artist})
+        queries.append({"q": f"{artist} {cleaned_track}"})
+
+    with ThreadPoolExecutor(max_workers=len(queries)) as executor:
+        results = list(executor.map(_search_lrclib, queries))
+    match = next((r for r in results if r is not None), None)
 
     if match is None:
         # 3) LRCLIB 4단계를 다 실패해야만 시도하는 마지막 자동 폴백(§43) — 동기화 가사는 없고

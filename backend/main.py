@@ -2016,6 +2016,19 @@ CURATED_DOMESTIC_MOOD_TRACKS: dict[str, list[tuple[str, str]]] = {
         ("Nell", "기억을 걷는 시간"),
         ("AKMU", "다섯 손가락"),
         ("Jung Seung Hwan", "너였다면"),
+        # (2026-10-06, 추가 보충) k-pop 무관 곡 보충 기준을 RESULT_SIZE로 낮추면서(바로 위 함수
+        # 참고) 이 목록이 10곡뿐이면 재방문해도 매번 같은 10곡만 섞여 나오는 문제가 생김 —
+        # 데모용이 아니라 실사용자(지인 등)에게 보여줄 거라 변주 폭도 챙기기로 하고 10곡 더 추가.
+        ("Younha", "우산"),
+        ("Sung Si Kyung", "두 사람"),
+        ("Davichi", "안녕이라고 말하지마"),
+        ("Naul", "눈물 먹고 자라나"),
+        ("Lee Juck", "다행이다"),
+        ("Yoon Jong Shin", "환생"),
+        ("Park Jung Hyun", "미아"),
+        ("Lee Sora", "바람이 분다"),
+        ("Kim Yeon Woo", "여전히 아름다운지"),
+        ("Lyn", "진심"),
     ],
     "sad": [
         ("Ailee", "I Will Show You"),
@@ -2150,7 +2163,14 @@ def discover_by_mood(tag: str, x_session_id: Optional[str] = Header(default=None
     # v4는 국내 폴백을 무드별 큐레이션 목록으로 바꾼 변경(§63/§64). v5는 하드 필터→소프트
     # 정렬 + "최종 결과" 대신 "더 큰 풀"을 캐싱하는 구조로 바뀐 변경 — 응답 의미 자체가
     # 달라져서(캐시된 게 그대로 나가는 게 아니라 매번 그 안에서 재추출됨) 버전업 필요.
-    cache_key = f"discover-by-mood:v5:{tag.lower().strip()}"
+    # v6: k-pop 무관 곡 보충 발동 기준을 POOL_SIZE→RESULT_SIZE로 낮춘 변경(바로 아래 주석 참고,
+    # "잔잔한"에 Pink Venom/FANCY 같은 곡이 섞이던 버그 수정) — 이 키를 안 올리면 예전에 오염된
+    # 채로 캐싱된 풀(특히 mellow)이 TTL 끝날 때까지 그대로 나감.
+    # v7: mellow 큐레이션 목록을 10곡→20곡으로 늘린 변경(CURATED_DOMESTIC_MOOD_TRACKS 참고,
+    # 변주 폭 확보용) — 캐시 키(v6)만 보고 "로직은 안 바뀌었으니 자동 반영될 것"이라고 착각했다가
+    # 실제로는 v6 때 이미 10곡짜리 풀이 캐싱돼 있어서 20곡으로 안 늘어나는 걸 라이브로 확인함.
+    # 데이터(큐레이션 목록) 변경도 로직 변경과 똑같이 캐시 무효화 대상이라는 걸 다시 확인한 케이스.
+    cache_key = f"discover-by-mood:v7:{tag.lower().strip()}"
     pool = get_cached(cache_key)
 
     if pool is None:
@@ -2173,9 +2193,15 @@ def discover_by_mood(tag: str, x_session_id: Optional[str] = Header(default=None
                     domestic.append(track)
                     seen.add(key)
 
-            # 그래도 부족하면(큐레이션 목록에 없는 새 무드거나 검색이 다 실패한 경우) 예전처럼
-            # k-pop 인기 차트로 마지막 보충 — 무드와 안 맞아도 완전히 빈 화면보단 낫다는 판단.
-            if len(domestic) < POOL_SIZE:
+            # (버그 수정, 2026-10-06) 원래 여기 기준도 POOL_SIZE(20)였는데, "잔잔한" 라이브 확인 중
+            # Pink Venom/FANCY/The Boys/Supernova처럼 전혀 안 잔잔한 k-pop 히트곡이 결과에 그대로
+            # 섞여 나오는 걸 발견함 — mellow 큐레이션 목록이 10곡뿐이라 1(태그)+2(큐레이션)를 합쳐도
+            # 20개에 못 미쳐서, "큐레이션 목록 자체가 아예 없는 무드"를 위한 최후 수단이었던 이
+            # k-pop 보충이 "큐레이션은 있지만 짧은" mellow 같은 무드에도 매번 발동해버렸던 것.
+            # 기준을 RESULT_SIZE(한 번에 보여줄 최소 개수)로 낮춰서, 큐레이션으로 이미 충분히
+            # 채워진 무드는 더 이상 무관한 곡으로 오염되지 않게 함 — 대신 그런 무드는 풀이
+            # RESULT_SIZE에 가깝게 작아져서 재방문 시 변주 효과는 줄어들 수 있음(장르 정확도 우선).
+            if len(domestic) < RESULT_SIZE:
                 for track in _tag_top_tracks("k-pop", 30):
                     key = (track["artist"].lower(), track["name"].lower())
                     if key not in seen:

@@ -3,6 +3,7 @@ package com.unbeat.playlist.favoritetrack
 import com.unbeat.playlist.favoritetrack.dto.FavoriteTrackRequest
 import com.unbeat.playlist.favoritetrack.dto.FavoriteTrackResponse
 import com.unbeat.playlist.lastfm.LastFmTagClient
+import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.stereotype.Service
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
@@ -29,16 +30,26 @@ class FavoriteTrackService(
         val trackTags = lastFmTagClient.fetchTopTags(request.artistName, request.trackName)
         val tags = trackTags.ifEmpty { lastFmTagClient.fetchArtistTags(request.artistName) }
 
-        val saved = favoriteTrackRepository.save(
-            FavoriteTrack(
-                sessionId = sessionId,
-                artistName = request.artistName,
-                trackName = request.trackName,
-                tags = tags.joinToString(",").ifBlank { null },
-                url = request.trackUrl
-            )
-        )
-        return saved.toResponse()
+        return try {
+            favoriteTrackRepository.save(
+                FavoriteTrack(
+                    sessionId = sessionId,
+                    artistName = request.artistName,
+                    trackName = request.trackName,
+                    tags = tags.joinToString(",").ifBlank { null },
+                    url = request.trackUrl
+                )
+            ).toResponse()
+        } catch (e: DataIntegrityViolationException) {
+            // 같은 곡을 거의 동시에 두 번 누르는 경우(더블클릭 등) 두 요청 모두 위의 existing==null
+            // 체크를 통과한 뒤 거의 동시에 insert를 시도하는 race condition — DB unique 제약
+            // (session_id, artist_name, track_name)이 두 번째 insert는 막아주지만, 그걸 그냥 500으로
+            // 터뜨리면 프론트에서는 "즐겨찾기 처리 실패"로만 보임(실제로는 이미 저장 성공한 상태인데도).
+            // 대신 이미 저장된 레코드를 다시 조회해서 정상 응답으로 돌려줌 — add()가 멱등이 되게 함
+            favoriteTrackRepository.findBySessionIdAndArtistNameAndTrackName(
+                sessionId, request.artistName, request.trackName
+            )?.toResponse() ?: throw e
+        }
     }
 
     fun remove(sessionId: String, favoriteTrackId: Long): Boolean {

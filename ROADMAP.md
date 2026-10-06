@@ -107,7 +107,7 @@ Unbeat: Spotify API 기반으로 새로운 음악을 찾아주는 서비스.
 - [x] Next.js 프론트엔드를 Vercel에 배포 — `unbeat-delta.vercel.app` + 커스텀 도메인 `unbeat.org`/`www.unbeat.org` 연결까지 완료, 실제 접속해 콘텐츠 정상 로드 확인
 - [x] FastAPI 백엔드용 Dockerfile 작성 후 Render Web Service로 배포 — `unbeat-backend` 라이브 확인
 - [x] Spring Boot 플레이리스트 서비스용 Dockerfile 작성 후 Render Web Service로 배포 — `unbeat-playlist` 라이브 확인 (DB 연결 문제 별도 해결, 학습노트 참고)
-- [ ] MariaDB를 Render Private Service로 컨테이너 직접 구동(영구 디스크 사용, 지금 스키마 그대로 유지 — 마이그레이션 불필요) — 서비스 자체는 떠있으나 즐겨찾기 저장 등 실제 DB 기능 라이브 확인은 아직
+- [ ] MariaDB를 Render Private Service로 컨테이너 직접 구동(영구 디스크 사용, 지금 스키마 그대로 유지 — 마이그레이션 불필요) — 서비스 자체는 떠있으나 즐겨찾기 저장 등 실제 DB 기능 라이브 확인은 아직. (버그 발견+수정) unbeat.org에서 즐겨찾기 라이브 확인 중 "트랙 즐겨찾기 처리에 실패했어요" 에러 재현 — Render 로그로 원인 확인(`DataIntegrityViolationException: Duplicate entry ... favorite_tracks`). `FavoriteTrackService.add()`/`FavoriteService.add()` 둘 다 "이미 있으면 그대로 반환" 체크 후 저장하는 구조인데, 그 체크와 저장 사이에 틈이 있어서 같은 곡을 거의 동시에 두 번 누르면(더블클릭 등) 두 요청 모두 체크를 통과한 뒤 DB unique 제약(session_id+artist_name[+track_name])에서 두 번째 insert가 막혀 500으로 터지는 race condition이었음 — 프론트(`handleToggleFavoriteTrack`)가 로컬 state만 보고 "이미 즐겨찾기됐는지" 판단해서 더 쉽게 재현됨. 두 서비스 모두 `DataIntegrityViolationException`을 잡아서 이미 저장된 레코드를 재조회해 정상 응답으로 돌려주도록 수정(멱등하게 처리) — 로컬 컴파일 미확인(샌드박스에 네트워크 제한으로 Gradle 실행 불가, 사용자 쪽 IntelliJ/터미널에서 빌드 확인 필요), 라이브 확인 대기
 - [ ] Redis는 Render 매니지드 Redis 또는 컨테이너로 구동 — 서비스 자체는 떠있으나 캐싱 동작 라이브 확인은 아직
 - [x] 프론트(Vercel) ↔ 백엔드(Render) 간 CORS/환경변수(API URL) 연결 — `ALLOWED_ORIGINS` 환경변수가 코드에 반영 안 되던 근본 원인(미커밋) 수정 후 `unbeat.org`에서 콘솔 에러 없이 정상 로드 확인
 - [x] GitHub 연결 시 자동 배포되는지 확인 — Render는 `gwangyeon` 브랜치, Vercel은 Production Branch를 `dev`로 변경(기존 `main`은 사용 안 하던 브랜치였음) 후 PR 머지→자동 재배포 라이브 확인. GitHub 저장소 기본 브랜치도 `dev`로 통일

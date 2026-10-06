@@ -10,6 +10,7 @@ from datetime import date
 from urllib.parse import quote
 import anthropic
 import json
+import random
 import re
 import requests
 import os
@@ -2009,6 +2010,12 @@ CURATED_DOMESTIC_MOOD_TRACKS: dict[str, list[tuple[str, str]]] = {
         ("Kim Feel", "청춘"),
         ("Jannabi", "주저하는 연인들을 위해"),
         ("Kwon Jinah", "Feeling"),
+        # (2026-10-06) "잔잔한" 무드가 4곡밖에 안 뜬다는 피드백으로 보충 — 다른 무드(workout 10개
+        # 등)에 비해 이 목록이 유독 적게 등록돼 있던 게 원인 중 하나였음
+        ("10cm", "폰서트"),
+        ("Nell", "기억을 걷는 시간"),
+        ("AKMU", "다섯 손가락"),
+        ("Jung Seung Hwan", "너였다면"),
     ],
     "sad": [
         ("Ailee", "I Will Show You"),
@@ -2017,6 +2024,10 @@ CURATED_DOMESTIC_MOOD_TRACKS: dict[str, list[tuple[str, str]]] = {
         ("IU", "eight"),
         ("Sam Kim", "Breathe"),
         ("Ben", "너를 사랑하고 있어"),
+        ("Lee Hi", "한숨"),
+        ("Heize", "저녁 하늘"),
+        ("Gummy", "미안해 미워해"),
+        ("Park Hyo Shin", "야생화"),
     ],
     "love": [
         ("Zion.T", "No Make Up"),
@@ -2026,6 +2037,9 @@ CURATED_DOMESTIC_MOOD_TRACKS: dict[str, list[tuple[str, str]]] = {
         ("Taeyeon", "Fine"),
         ("Jonghyun", "Lonely"),
         ("IU", "Love Poem"),
+        ("Paul Kim", "모든 날, 모든 순간"),
+        ("Epik High", "본능적으로"),
+        ("10cm", "사랑은 은하수 다방에서"),
     ],
     "driving": [
         ("Jang Beom June", "노래방에서"),
@@ -2033,6 +2047,11 @@ CURATED_DOMESTIC_MOOD_TRACKS: dict[str, list[tuple[str, str]]] = {
         ("Crush", "Rush Hour"),
         ("Peppertones", "도로 위에서"),
         ("Kim Dong Ryul", "그대가 이렇게 내게 오듯이"),
+        ("10cm", "아메리카노"),
+        ("Jang Beom June", "회전목마"),
+        ("Peppertones", "Jamboree"),
+        ("Standing Egg", "우리 아직 사랑한다면"),
+        ("Kim Dong Ryul", "감수성"),
     ],
 }
 
@@ -2113,65 +2132,81 @@ def discover_by_mood(tag: str, x_session_id: Optional[str] = Header(default=None
 
     "한국 노래랑 팝송을 구분하고 싶다"는 요청으로, 결과를 국내(domesticTracks)/해외
     (internationalTracks) 두 목록으로 나눠서 내려줌 — 자세한 판별 기준은 _is_domestic_artist 참고.
+
+    (2026-10-06) 두 가지 변경: (1) 가사 유무를 "있어야만 통과"하는 하드 필터에서 "있는 곡을
+    우선 보여주되 모자라면 없는 곡도 채우는" 소프트 정렬로 바꿈 — 어차피 §59 유튜브 폴백
+    경로에서는 가사 필터를 아예 건너뛰고 있어서 "모든 추천곡에 가사가 있다"는 보장 자체가
+    깨져 있었는데, 그 상태에서 "mellow"처럼 애초에 후보가 적은 무드가 필터 때문에 더
+    깎여나가는 게(4곡까지 줄어듦) 손해가 더 크다고 판단. (2) 같은 캐시를 계속 받아보면
+    "눌러도 맨날 같은 곡"이라는 피드백 — 결과를 그대로 캐싱하는 대신 더 큰 풀(POOL_SIZE)을
+    캐싱해두고, 요청마다 거기서 무작위로 최종 개수(RESULT_SIZE)만큼 뽑아 보여주도록 바꿈 —
+    같은 캐시 기간 안에서도 클릭할 때마다 다른 조합이 나오게 됨("빠른 선곡"의 프론트 셔플과
+    같은 아이디어를 여기선 백엔드 풀 캐싱 쪽에 적용).
     """
-    # 캐시 키 버전: v2는 국내/해외 분리(응답 스키마 변경, {"tracks":[...]} → domestic/international
-    # 두 필드로 바뀌면서 옛 캐시가 KeyError로 500을 냈던 문제 수정). v3은 트랙 이미지 우선순위를
-    # Last.fm→iTunes에서 iTunes→Last.fm으로 뒤집은 §31 변경분. v4는 국내 폴백을 무드 무관 k-pop
-    # 차트에서 무드별 큐레이션 목록으로 바꾼 변경분 — 안 올리면 옛 k-pop 차트 결과가 캐시 만료
-    # 전까지 계속 나감.
-    cache_key = f"discover-by-mood:v4:{tag.lower().strip()}"
-    cached = get_cached(cache_key)
-    if cached is not None:
-        if x_session_id:
-            total = len(cached["domesticTracks"]) + len(cached["internationalTracks"])
-            log_event(x_session_id, "mood_browse", tag, result_count=total)
-        return {**cached, "cached": True}
+    RESULT_SIZE = 10
+    POOL_SIZE = 20
 
-    # /chart와 같은 이유로, 최종 개수를 채우기 위해 더 많이(50곡) 받아온 뒤 국내/해외로 나눔.
-    candidates = _tag_top_tracks(tag, 50)
+    # 캐시 키 버전: v2는 국내/해외 분리(응답 스키마 변경). v3은 이미지 우선순위 반전(§31).
+    # v4는 국내 폴백을 무드별 큐레이션 목록으로 바꾼 변경(§63/§64). v5는 하드 필터→소프트
+    # 정렬 + "최종 결과" 대신 "더 큰 풀"을 캐싱하는 구조로 바뀐 변경 — 응답 의미 자체가
+    # 달라져서(캐시된 게 그대로 나가는 게 아니라 매번 그 안에서 재추출됨) 버전업 필요.
+    cache_key = f"discover-by-mood:v5:{tag.lower().strip()}"
+    pool = get_cached(cache_key)
 
-    domestic, international = [], []
-    for track in candidates:
-        (domestic if _is_domestic_artist(track["artist"]) else international).append(track)
+    if pool is None:
+        # /chart와 같은 이유로, 풀을 채우기 위해 더 많이(50곡) 받아온 뒤 국내/해외로 나눔.
+        candidates = _tag_top_tracks(tag, 50)
 
-    # Last.fm의 무드/장르 태그는 서구 팝 위주로 편향돼 있어서, 후보를 아무리 늘려도
-    # 국내 곡이 하나도 안 걸리는 태그가 실제로 있음 — 이 경우 무드별로 직접 골라둔
-    # CURATED_DOMESTIC_MOOD_TRACKS로 보충함(예전엔 여기서 "k-pop" 태그의 무드 무관 고정
-    # 차트를 썼는데, 그러면 대부분의 무드에서 국내 쪽이 똑같은 목록으로 보이는 문제가 있었음).
-    if len(domestic) < 6:
-        seen = {(t["artist"].lower(), t["name"].lower()) for t in domestic}
-        curated_pairs = CURATED_DOMESTIC_MOOD_TRACKS.get(tag.lower().strip(), [])
-        for track in _resolve_curated_tracks(curated_pairs):
-            key = (track["artist"].lower(), track["name"].lower())
-            if key not in seen:
-                domestic.append(track)
-                seen.add(key)
+        domestic, international = [], []
+        for track in candidates:
+            (domestic if _is_domestic_artist(track["artist"]) else international).append(track)
 
-        # 그래도 부족하면(큐레이션 목록에 없는 새 무드거나 검색이 다 실패한 경우) 예전처럼
-        # k-pop 인기 차트로 마지막 보충 — 무드와 안 맞아도 완전히 빈 화면보단 낫다는 판단.
-        if len(domestic) < 6:
-            for track in _tag_top_tracks("k-pop", 30):
+        # Last.fm의 무드/장르 태그는 서구 팝 위주로 편향돼 있어서, 후보를 아무리 늘려도
+        # 국내 곡이 하나도 안 걸리는 태그가 실제로 있음 — 이 경우 무드별로 직접 골라둔
+        # CURATED_DOMESTIC_MOOD_TRACKS로 보충함.
+        if len(domestic) < POOL_SIZE:
+            seen = {(t["artist"].lower(), t["name"].lower()) for t in domestic}
+            curated_pairs = CURATED_DOMESTIC_MOOD_TRACKS.get(tag.lower().strip(), [])
+            for track in _resolve_curated_tracks(curated_pairs):
                 key = (track["artist"].lower(), track["name"].lower())
                 if key not in seen:
                     domestic.append(track)
                     seen.add(key)
 
-    # 국내/해외를 따로따로 _filter_tracks_with_lyrics()에 넘기면 스레드풀 병렬 조회가 두 번
-    # 순차로 도는 셈이라(첫 번째 그룹 다 끝나야 두 번째 그룹 시작) 체감 속도가 눈에 띄게
-    # 느려짐 — "뜨긴 하는데 느리다"는 피드백으로, 후보를 합쳐서 한 번의 병렬 조회로 끝낸 뒤
-    # 그 결과만 국내/해외로 다시 나누는 방식으로 바꿔서 대기 시간을 절반 가까이 줄임.
-    availability = _lyrics_availability_map(domestic + international)
-    domestic_tracks = [t for t in domestic if availability.get((t["artist"], t["name"]))][:10]
-    international_tracks = [t for t in international if availability.get((t["artist"], t["name"]))][:10]
+            # 그래도 부족하면(큐레이션 목록에 없는 새 무드거나 검색이 다 실패한 경우) 예전처럼
+            # k-pop 인기 차트로 마지막 보충 — 무드와 안 맞아도 완전히 빈 화면보단 낫다는 판단.
+            if len(domestic) < POOL_SIZE:
+                for track in _tag_top_tracks("k-pop", 30):
+                    key = (track["artist"].lower(), track["name"].lower())
+                    if key not in seen:
+                        domestic.append(track)
+                        seen.add(key)
 
-    result = {"domesticTracks": domestic_tracks, "internationalTracks": international_tracks}
-    set_cached(cache_key, result)
+        # 국내/해외를 따로따로 _filter_tracks_with_lyrics()에 넘기면 스레드풀 병렬 조회가 두 번
+        # 순차로 도는 셈이라 체감 속도가 느려짐 — 후보를 합쳐서 한 번의 병렬 조회로 끝낸 뒤
+        # 그 결과만 국내/해외로 다시 나누는 방식으로 대기 시간을 절반 가까이 줄임.
+        availability = _lyrics_availability_map(domestic + international)
+        # 가사 있는 곡이 앞에 오도록 안정 정렬(원래 인기순은 그대로 유지)만 하고, 없다고
+        # 탈락시키진 않음 — 모자라면 가사 없는 곡도 풀에 포함됨.
+        domestic.sort(key=lambda t: not availability.get((t["artist"], t["name"]), False))
+        international.sort(key=lambda t: not availability.get((t["artist"], t["name"]), False))
+
+        pool = {
+            "domesticPool": domestic[:POOL_SIZE],
+            "internationalPool": international[:POOL_SIZE],
+        }
+        set_cached(cache_key, pool)
+
+    domestic_pool = pool["domesticPool"]
+    international_pool = pool["internationalPool"]
+    domestic_tracks = random.sample(domestic_pool, min(RESULT_SIZE, len(domestic_pool)))
+    international_tracks = random.sample(international_pool, min(RESULT_SIZE, len(international_pool)))
 
     if x_session_id:
         total = len(domestic_tracks) + len(international_tracks)
         log_event(x_session_id, "mood_browse", tag, result_count=total)
 
-    return {**result, "cached": False}
+    return {"domesticTracks": domestic_tracks, "internationalTracks": international_tracks}
 
 
 @app.get("/chart")

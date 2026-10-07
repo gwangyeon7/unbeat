@@ -109,10 +109,10 @@ Unbeat: Spotify API 기반으로 새로운 음악을 찾아주는 서비스.
 - [x] FastAPI 백엔드용 Dockerfile 작성 후 Render Web Service로 배포 — `unbeat-backend` 라이브 확인
 - [x] Spring Boot 플레이리스트 서비스용 Dockerfile 작성 후 Render Web Service로 배포 — `unbeat-playlist` 라이브 확인 (DB 연결 문제 별도 해결, 학습노트 참고)
 - [x] MariaDB를 Render Private Service로 컨테이너 직접 구동(영구 디스크 사용, 지금 스키마 그대로 유지 — 마이그레이션 불필요) — unbeat.org에서 즐겨찾기 저장/삭제가 실제로 DB에 쓰이고 유지되는 것 라이브 확인 완료. (버그 발견+수정) 확인 과정에서 "트랙 즐겨찾기 처리에 실패했어요" 에러 재현 — Render 로그로 원인 확인(`DataIntegrityViolationException: Duplicate entry ... favorite_tracks`). `FavoriteTrackService.add()`/`FavoriteService.add()` 둘 다 "이미 있으면 그대로 반환" 체크 후 저장하는 구조인데, 그 체크와 저장 사이에 틈이 있어서 같은 곡을 거의 동시에 두 번 누르면(더블클릭 등) 두 요청 모두 체크를 통과한 뒤 DB unique 제약(session_id+artist_name[+track_name])에서 두 번째 insert가 막혀 500으로 터지는 race condition이었음 — 프론트(`handleToggleFavoriteTrack`)가 로컬 state만 보고 "이미 즐겨찾기됐는지" 판단해서 더 쉽게 재현됨. 두 서비스 모두 `DataIntegrityViolationException`을 잡아서 이미 저장된 레코드를 재조회해 정상 응답으로 돌려주도록 수정(멱등하게 처리) — 사용자가 직접 IntelliJ에서 Gradle 빌드 확인(컴파일 통과) 후 push, Render 재배포(커밋 `f23fb88`) 완료, 이후 같은 중복 시도가 재현됐을 때 Render 로그에 더 이상 500 ERROR가 안 찍히는 것까지 확인함 — 라이브 확인 완료. (별개 발견) 에러처럼 보였던 재현 사례 중 하나는 실제로는 버그가 아니라 Render 무료 티어 콜드스타트(playlist-service가 15분 미접속으로 잠들어 있다가 깨어나는 도중 첫 요청이 실패)였음 — 새로고침 후 재시도하면 정상 동작, 메모리에 별도 기록해둠
-- [ ] Redis는 Render 매니지드 Redis 또는 컨테이너로 구동 — 서비스 자체는 떠있으나 캐싱 동작 라이브 확인은 아직
+- [x] Redis는 Render 매니지드 Redis 또는 컨테이너로 구동 — 프로덕션(`unbeat-backend.onrender.com/chart`)에서 첫 호출 `"cached":false` → 재호출 `"cached":true`(동일 데이터)로 캐싱 동작 실제 확인 완료 (2026-10-07)
 - [x] 프론트(Vercel) ↔ 백엔드(Render) 간 CORS/환경변수(API URL) 연결 — `ALLOWED_ORIGINS` 환경변수가 코드에 반영 안 되던 근본 원인(미커밋) 수정 후 `unbeat.org`에서 콘솔 에러 없이 정상 로드 확인
-- [x] GitHub 연결 시 자동 배포되는지 확인 — Render는 `gwangyeon` 브랜치, Vercel은 Production Branch를 `dev`로 변경(기존 `main`은 사용 안 하던 브랜치였음) 후 PR 머지→자동 재배포 라이브 확인. GitHub 저장소 기본 브랜치도 `dev`로 통일
-- [ ] 무료 티어 특성상 15분 미접속 시 슬립 → 콜드스타트 1분 정도 발생하는 점 인지(논문 심사 데모 전엔 미리 한 번 깨워두기)
+- [x] GitHub 연결 시 자동 배포되는지 확인 — Render는 `gwangyeon` 브랜치, Vercel은 Production Branch를 처음엔 `dev`로 변경(기존 `main`은 사용 안 하던 브랜치였음) 후 PR 머지→자동 재배포 라이브 확인. GitHub 저장소 기본 브랜치도 `dev`로 통일. (정정, 2026-10-06) 실제 작업 브랜치는 `gwangyeon`인데 Vercel Production Branch가 `dev`로 남아있어서 프론트 푸시가 프리뷰로만 올라가고 unbeat.org엔 반영 안 되는 문제를 재발견 — Production Branch를 다시 `gwangyeon`으로 변경해 Render/Vercel 둘 다 같은 브랜치를 보도록 통일함([[project_unbeat_deploy_branch_mismatch]] 참고)
+- [x] 무료 티어 특성상 15분 미접속 시 슬립 → 콜드스타트 1분 정도 발생하는 점 인지(논문 심사 데모 전엔 미리 한 번 깨워두기) — 2026-10-06/07 두 차례 실제로 겪고 직접 확인함(§Phase 5-1 위 항목, [[학습노트]] 아님, 메모리 `project_unbeat_render_coldstart_demo` 참고)
 
 ### 5-2. 로그인/회원 시스템 — Supabase Auth
 - [ ] Supabase 프로젝트 생성, 이메일/비번 로그인(+선택적으로 OAuth) 활성화

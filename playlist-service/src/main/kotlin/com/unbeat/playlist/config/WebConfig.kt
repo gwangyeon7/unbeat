@@ -18,7 +18,9 @@ class WebConfig(
 
 		registry.addMapping("/**")
 			.allowedOrigins(*(defaultOrigins + parsedExtra))
-			.allowedMethods("GET", "POST", "DELETE", "OPTIONS")
+			// PATCH 추가 — 게이미피케이션 2단계(공개/비공개 전환, /playlists/{id}/visibility)에서
+			// 처음 써서 기존 목록에 빠져있었음. 안 넣으면 브라우저 CORS preflight에서 막힘.
+			.allowedMethods("GET", "POST", "PATCH", "DELETE", "OPTIONS")
 			.allowedHeaders("*")
 	}
 }

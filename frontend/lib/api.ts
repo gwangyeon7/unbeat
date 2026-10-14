@@ -1,4 +1,5 @@
 import { getSessionId } from "@/lib/session";
+import { getAccessToken } from "@/lib/supabase";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000";
 
@@ -21,11 +22,16 @@ export type Track = {
 };
 
 async function fetchJson<T>(path: string, options: RequestInit = {}): Promise<T> {
+  // 로그인했으면 Supabase access_token(JWT)을 Authorization 헤더로 같이 보냄 — 백엔드가
+  // 이 헤더가 있으면 검증해서 UUID를 식별하고, 없으면(비로그인) 기존 X-Session-Id 경로로
+  // 그대로 처리함(선택적 인증, ROADMAP 5-2 결정).
+  const accessToken = await getAccessToken();
   const res = await fetch(`${API_BASE_URL}${path}`, {
     ...options,
     cache: "no-store",
     headers: {
       "X-Session-Id": getSessionId(),
+      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
       // ngrok 무료 티어는 브라우저 최초 방문 때뿐 아니라 이 fetch 같은 XHR 요청에도
       // "방문 확인" 경고 페이지(HTML)를 끼워 넣어서, res.json() 파싱이 깨져 조용히
       // 빈 배열로 폴백되는 문제가 있었음(폰으로 테스트할 때 홈 화면 전체가 비어 보인 원인).
@@ -95,6 +101,39 @@ export function discoverByMood(
 ): Promise<{ domesticTracks: Track[]; internationalTracks: Track[] }> {
   const query = encodeURIComponent(tag);
   return fetchJson(`/discover-by-mood?tag=${query}`);
+}
+
+// (Phase 5-3) GPS 좌표 + 실시간 날씨 기반 무드 추천. 로그인 불필요, 좌표는 이 요청에만 씀.
+export type ContextMoodResult = {
+  moodTag: string;
+  moodLabel: string;
+  description: string;
+  temperature: number;
+  domesticTracks: Track[];
+  internationalTracks: Track[];
+};
+
+export function getContextMood(lat: number, lon: number): Promise<ContextMoodResult> {
+  return fetchJson(`/context-mood?lat=${lat}&lon=${lon}`);
+}
+
+// "감정 다이어리" — 자유 텍스트 일기를 Claude Haiku에게 보내 공감 메시지 + 어울리는 무드의
+// 추천곡을 받아옴. 서버는 일기 원문을 저장하지 않으므로(프라이버시), 기록 보관은 호출하는
+// 쪽(page.tsx)이 localStorage에 직접 담당한다(즐겨찾기/플레이리스트와 같은 패턴).
+export type DiaryReflectionResult = {
+  message: string;
+  moodTag: string;
+  moodLabel: string;
+  domesticTracks: Track[];
+  internationalTracks: Track[];
+};
+
+export function getDiaryReflection(text: string): Promise<DiaryReflectionResult> {
+  return fetchJson(`/diary-reflection`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text }),
+  });
 }
 
 // 검색창 드롭다운용 '최근 검색' 목록. 분석 이벤트 로그가 아니라 Redis에 세션별로 저장된
@@ -256,5 +295,44 @@ export function getAiQuickPicks(
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ favorites }),
+  });
+}
+
+// (§83) "다음 트랙" 수작업 매핑 관리자 화면(/admin/next-tracks)용 — 오디오 분석/협업 필터링이
+// 라이선스·데이터 문제로 막혀있어서, 가사 수동 등록과 같은 방식으로 "이 곡 다음엔 이 곡"을
+// 운영자가 직접 등록해둠. similar-tracks가 이 등록이 있으면 Last.fm을 거치지 않고 바로 씀.
+export type NextTrackOverrideEntry = {
+  artist: string;
+  track: string;
+  nextTracks: { artist: string; track: string }[];
+};
+
+export function getNextTrackOverrides(
+  adminSecret: string
+): Promise<{ overrides: NextTrackOverrideEntry[] }> {
+  return fetchJson(`/admin/next-track-overrides`, {
+    headers: { "X-Admin-Secret": adminSecret },
+  });
+}
+
+export function submitNextTracksOverride(
+  adminSecret: string,
+  payload: { artist: string; track: string; next_tracks: { artist: string; track: string }[] }
+): Promise<{ saved: boolean; count: number }> {
+  return fetchJson(`/next-tracks/override`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Admin-Secret": adminSecret },
+    body: JSON.stringify(payload),
+  });
+}
+
+export function deleteNextTracksOverride(
+  adminSecret: string,
+  payload: { artist: string; track: string }
+): Promise<{ deleted: boolean }> {
+  const params = new URLSearchParams({ artist: payload.artist, track: payload.track });
+  return fetchJson(`/next-tracks/override?${params.toString()}`, {
+    method: "DELETE",
+    headers: { "X-Admin-Secret": adminSecret },
   });
 }

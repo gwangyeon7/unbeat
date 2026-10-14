@@ -16,3 +16,20 @@ body {
 .scrollbar-none::-webkit-scrollbar {
   display: none; /* Chrome/Safari/Edge(Chromium) */
 }
+
+/* (모바일 앱 느낌 개선) 전체화면 서랍/검색 같은 오버레이가 지금까지 아무 전환 없이 뚝 나타났다가
+   사라졌음 — "웹사이트 같다"는 피드백 중 하나가 이 부분이라, 아래에서 슬라이드업 + 살짝 페이드로
+   뜨게 함. 네이티브 앱의 바텀시트/풀스크린 전환과 비슷한 느낌을 의도함. */
+@keyframes slide-up-in {
+  from {
+    transform: translateY(16px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+.animate-slide-up-in {
+  animation: slide-up-in 220ms cubic-bezier(0.16, 1, 0.3, 1);
+}

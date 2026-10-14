@@ -29,6 +29,11 @@ dependencies {
 	implementation("org.springframework.boot:spring-boot-starter-actuator")
 	implementation("org.jetbrains.kotlin:kotlin-reflect")
 	runtimeOnly("com.mysql:mysql-connector-j")
+	// Supabase 로그인 JWT 검증용(게이미피케이션의 전제조건, 2026-10-10). FastAPI 쪽(backend/auth.py)은
+	// PyJWKClient로 JWKS 공개키를 받아 ES256 서명을 검증하는데, 그 자바/코틀린 생태계 동급 라이브러리.
+	// 전체 Spring Security를 새로 들이는 대신 이 라이브러리 하나로 "헤더 파싱 -> 서명 검증 -> sub 추출"만
+	// 가볍게 처리 — 기존 컨트롤러들이 @RequestHeader로 직접 값을 받는 단순한 스타일과 일관되게 유지.
+	implementation("com.nimbusds:nimbus-jose-jwt:9.37.3")
 
 	testImplementation("org.springframework.boot:spring-boot-starter-test")
 	testImplementation("org.mockito.kotlin:mockito-kotlin:5.2.1")

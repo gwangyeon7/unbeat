@@ -12,6 +12,7 @@
     "@capacitor/android": "^8.5.0",
     "@capacitor/cli": "^8.5.0",
     "@capacitor/core": "^8.5.0",
+    "@supabase/supabase-js": "^2.117.2",
     "cordova-plugin-background-mode": "^0.7.3",
     "cordova-plugin-device": "^3.0.0",
     "next": "14.2.5",

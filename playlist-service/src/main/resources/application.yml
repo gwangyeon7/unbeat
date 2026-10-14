@@ -35,6 +35,12 @@ spring:
 lastfm:
   api-key: ${LASTFM_API_KEY:}
 
+# Supabase 로그인 JWT 검증용(게이미피케이션, 2026-10-10 추가). backend(FastAPI)의 SUPABASE_URL과
+# 같은 값을 써야 함(같은 Supabase 프로젝트의 JWKS 엔드포인트). 비어있으면 SupabaseAuth가 검증 자체를
+# 건너뛰고 항상 비로그인으로 처리 — 로그인이 선택 기능이라 이 설정이 없어도 서비스가 죽으면 안 됨.
+supabase:
+  url: ${SUPABASE_URL:}
+
 # Render의 healthCheckPath(/actuator/health)가 기본 설정으론 DB 연결까지 확인하는데,
 # DB 연결이 간헐적으로 끊기는 상황에서 헬스체크마다 걸려서 배포 자체가 "Timed Out"으로
 # 실패하는 문제가 있었음 — 헬스체크에서 DB 체크를 빼서 앱만 떠있으면 배포가 통과되게 함.

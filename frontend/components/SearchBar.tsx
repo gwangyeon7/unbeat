@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { searchSuggest, type SearchSuggestion } from "@/lib/api";
 
 type SearchBarProps = {
@@ -8,14 +9,20 @@ type SearchBarProps = {
   isLoading?: boolean;
   recentSearches?: string[];
   onRemoveRecent?: (query: string) => void;
+  // (모바일 하단 탭바 도입) "검색" 탭이 이 컴포넌트 내부의 모바일 전체화면 검색을 대신 열어줄 수
+  // 있게 됨에 따라, 헤더에 있던 돋보기 아이콘 자체는 더 이상 안 보여줘도 됨(탭바와 기능이 겹침).
+  // true면 그 아이콘 버튼만 숨기고, 전체화면 검색 로직/마크업 자체는 그대로 둠(ref로 열림).
+  hideMobileTrigger?: boolean;
 };
 
-export default function SearchBar({
-  onSearch,
-  isLoading,
-  recentSearches = [],
-  onRemoveRecent,
-}: SearchBarProps) {
+export type SearchBarHandle = {
+  openMobileSearch: () => void;
+};
+
+const SearchBar = forwardRef<SearchBarHandle, SearchBarProps>(function SearchBar(
+  { onSearch, isLoading, recentSearches = [], onRemoveRecent, hideMobileTrigger = false },
+  ref
+) {
   const [value, setValue] = useState("");
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   // (모바일 검색 UX 개편) 유튜브 뮤직/멜론 앱은 헤더에 검색창 전체를 항상 띄워두지 않고
@@ -57,6 +64,14 @@ export default function SearchBar({
       mobileInputRef.current?.focus();
     }
   }, [isMobileOpen]);
+
+  // 하단 탭바의 "검색" 버튼이 외부(page.tsx)에서 이 전체화면 검색을 열 수 있게 노출.
+  // state 자체를 끌어올리는 대신 ref로 메서드 하나만 노출한 이유: 내부 상태/로직(디바운스,
+  // 자동완성, 최근 검색 등)은 전부 이 컴포넌트 안에 그대로 두고 싶어서(이미 잘 동작하던 걸
+  // 건드릴 이유가 없음) — "열어라"는 명령 하나만 받으면 충분함.
+  useImperativeHandle(ref, () => ({
+    openMobileSearch: () => setIsMobileOpen(true),
+  }));
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -227,23 +242,30 @@ export default function SearchBar({
         </div>
       )}
 
-      {/* 모바일(sm 미만) — 돋보기 아이콘만 노출, 탭하면 전체화면 검색으로 전환 */}
-      <button
-        type="button"
-        aria-label="검색"
-        onClick={() => setIsMobileOpen(true)}
-        className="flex h-11 w-11 items-center justify-center rounded-full text-white/80 hover:bg-white/10 sm:hidden"
-      >
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-5 w-5">
-          <circle cx="11" cy="11" r="7" />
-          <path d="m21 21-4.3-4.3" />
-        </svg>
-      </button>
+      {/* 모바일(sm 미만) — 돋보기 아이콘만 노출, 탭하면 전체화면 검색으로 전환.
+          (하단 탭바 도입) 탭바의 "검색"이 같은 역할을 대신하게 돼서 hideMobileTrigger가 true면
+          이 아이콘은 안 그림 — 전체화면 검색 자체(바로 아래)는 그대로 ref로 열 수 있음. */}
+      {!hideMobileTrigger && (
+        <button
+          type="button"
+          aria-label="검색"
+          onClick={() => setIsMobileOpen(true)}
+          className="flex h-11 w-11 items-center justify-center rounded-full text-white/80 hover:bg-white/10 sm:hidden"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-5 w-5">
+            <circle cx="11" cy="11" r="7" />
+            <path d="m21 21-4.3-4.3" />
+          </svg>
+        </button>
+      )}
 
       {/* 모바일 전체화면 검색 — 유튜브 뮤직/멜론처럼 뒤로가기 화살표 + 입력창 + 최근 검색(또는
           자동완성)을 화면 전체로 덮어서 보여줌. */}
-      {isMobileOpen && (
-        <div className="fixed inset-0 z-50 flex h-screen w-screen flex-col bg-black sm:hidden">
+      {/* header가 sticky + z-20으로 자체 stacking context를 만들어서, 이 안에 그냥 두면
+          z-50을 줘도 header 바깥의 하단 탭바(z-30, 하단 탭바 도입으로 신규)보다 아래에
+          깔려 버림 — createPortal로 body 바로 밑에 그려서 그 제약을 벗어나게 함. */}
+      {isMobileOpen && createPortal(
+        <div className="animate-slide-up-in fixed inset-0 z-50 flex h-screen w-screen flex-col bg-black sm:hidden">
           <form onSubmit={handleSubmit} className="flex items-center gap-2 border-b border-white/10 p-3">
             <button
               type="button"
@@ -284,8 +306,11 @@ export default function SearchBar({
               ? hasSuggestions && renderSuggestionList()
               : recentSearches.length > 0 && renderRecentList()}
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
-}
+});
+
+export default SearchBar;

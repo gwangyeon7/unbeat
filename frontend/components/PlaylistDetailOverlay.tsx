@@ -16,6 +16,10 @@ type PlaylistDetailOverlayProps = {
   onAddSelectedToPlaylist: (tracks: PlaylistTrack[]) => void;
   onRemoveTrack: (trackId: number) => void;
   onDeleteSelected: (trackIds: number[]) => void;
+  // (게이미피케이션 2단계) 공개/비공개 전환 — 비로그인 상태에서 공개로 바꾸려 하면 호출하는 쪽
+  // (page.tsx)이 로그인 모달을 띄움.
+  onToggleVisibility: () => void;
+  isTogglingVisibility: boolean;
 };
 
 // 멜론 앱 재생목록 화면(체크박스 + 하단 선택반복/믹스업/다운/담기/삭제 액션바)을 참고해서 추가.
@@ -34,6 +38,8 @@ export default function PlaylistDetailOverlay({
   onAddSelectedToPlaylist,
   onRemoveTrack,
   onDeleteSelected,
+  onToggleVisibility,
+  isTogglingVisibility,
 }: PlaylistDetailOverlayProps) {
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   // "삭제 누르면 바로 없어지는 게 아니라 한 번 물어봤으면 좋겠다"는 피드백으로 추가 — 특히
@@ -90,7 +96,22 @@ export default function PlaylistDetailOverlay({
           </p>
           <p className="text-xs text-white/40">{list.length}곡</p>
         </div>
-        <div className="w-9" />
+        {/* (게이미피케이션 2단계) 공개/비공개 전환 — 공개하면 "둘러보기" 피드에 다른 사용자에게
+            노출됨. 비로그인 상태로 공개를 누르면 onToggleVisibility 호출 쪽(page.tsx)이 로그인
+            모달을 띄우도록 처리돼 있어서, 여기선 버튼 자체를 숨기거나 막지 않고 그대로 눌리게 둠. */}
+        <button
+          type="button"
+          onClick={onToggleVisibility}
+          disabled={isTogglingVisibility}
+          title={playlist.isPublic ? "공개 중 — 눌러서 비공개로 전환" : "비공개 — 눌러서 다른 사람에게 공개"}
+          className={`shrink-0 rounded-full px-2 py-1 text-[11px] disabled:opacity-40 ${
+            playlist.isPublic
+              ? "bg-accent/20 text-accent"
+              : "text-white/40 hover:bg-white/10 hover:text-white/70"
+          }`}
+        >
+          {playlist.isPublic ? "🌐 공개" : "🔒 비공개"}
+        </button>
       </div>
 
       <div className="mx-auto flex w-full max-w-2xl min-h-0 flex-1 flex-col overflow-hidden px-4 pt-3">

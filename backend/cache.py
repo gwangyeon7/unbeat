@@ -130,3 +130,39 @@ def get_recent_plays(session_id: str) -> list:
     except redis.RedisError as e:
         print(f"[cache] 최근 재생 조회 실패 (빈 목록으로 대체): {e}")
         return []
+
+
+# "다음 트랙" 수작업 매핑(§82 이후, 외부 API 없이 운영자가 직접 등록) 인덱스.
+# 매핑 자체는 next-track-override:{artist}:{track} 키 각각에 저장되는데, Redis는 "이 패턴에
+# 맞는 키 전부"를 가볍게 조회하는 기능이 없어서(KEYS 명령은 운영 중 전체 스캔이라 피해야 함),
+# 관리자 페이지에서 "지금까지 등록한 매핑 목록"을 보여주려면 어떤 (아티스트, 곡명) 쌍에 매핑이
+# 있는지 따로 추적해둬야 함 — 그래서 Set 하나에 그 쌍들만 모아둠(가사 요청 큐와 달리, 이건
+# "사용자 요청"이 아니라 운영자가 능동적으로 등록하는 거라 MariaDB 쪽엔 로그가 없음).
+NEXT_TRACK_OVERRIDE_INDEX_KEY = "next-track-override-index"
+
+
+def _override_index_member(artist: str, track: str) -> str:
+    return json.dumps({"artist": artist, "track": track}, ensure_ascii=False)
+
+
+def add_next_track_override_index(artist: str, track: str):
+    try:
+        _client.sadd(NEXT_TRACK_OVERRIDE_INDEX_KEY, _override_index_member(artist, track))
+    except redis.RedisError as e:
+        print(f"[cache] 다음 트랙 override 인덱스 추가 실패 (무시하고 진행): {e}")
+
+
+def remove_next_track_override_index(artist: str, track: str):
+    try:
+        _client.srem(NEXT_TRACK_OVERRIDE_INDEX_KEY, _override_index_member(artist, track))
+    except redis.RedisError as e:
+        print(f"[cache] 다음 트랙 override 인덱스 삭제 실패 (무시하고 진행): {e}")
+
+
+def list_next_track_overrides() -> list:
+    try:
+        raw = _client.smembers(NEXT_TRACK_OVERRIDE_INDEX_KEY)
+        return [json.loads(r) for r in raw]
+    except redis.RedisError as e:
+        print(f"[cache] 다음 트랙 override 인덱스 조회 실패 (빈 목록으로 대체): {e}")
+        return []

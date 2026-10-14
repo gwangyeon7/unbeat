@@ -6,6 +6,10 @@ pymysql
 redis
 rapidfuzz
 anthropic
+
+# Supabase 로그인 JWT 검증용(§5-2, 2026-10-07). [crypto]는 이 프로젝트가 쓰는 ES256
+# (비대칭키) 서명 검증에 필요한 cryptography 패키지를 같이 설치해줌.
+PyJWT[crypto]
 # 띄어쓰기 없는 한글 검색어 교정용(§45). PyPI에 없어서 git URL로 설치 — TensorFlow/Keras를
 # 딸려오는 무거운 패키지라(설치 용량 ~300MB) 설치가 오래 걸릴 수 있음, 정상.
 # PyKoSpacing의 setup.py가 macOS(Darwin)에서는 의도적으로 의존성 목록을 빈 리스트로 반환하게

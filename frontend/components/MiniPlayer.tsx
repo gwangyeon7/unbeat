@@ -803,7 +803,9 @@ export default function MiniPlayer({
   }
 
   return (
-    <div className="fixed inset-x-0 bottom-0 z-30 border-t border-white/10 bg-black/95 backdrop-blur">
+    // (하단 탭바 도입) 폰 화면(sm 미만)엔 page.tsx의 하단 탭바(h-16, bottom-0)가 깔려 있어서
+    // 이 collapsed bar를 bottom-16으로 올려 탭바 위에 쌓음. sm 이상은 탭바가 없으니 기존대로 bottom-0.
+    <div className="fixed inset-x-0 bottom-16 z-30 border-t border-white/10 bg-black/95 backdrop-blur sm:bottom-0">
       {/* 실제 유튜브 iframe — 화면엔 안 보이게 숨겨두고 오디오 소스로만 씀 */}
       <div
         ref={containerRef}

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import SearchBar from "@/components/SearchBar";
+import SearchBar, { type SearchBarHandle } from "@/components/SearchBar";
 import ArtistCard from "@/components/ArtistCard";
 import TrackList from "@/components/TrackList";
 import CompactTrackGrid from "@/components/CompactTrackGrid";
@@ -11,6 +11,9 @@ import FavoriteTrackRow from "@/components/FavoriteTrackRow";
 import AddToPlaylistModal from "@/components/AddToPlaylistModal";
 import PlaylistDetailOverlay from "@/components/PlaylistDetailOverlay";
 import StaleTracksModal from "@/components/StaleTracksModal";
+import AuthModal from "@/components/AuthModal";
+import RankingPage from "@/components/RankingPage";
+import { supabase } from "@/lib/supabase";
 import {
   search,
   recommendByArtist,
@@ -26,8 +29,12 @@ import {
   getYoutubeChart,
   searchYoutubeVideo,
   getSimilarTracks,
+  getContextMood,
+  getDiaryReflection,
   type Artist,
   type Track,
+  type ContextMoodResult,
+  type DiaryReflectionResult,
 } from "@/lib/api";
 import {
   getFavorites,
@@ -45,11 +52,20 @@ import {
   removeTrackFromPlaylist,
   generateAutoPlaylists,
   getStaleFavoriteTracks,
+  setPlaylistVisibility,
+  getPublicPlaylists,
+  setNickname,
+  getProfile,
+  likePlaylist,
+  unlikePlaylist,
+  PlaylistApiError,
   type Favorite,
   type FavoriteTrack,
   type Playlist,
   type PlaylistTrack,
+  type PublicPlaylist,
 } from "@/lib/playlistApi";
+import { MUSIC_CATEGORIES } from "@/lib/categories";
 
 // "빠른 선곡" 섹션에서, 같은 후보 목록이라도 새로고침마다 다르게 보이도록 순서를 섞는 데 씀.
 // (Fisher-Yates) — 진짜 개인화 추천 AI는 이 프로젝트 범위 밖(ROADMAP 목표에 명시)이라, 최소한
@@ -108,9 +124,37 @@ export default function Home() {
   // 홈 화면 무드 탐색용 상태 — 검색과는 별개 흐름
   // "한국 노래랑 팝송 구분하고 싶다"는 피드백으로 국내/해외 두 목록으로 나눠서 보관
   const [selectedMood, setSelectedMood] = useState<string | null>(null);
+  // (Phase 5-3) 컨텍스트 인식 탐색 — GPS+실시간 날씨로 자동 추천되는 섹션. 버튼으로 가리지
+  // 않고 홈 진입 시 자동으로 위치 권한을 물어보기로 결정(사용자 요청) — 거부/실패해도
+  // 에러 UI 없이 그냥 섹션을 안 보여줌(조용히 무시).
+  const [contextMood, setContextMood] = useState<ContextMoodResult | null>(null);
   const [domesticMoodTracks, setDomesticMoodTracks] = useState<Track[]>([]);
   const [internationalMoodTracks, setInternationalMoodTracks] = useState<Track[]>([]);
   const [isLoadingMood, setIsLoadingMood] = useState(false);
+
+  // (Phase 5-3) 감정 다이어리 — 자유 텍스트 일기를 Claude Haiku가 읽고 공감 메시지 +
+  // 어울리는 무드의 추천곡을 돌려줌. 서버는 일기 원문을 저장하지 않아서(프라이버시),
+  // 기록은 이 브라우저의 localStorage에만 남김(즐겨찾기/플레이리스트와 같은 패턴) —
+  // 로그인 여부와 무관하게 기기가 바뀌면 기록도 같이 사라지는 건 알려진 트레이드오프.
+  const DIARY_HISTORY_KEY = "unbeat:diary-history";
+  const DIARY_HISTORY_CAP = 10;
+  type DiaryHistoryEntry = {
+    date: string; // YYYY-MM-DD
+    text: string;
+    message: string;
+    moodLabel: string;
+  };
+  // (UI 재배치, 2026-10-08) 처음엔 홈 피드 안에 입력창을 바로 깔아놨는데, "스크롤로 곡 보는
+  // 흐름 중간에 글 쓰는 칸이 끼어있는 게 안 어울린다"는 피드백으로, 홈에는 작은 진입 버튼만
+  // 남기고 실제 입력/결과는 모달로 분리(AuthModal과 같은 "화면 중앙 모달" 패턴 재사용).
+  const [isDiaryOpen, setIsDiaryOpen] = useState(false);
+  const [diaryText, setDiaryText] = useState("");
+  const [diaryResult, setDiaryResult] = useState<DiaryReflectionResult | null>(null);
+  const [isDiaryLoading, setIsDiaryLoading] = useState(false);
+  const [diaryError, setDiaryError] = useState<string | null>(null);
+  const [diaryHistory, setDiaryHistory] = useState<DiaryHistoryEntry[]>([]);
+  const [isDiaryHistoryOpen, setIsDiaryHistoryOpen] = useState(false);
+  const DIARY_TEXT_MAX_LENGTH = 500;
 
   // 검색/무드 선택 전에도 중앙이 비어 보이지 않게, 홈 화면 기본으로 깔아둘 인기곡 차트.
   // "스포티파이/유튜브 뮤직처럼 홈이 여러 행으로 나뉘어 있으면 좋겠다"는 피드백을 받고
@@ -173,12 +217,54 @@ export default function Home() {
   const [isCreatingPlaylist, setIsCreatingPlaylist] = useState(false);
   const [newPlaylistName, setNewPlaylistName] = useState("");
   const [isGeneratingPlaylists, setIsGeneratingPlaylists] = useState(false);
+  // (게이미피케이션 2단계, 2026-10-10) 공개/비공개 전환 + 다른 사람 재생목록 둘러보기 피드.
+  // 처음엔 재생목록 상세 화면 안 🌐 아이콘+모달이었는데, "게이미피케이션 기능이 아이콘 하나로
+  // 띡 나오니 이상하다"는 라이브 피드백으로 하단 탭바의 전용 탭 + 전체화면(RankingPage)으로
+  // 옮김([[학습노트 90번]] 예정) — state 이름은 그대로 두되 역할은 "랭킹 페이지 열림 여부".
+  const [isTogglingVisibility, setIsTogglingVisibility] = useState(false);
+  const [isPublicFeedOpen, setIsPublicFeedOpen] = useState(false);
+  const [publicPlaylists, setPublicPlaylists] = useState<PublicPlaylist[]>([]);
+  const [isLoadingPublicFeed, setIsLoadingPublicFeed] = useState(false);
+  // 피드에서 재생목록을 클릭하면 그 안의 곡 목록을 같은 모달 안에서 보여줌(상세 화면을 또
+  // 새로 안 만들고, "둘러보기 목록 <-> 선택한 재생목록 곡" 두 단계만 모달 하나로 처리).
+  const [viewingPublicPlaylistId, setViewingPublicPlaylistId] = useState<number | null>(null);
+  const [publicPlaylistTracks, setPublicPlaylistTracks] = useState<PlaylistTrack[] | null>(null);
+  // (게이미피케이션 2.5단계, 2026-10-10) "재생목록이 그냥 올라가기보단 닉네임을 정해서 그
+  // 사람 페이지로 들어가는 식이면 좋겠다"는 피드백으로 추가 — 공개 피드에서 닉네임을 누르면
+  // 그 사람이 공개한 재생목록 모음(프로필 페이지)으로 들어감.
+  const [viewingProfileNickname, setViewingProfileNickname] = useState<string | null>(null);
+  const [profilePlaylists, setProfilePlaylists] = useState<PublicPlaylist[] | null>(null);
+  // 재생목록을 처음 공개로 전환하려는데 아직 닉네임이 없으면(백엔드 428) 닉네임 설정 모달을
+  // 띄움 — 어느 재생목록을 공개하려던 시도였는지 기억해뒀다가, 닉네임 저장에 성공하면 그
+  // 재생목록 공개 전환을 자동으로 다시 시도함(사용자가 "공개" 버튼을 두 번 누르지 않게).
+  const [isNicknameModalOpen, setIsNicknameModalOpen] = useState(false);
+  const [pendingVisibilityPlaylist, setPendingVisibilityPlaylist] = useState<Playlist | null>(null);
+  const [nicknameInput, setNicknameInput] = useState("");
+  const [nicknameError, setNicknameError] = useState<string | null>(null);
+  const [isSavingNickname, setIsSavingNickname] = useState(false);
+  // (랭킹 카테고리 필터, 2026-10-10 추가) 비공개 -> 공개 전환은 이제 카테고리를 먼저 골라야
+  // 해서, 닉네임 모달과 같은 패턴으로 "공개하려던 재생목록"과 "그때 고른 카테고리"를
+  // 기억해뒀다가 닉네임 모달까지 거쳐도(428) 마지막에 한 번에 handlePublish로 제출함.
+  const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
+  const [pendingVisibilityCategory, setPendingVisibilityCategory] = useState<string | null>(null);
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   // (모바일 헤더 개편) 즐겨찾기 아티스트/즐겨찾기 곡/재생목록은 데스크톱에선 좌우 사이드바로
   // 항상 보이는데, 폰 화면(sm 미만)에선 그 사이드바 자체가 안 보여서(hidden lg:block) 이 세
   // 기능을 볼 방법이 아예 없었음. 헤더에 "보관함" 아이콘을 추가해서 눌렀을 때 이 내용을
   // 전체화면 서랍(drawer)으로 대신 보여줌 — 실제 데이터/핸들러는 아래 사이드바와 완전히
   // 공유(renderFavoriteArtists/renderLibraryPanel)해서 로직이 두 군데로 갈라지지 않게 함.
   const [isLibraryOpen, setIsLibraryOpen] = useState(false);
+  // 하단 탭바의 "검색" 탭이 SearchBar 내부의 모바일 전체화면 검색을 대신 열게 하기 위한 ref.
+  // (state를 끌어올리지 않고 메서드만 노출 — SearchBar.tsx의 openMobileSearch 참고)
+  const searchBarRef = useRef<SearchBarHandle>(null);
+  // 로그인은 선택 기능(ROADMAP 5-2 결정) — null이면 비로그인 상태로 기존처럼 전부 동작.
+  // 로그인했을 때만 헤더에 이메일/로그아웃 버튼이 뜨고, api.ts가 Authorization 헤더를 추가로 보냄.
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [userEmail, setUserEmail] = useState<string | null>(null);
+  // (버그 수정, 2026-10-08) 하단 탭바 "프로필"이 로그인 상태에서 눌렀을 때 아무 확인 화면
+  // 없이 바로 signOut()을 호출해버려서, "로그인이 됐는지 안 됐는지 전혀 안 보인다"는 혼란을
+  // 실제로 겪음 — 로그인됐을 때만 이메일+로그아웃 버튼이 있는 작은 바텀시트를 보여주도록 분리.
+  const [isProfileSheetOpen, setIsProfileSheetOpen] = useState(false);
   // 트랙 카드의 "+" 버튼을 누르면(1곡) 또는 재생목록 상세 화면에서 여러 곡을 체크하고 "담기"를
   // 누르면(여러 곡) 이 상태가 채워지고, 화면 중앙에 AddToPlaylistModal이 뜸 — 항상 배열로 통일.
   const [addToPlaylistTracks, setAddToPlaylistTracks] = useState<
@@ -301,6 +387,170 @@ export default function Home() {
     }
   }
 
+  // (게이미피케이션 2단계, 2.5단계에서 428 분기 추가, 카테고리 필터에서 공개 전환 분리)
+  // 공개 -> 비공개는 카테고리가 필요 없으니 바로 API를 호출하지만, 비공개 -> 공개는 먼저
+  // 카테고리를 골라야 해서(handlePublish가 실제 호출을 담당) 여기서는 카테고리 선택 모달만 띔.
+  async function handleToggleVisibility(playlist: Playlist) {
+    if (playlist.isPublic) {
+      // 공개 -> 비공개: 카테고리 선택 불필요, 바로 전환.
+      setIsTogglingVisibility(true);
+      setError(null);
+      try {
+        const updated = await setPlaylistVisibility(playlist.id, false);
+        setPlaylists((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
+      } catch {
+        setError("재생목록 공개 설정을 바꾸지 못했어요.");
+      } finally {
+        setIsTogglingVisibility(false);
+      }
+      return;
+    }
+    // 비공개 -> 공개: 카테고리를 먼저 고르게 함 (닉네임과 같은 "그 순간에만 물어보기" 패턴).
+    setPendingVisibilityPlaylist(playlist);
+    setSelectedCategory(null);
+    setIsCategoryModalOpen(true);
+  }
+
+  // (랭킹 카테고리 필터, 2026-10-10 추가) 카테고리 선택 모달에서 "선택하고 공개하기"를
+  // 누르면 실제로 공개 전환 API를 호출함. 닉네임이 아직 없으면(428) 카테고리를 기억해두고
+  // 닉네임 모달을 띄워서, 닉네임 저장 성공 시 이 함수를 다시 호출해 이어서 공개 전환함.
+  async function handlePublish(playlist: Playlist, category: string) {
+    setIsTogglingVisibility(true);
+    setError(null);
+    try {
+      const updated = await setPlaylistVisibility(playlist.id, true, category);
+      setPlaylists((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
+      setIsCategoryModalOpen(false);
+      setPendingVisibilityPlaylist(null);
+      setPendingVisibilityCategory(null);
+      setSelectedCategory(null);
+    } catch (err) {
+      const status = err instanceof PlaylistApiError ? err.status : null;
+      if (status === 428) {
+        // 닉네임 설정 모달에서 저장 성공 시 같은 카테고리로 공개 전환을 자동 재시도함
+        // (handleSetNickname 참고) — 사용자가 카테고리를 다시 고르지 않아도 되게 기억해둠.
+        setPendingVisibilityCategory(category);
+        setIsCategoryModalOpen(false);
+        setNicknameError(null);
+        setIsNicknameModalOpen(true);
+      } else if (status === 403) {
+        setIsCategoryModalOpen(false);
+        setError("재생목록을 공개하려면 먼저 로그인해주세요.");
+        setIsAuthModalOpen(true);
+      } else {
+        setError("재생목록 공개 설정을 바꾸지 못했어요.");
+      }
+    } finally {
+      setIsTogglingVisibility(false);
+    }
+  }
+
+  // (게이미피케이션 2.5단계, 카테고리 필터에서 handlePublish 재시도로 변경) 닉네임 설정 모달
+  // 제출 — 성공하면 모달을 닫고, 원래 하려던 공개 전환(pendingVisibilityPlaylist +
+  // pendingVisibilityCategory)을 바로 이어서 시도함. 중복 닉네임(409)/형식 오류(400)는
+  // 모달 안에 인라인 에러로 보여주고 모달은 닫지 않음(다시 입력할 수 있게).
+  async function handleSetNickname() {
+    if (!pendingVisibilityPlaylist || !pendingVisibilityCategory) return;
+    setIsSavingNickname(true);
+    setNicknameError(null);
+    try {
+      await setNickname(nicknameInput);
+      const playlist = pendingVisibilityPlaylist;
+      const category = pendingVisibilityCategory;
+      setIsNicknameModalOpen(false);
+      setNicknameInput("");
+      await handlePublish(playlist, category);
+    } catch (err) {
+      if (err instanceof PlaylistApiError && err.status === 409) {
+        setNicknameError("이미 사용 중인 닉네임이에요.");
+      } else if (err instanceof PlaylistApiError && err.status === 400) {
+        setNicknameError("닉네임은 2~20자로 입력해주세요.");
+      } else {
+        setNicknameError("닉네임을 저장하지 못했어요.");
+      }
+    } finally {
+      setIsSavingNickname(false);
+    }
+  }
+
+  function handleOpenPublicFeed() {
+    setIsPublicFeedOpen(true);
+    setViewingPublicPlaylistId(null);
+    setPublicPlaylistTracks(null);
+    setViewingProfileNickname(null);
+    setProfilePlaylists(null);
+    setIsLoadingPublicFeed(true);
+    getPublicPlaylists()
+      .then(setPublicPlaylists)
+      .catch(() => setError("공개 재생목록을 불러오지 못했어요."))
+      .finally(() => setIsLoadingPublicFeed(false));
+  }
+
+  function handleViewPublicPlaylist(playlistId: number) {
+    setViewingPublicPlaylistId(playlistId);
+    setPublicPlaylistTracks(null);
+    getPlaylistTracks(playlistId)
+      .then(setPublicPlaylistTracks)
+      .catch(() => setError("재생목록 곡을 불러오지 못했어요."));
+  }
+
+  // (게이미피케이션 2.5단계) 공개 피드에서 닉네임을 누르면 그 사람이 공개한 재생목록 모음으로 이동.
+  function handleViewProfile(nickname: string) {
+    setViewingProfileNickname(nickname);
+    setProfilePlaylists(null);
+    getProfile(nickname)
+      .then((res) => setProfilePlaylists(res.playlists))
+      .catch(() => setError("프로필을 불러오지 못했어요."));
+  }
+
+  // 랭킹 페이지 안 "뒤로" — 곡 목록 화면이면 그걸 닫고(프로필 화면이었으면 프로필로, 아니었으면
+  // 피드로 자연히 복귀), 프로필 화면이면 피드로 복귀.
+  function handleBackInRanking() {
+    if (viewingPublicPlaylistId !== null) {
+      setViewingPublicPlaylistId(null);
+      setPublicPlaylistTracks(null);
+    } else if (viewingProfileNickname !== null) {
+      setViewingProfileNickname(null);
+      setProfilePlaylists(null);
+    }
+  }
+
+  // (게이미피케이션 3단계) 좋아요 토글 — 피드/프로필 둘 중 어디서 눌렀는지 모르니 두 목록 다
+  // 낙관적으로 갱신(화면에 반영된 뒤 서버 응답으로 정확한 수치로 덮어씀). 실패하면(주로
+  // 비로그인 403) 원래 값으로 되돌리고 로그인 모달을 띄움 — 공개 전환(handleToggleVisibility)과
+  // 같은 패턴. 정렬 순서는 다음에 피드를 다시 열 때 서버가 최신 좋아요 수 기준으로 다시 내려줌 —
+  // 누르는 즉시 카드 위치가 휙휙 바뀌면 오히려 혼란스러울 것 같아 토글 중엔 순서를 그대로 둠.
+  async function handleToggleLike(playlist: PublicPlaylist) {
+    const nextLiked = !playlist.likedByMe;
+    const applyTo = (updater: (p: PublicPlaylist) => PublicPlaylist) => (list: PublicPlaylist[]) =>
+      list.map((p) => (p.id === playlist.id ? updater(p) : p));
+
+    const optimistic = applyTo((p) => ({
+      ...p,
+      likedByMe: nextLiked,
+      likeCount: p.likeCount + (nextLiked ? 1 : -1),
+    }));
+    setPublicPlaylists(optimistic);
+    setProfilePlaylists((prev) => (prev ? optimistic(prev) : prev));
+
+    try {
+      const result = nextLiked ? await likePlaylist(playlist.id) : await unlikePlaylist(playlist.id);
+      const applyServer = applyTo((p) => ({ ...p, likeCount: result.likeCount, likedByMe: result.likedByMe }));
+      setPublicPlaylists(applyServer);
+      setProfilePlaylists((prev) => (prev ? applyServer(prev) : prev));
+    } catch (err) {
+      const revert = applyTo(() => playlist);
+      setPublicPlaylists(revert);
+      setProfilePlaylists((prev) => (prev ? revert(prev) : prev));
+      if (err instanceof PlaylistApiError && err.status === 403) {
+        setError("좋아요를 누르려면 먼저 로그인해주세요.");
+        setIsAuthModalOpen(true);
+      } else {
+        setError("좋아요 처리에 실패했어요.");
+      }
+    }
+  }
+
   async function handleCreatePlaylistAndAddTrack(name: string) {
     try {
       const created = await createPlaylist(name);
@@ -316,6 +566,57 @@ export default function Home() {
       setError("재생목록을 만들지 못했어요.");
     }
   }
+
+  useEffect(() => {
+    // 새로고침해도 로그인 상태가 유지되도록 Supabase가 localStorage에 저장해둔 세션을 복원.
+    // 이후 로그인/로그아웃/토큰 자동 갱신 등 모든 인증 상태 변화를 이 구독 하나로 계속 반영함.
+    if (!supabase) return;
+    supabase.auth.getSession().then(({ data }) => {
+      setUserEmail(data.session?.user.email ?? null);
+    });
+    const { data: subscription } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUserEmail(session?.user.email ?? null);
+    });
+    return () => subscription.subscription.unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    // (Phase 5-3) 컨텍스트 인식 탐색 — 버튼 없이 홈 진입 시 바로 위치 권한을 물어봄(사용자
+    // 요청, "버튼 굳이 필요할까 그냥 자동으로"). 브라우저 자체 권한 팝업으로 동의를 받는
+    // 구조라 사용자 동의 없이 위치를 가져가는 건 아님 — 거부하거나 실패해도 에러 문구 없이
+    // 그냥 이 섹션만 안 뜸(다른 홈 화면 기능엔 영향 없음).
+    if (typeof navigator === "undefined" || !navigator.geolocation) return;
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        getContextMood(pos.coords.latitude, pos.coords.longitude)
+          .then(setContextMood)
+          .catch((err) => {
+            // (버그 수정, 2026-10-08) 전엔 에러를 완전히 삼켜서, 권한을 허용해도 섹션이
+            // 안 떴을 때 원인을 전혀 알 수 없었음 — 화면엔 여전히 아무것도 안 띄우되
+            // (사용자에게 에러 문구를 보여줄 만큼 중요한 기능은 아니라서), 콘솔에는 남겨서
+            // 다음에 재현되면 바로 원인 확인 가능하게 함.
+            console.warn("[context-mood] 요청 실패:", err);
+          });
+      },
+      (err) => {
+        // 거부/타임아웃/위치서비스 꺼짐 등 — 화면엔 조용히 무시하되 콘솔엔 남김(위와 동일 이유)
+        console.warn("[context-mood] 위치 가져오기 실패:", err.code, err.message);
+      },
+      // (버그 수정) 8초는 실내/네트워크 기반 측위가 느린 환경에서 너무 짧을 수 있어 15초로 상향
+      { timeout: 15000, maximumAge: 1000 * 60 * 30 }
+    );
+  }, []);
+
+  useEffect(() => {
+    // (Phase 5-3) 감정 다이어리 기록 복원 — 서버에 저장 안 하므로 이 브라우저의
+    // localStorage에서만 불러옴. 파싱 실패(옛 포맷/손상)는 조용히 빈 배열로 무시.
+    try {
+      const raw = localStorage.getItem(DIARY_HISTORY_KEY);
+      if (raw) setDiaryHistory(JSON.parse(raw));
+    } catch (e) {
+      console.warn("[diary] 기록 복원 실패:", e);
+    }
+  }, []);
 
   useEffect(() => {
     // 즐겨찾기 서비스(playlist-service)가 꺼져있어도 검색/추천은 그대로 동작해야 하니
@@ -476,6 +777,36 @@ export default function Home() {
       setError("무드 곡을 불러오지 못했어요.");
     } finally {
       setIsLoadingMood(false);
+    }
+  }
+
+  async function handleSubmitDiary() {
+    const text = diaryText.trim();
+    if (!text) return;
+    setDiaryError(null);
+    setIsDiaryLoading(true);
+    try {
+      const data = await getDiaryReflection(text);
+      setDiaryResult(data);
+      const entry: DiaryHistoryEntry = {
+        date: new Date().toISOString().slice(0, 10),
+        text,
+        message: data.message,
+        moodLabel: data.moodLabel,
+      };
+      // 최신순으로 맨 앞에 추가, 너무 쌓이지 않게 최근 10개까지만 보관
+      const nextHistory = [entry, ...diaryHistory].slice(0, DIARY_HISTORY_CAP);
+      setDiaryHistory(nextHistory);
+      try {
+        localStorage.setItem(DIARY_HISTORY_KEY, JSON.stringify(nextHistory));
+      } catch (e) {
+        console.warn("[diary] 기록 저장 실패:", e);
+      }
+      setDiaryText("");
+    } catch (err) {
+      setDiaryError("응답을 받지 못했어요. 잠시 후 다시 시도해주세요.");
+    } finally {
+      setIsDiaryLoading(false);
     }
   }
 
@@ -759,7 +1090,21 @@ export default function Home() {
   // 재생 버튼을 누른 시점이 아니라, MiniPlayer 안 유튜브 플레이어가 실제로 PLAYING 상태에 들어간
   // 순간(=진짜로 소리가 나기 시작한 순간)에 호출됨 — "재생 의도" 신호를 클릭 시점보다 한 단계 더
   // 정확하게(검색 실패로 아예 못 튼 경우는 신호로 안 남게) 잡기 위해 이 시점으로 옮김.
-  function handleActuallyPlaying(track: { name: string; artist: string; image?: string | null }) {
+  //
+  // (이미지 보강, 2026-10-10) "다시 듣기"에 이미지 없는 곡이 많다"는 피드백 — iTunes/Last.fm
+  // 둘 다 이미지가 없는 비공식/리믹스/쇼미더머니류 곡은 원래도 있었고, 백엔드가 "빠른 선곡"/
+  // "다음 트랙"에만 유튜브 썸네일로 보강해주고 있었음(§85, 유튜브 검색 API 쿼터 때문에 전체
+  // 목록엔 일부러 안 걸어둠 — 다시 듣기처럼 곡이 많은 목록에 걸면 화면 하나에 하루 쿼터를
+  // 다 쓸 수 있어서). 그런데 "다시 듣기"에 들어오는 곡은 전부 이미 실제로 재생을 시작한
+  // 곡이라 videoId를 이미 알고 있고, 썸네일 URL(i.ytimg.com/vi/{videoId}/...)은 검색 없이
+  // videoId만으로 바로 만들 수 있는 무료 정적 URL이라 쿼터를 전혀 안 씀 — 이 지점에서만큼은
+  // "이미 아는 videoId로 보강"이 공짜라서 적용 안 할 이유가 없음.
+  function handleActuallyPlaying(track: {
+    name: string;
+    artist: string;
+    image?: string | null;
+    videoId?: string;
+  }) {
     const existing = favoriteTracks.find(
       (f) => f.artistName === track.artist && f.trackName === track.name
     );
@@ -767,13 +1112,16 @@ export default function Home() {
       markFavoriteTrackOpened(existing.id).catch(() => {});
     }
 
+    const resolvedImage =
+      track.image ?? (track.videoId ? `https://i.ytimg.com/vi/${track.videoId}/hqdefault.jpg` : null);
+
     // (§49) "다시 듣기" 홈 섹션용 최근 재생 기록. 즐겨찾기 여부와 무관하게 재생을 시작한
     // 모든 곡을 기록 — 화면에는 즉시 반영(맨 앞으로, 중복 제거)하고 서버 기록은 백그라운드로.
     setRecentPlays((prev) => [
-      { name: track.name, artist: track.artist, listeners: null, url: "", image: track.image ?? null },
+      { name: track.name, artist: track.artist, listeners: null, url: "", image: resolvedImage },
       ...prev.filter((t) => !(t.artist === track.artist && t.name === track.name)),
     ]);
-    recordRecentPlay(track.artist, track.name, undefined, track.image ?? undefined).catch(() => {});
+    recordRecentPlay(track.artist, track.name, undefined, resolvedImage ?? undefined).catch(() => {});
   }
 
   const selectedMoodLabel = MOODS.find((m) => m.tag === selectedMood)?.label;
@@ -982,35 +1330,85 @@ export default function Home() {
           </div>
           <div className="flex items-center justify-end gap-1 lg:justify-center">
             <SearchBar
+              ref={searchBarRef}
               onSearch={handleSearch}
               isLoading={isSearching}
               recentSearches={recentSearches}
               onRemoveRecent={handleRemoveRecent}
+              hideMobileTrigger
             />
-            {/* (모바일 헤더 개편) "보관함" 아이콘 — 즐겨찾기 아티스트/즐겨찾기 곡/재생목록은
-                데스크톱에선 좌우 사이드바로 항상 보이는데, 폰 화면(sm 미만)에선 그 사이드바가
-                아예 안 보여서(hidden lg:block) 이 세 기능을 볼 방법이 없었음. 눌렀을 때
-                아래 전체화면 서랍으로 같은 내용을 보여줌. */}
+            {/* (하단 탭바 도입) "보관함"은 이제 하단 탭바가 폰 화면(sm 미만)에서 전담해서
+                여기 아이콘은 더 안 그림 — 탯 화면(sm~lg)에서는 사이드바가 아직 없어서 접근할
+                방법이 필요하므로 그 구간만 보이게 둠(hidden sm:flex lg:hidden). */}
             <button
               type="button"
               aria-label="보관함"
               onClick={() => setIsLibraryOpen(true)}
-              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-white/80 hover:bg-white/10 sm:hidden"
+              className="hidden h-11 w-11 shrink-0 items-center justify-center rounded-full text-white/80 hover:bg-white/10 sm:flex lg:hidden"
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-5 w-5">
                 <path d="M19 21V8a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2v13l7-4 7 4Z" />
               </svg>
             </button>
+            {/* (게이미피케이션, UI 재구조화 2026-10-10) 랭킹 페이지 — 폰은 하단 탭바가 전담하지만,
+                보관함/프로필과 달리 데스크톱엔 이걸 대신할 상시 사이드바가 없어서 lg에서도 계속
+                보이게 둠(보관함 아이콘과 다르게 lg:hidden을 안 붙임). */}
+            <button
+              type="button"
+              aria-label="랭킹"
+              onClick={handleOpenPublicFeed}
+              className="hidden h-11 w-11 shrink-0 items-center justify-center rounded-full text-white/80 hover:bg-white/10 sm:flex"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-5 w-5">
+                <path d="M8 21h8M12 17v4M7 4h10l-1 7a4 4 0 0 1-8 0L7 4Z" />
+                <path d="M5 4H3v2a4 4 0 0 0 4 4M19 4h2v2a4 4 0 0 1-4 4" />
+              </svg>
+            </button>
+            {/* 모바일용 로그인/로그아웃 — 하단 탭바의 "프로필" 탭이 폰 화면을 전담하므로
+                여기선 탭 화면(sm~lg)만 보이게 둠. 로그인 상태면 바로 로그아웃, 아니면 모달 오픈. */}
+            <button
+              type="button"
+              aria-label={userEmail ? "로그아웃" : "로그인"}
+              onClick={() => (userEmail ? supabase?.auth.signOut() : setIsAuthModalOpen(true))}
+              className="hidden h-11 w-11 shrink-0 items-center justify-center rounded-full text-white/80 hover:bg-white/10 sm:flex lg:hidden"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-5 w-5">
+                <circle cx="12" cy="8" r="4" />
+                <path d="M4 21c0-4 4-6 8-6s8 2 8 6" />
+              </svg>
+            </button>
           </div>
-          {/* 오른쪽 칸은 지금은 비워둠 — 본문 쪽 오른쪽 사이드바랑 폭을 맞추기 위한 자리 */}
-          <div className="hidden lg:block" />
+          {/* 로그인은 선택 기능이라(ROADMAP 5-2) 안 눌러도 기존 기능 전부 그대로 동작함.
+              로그인하면 이메일 일부 + 로그아웃 버튼으로 바뀜. */}
+          <div className="hidden items-center justify-end lg:flex">
+            {userEmail ? (
+              <button
+                type="button"
+                onClick={async () => {
+                  await supabase?.auth.signOut();
+                }}
+                className="truncate rounded-full px-3 py-1.5 text-xs text-white/70 hover:bg-white/10"
+                title={userEmail}
+              >
+                {userEmail.split("@")[0]} · 로그아웃
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setIsAuthModalOpen(true)}
+                className="rounded-full px-3 py-1.5 text-xs text-white/70 hover:bg-white/10"
+              >
+                로그인
+              </button>
+            )}
+          </div>
         </div>
       </header>
 
       {/* 모바일 "보관함" 전체화면 서랍 — 즐겨찾기 아티스트/즐겨찾기 곡/내 재생목록을 데스크톱
           사이드바와 완전히 같은 내용(renderFavoriteArtists/renderLibraryPanel)으로 보여줌. */}
       {isLibraryOpen && (
-        <div className="fixed inset-0 z-50 flex h-screen w-screen flex-col bg-black sm:hidden">
+        <div className="animate-slide-up-in fixed inset-0 z-50 flex h-screen w-screen flex-col bg-black sm:hidden">
           <div className="flex items-center gap-2 border-b border-white/10 p-3">
             <button
               type="button"
@@ -1034,8 +1432,10 @@ export default function Home() {
       )}
 
     <main
-      className={`mx-auto grid min-h-screen max-w-6xl grid-cols-1 gap-6 px-6 pb-10 pt-7 lg:grid-cols-[200px_1fr_200px] ${
-        nowPlaying ? "pb-40 sm:pb-28" : ""
+      className={`mx-auto grid min-h-screen max-w-6xl grid-cols-1 gap-6 px-6 pt-7 lg:grid-cols-[200px_1fr_200px] ${
+        // 하단 탭바(모바일 전용, 높이 약 64px)가 생기면서 그만큼 여백을 더 얹어야
+        // 본문 마지막 줄이 탭바 뒤에 깔리지 않음. sm 이상은 탭바가 안 보이니 기존 값 유지.
+        nowPlaying ? "pb-56 sm:pb-28" : "pb-[104px] sm:pb-10"
       }`}
     >
       {/* 데스크톱 3열 그리드에서 왼쪽 사이드바가 실제로 왼쪽에 오도록 order를 명시.
@@ -1051,6 +1451,20 @@ export default function Home() {
             익숙해서 별도 설명 없이 바로 알아본다는 피드백으로 제목 줄 자체를 없앰 */}
         <MoodChips selectedTag={selectedMood} onSelect={handleSelectMood} />
       </div>
+
+      {/* (Phase 5-3) 감정 다이어리 — 처음엔 이 자리에 입력창을 통째로 깔아놨는데, "곡 훑어보는
+          스크롤 흐름 중간에 글 쓰는 칸이 끼어있는 게 안 어울린다"는 피드백으로 작은 진입
+          버튼만 남기고 실제 입력/결과는 모달로 분리함(아래 isDiaryOpen 모달 참고). */}
+      <button
+        type="button"
+        onClick={() => setIsDiaryOpen(true)}
+        className="flex w-full max-w-xl items-center gap-2 rounded-xl border border-white/10 bg-neutral-900/60 px-4 py-3 text-left hover:border-white/20"
+      >
+        <span className="flex-1 text-sm text-white/70">오늘 하루 어땠나요? 기분을 적으면 어울리는 곡을 추천해드려요</span>
+        {diaryHistory.length > 0 && (
+          <span className="text-[11px] text-white/30">기록 {diaryHistory.length}</span>
+        )}
+      </button>
 
       {/* "빠른 선곡" — 원래 "인기 있는 곡(글로벌)"/"다시 듣기" 밑, 스크롤을 몇 번 내려야 나오는
           자리에 있었음. "폰으로 처음 들어가면 무드 칩 밑으로 화면이 비어 보인다"는 피드백으로
@@ -1266,6 +1680,39 @@ export default function Home() {
         </div>
       )}
 
+      {/* (Phase 5-3) 컨텍스트 인식 탐색 — GPS+날씨로 자동 선택된 무드 추천. 검색 중이거나
+          사용자가 직접 무드 칩을 골랐을 때는 그쪽이 우선이니 숨김(결과가 두 개 겹쳐서
+          뜨면 헷갈림). "스크롤 내리면 나오는 부분" 요청으로 글로벌 차트 밑, 다시 듣기 위에 배치. */}
+      {!searchContextArtist && !selectedMood && contextMood && (
+        <div className="w-full max-w-xl">
+          <p className="mb-2 text-xs text-white/40">
+            {contextMood.description} · &quot;{contextMood.moodLabel}&quot; 추천
+          </p>
+          {contextMood.domesticTracks.length > 0 && (
+            <div className="mb-6">
+              <CompactTrackGrid
+                tracks={contextMood.domesticTracks}
+                isFavorite={isTrackFavorite}
+                onToggleFavorite={handleToggleFavoriteTrack}
+                onPlay={handlePlay}
+                onAddToPlaylist={handleOpenAddToPlaylist}
+                scrollable
+              />
+            </div>
+          )}
+          {contextMood.internationalTracks.length > 0 && (
+            <CompactTrackGrid
+              tracks={contextMood.internationalTracks}
+              isFavorite={isTrackFavorite}
+              onToggleFavorite={handleToggleFavoriteTrack}
+              onPlay={handlePlay}
+              onAddToPlaylist={handleOpenAddToPlaylist}
+              scrollable
+            />
+          )}
+        </div>
+      )}
+
       {/* (§49) "다시 듣기" — 원래 사이드바 즐겨찾기 목록을 홈 화면 메인에도 그대로 노출했었는데,
           "사이드바 즐겨찾기랑 똑같은 걸 다시 듣기에도 보여주면 중복 아니냐"는 지적을 받고
           진짜 "최근에 재생한 곡" 기록(recentPlays)으로 데이터 소스를 바꿈 — 이제 사이드바
@@ -1355,6 +1802,101 @@ export default function Home() {
       </aside>
     </main>
 
+    {/* 모바일 하단 탭바 — "하단 네비게이션이 없음" 피드백 반영. 데스크톱/탭 화면(sm 이상)은
+        기존 헤더 아이콘·사이드바로 충분해서 폰 화면(sm 미만)에만 둠. 미니 플레이어(z-30, bottom-0)
+        와 겹치지 않도록 미니 플레이어 쪽을 bottom-16으로 올려서 이 탭바 위에 쌓이게 함. */}
+    <nav
+      className="fixed inset-x-0 bottom-0 z-30 flex h-16 items-stretch justify-between border-t border-white/10 bg-black/95 px-2 backdrop-blur sm:hidden"
+      aria-label="하단 메뉴"
+    >
+      <button
+        type="button"
+        onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+        className="flex flex-1 flex-col items-center justify-center gap-1 text-[11px]"
+        style={{ color: "#ff3b5c" }}
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-5 w-5">
+          <path d="M4 11.5 12 4l8 7.5" />
+          <path d="M6 10v10h5v-6h2v6h5V10" />
+        </svg>
+        홈
+      </button>
+      <button
+        type="button"
+        onClick={() => searchBarRef.current?.openMobileSearch()}
+        className="flex flex-1 flex-col items-center justify-center gap-1 text-[11px] text-white/70"
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-5 w-5">
+          <circle cx="11" cy="11" r="7" />
+          <path d="m21 21-4.3-4.3" />
+        </svg>
+        검색
+      </button>
+      <button
+        type="button"
+        onClick={() => setIsLibraryOpen(true)}
+        className="flex flex-1 flex-col items-center justify-center gap-1 text-[11px] text-white/70"
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-5 w-5">
+          <path d="M19 21V8a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2v13l7-4 7 4Z" />
+        </svg>
+        보관함
+      </button>
+      {/* (게이미피케이션, UI 재구조화 2026-10-10) 처음엔 재생목록 상세 화면 안 작은 🌐 아이콘으로
+          넣었는데, "게이미피케이션 기능인데 아이콘 하나로 나오니 이상하다, 랭킹 페이지를 따로
+          두는 게 낫겠다"는 라이브 피드백을 받고 다른 탭들과 동급인 전용 탭으로 승격함. */}
+      <button
+        type="button"
+        onClick={handleOpenPublicFeed}
+        className="flex flex-1 flex-col items-center justify-center gap-1 text-[11px] text-white/70"
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-5 w-5">
+          <path d="M8 21h8M12 17v4M7 4h10l-1 7a4 4 0 0 1-8 0L7 4Z" />
+          <path d="M5 4H3v2a4 4 0 0 0 4 4M19 4h2v2a4 4 0 0 1-4 4" />
+        </svg>
+        랭킹
+      </button>
+      <button
+        type="button"
+        onClick={() => (userEmail ? setIsProfileSheetOpen(true) : setIsAuthModalOpen(true))}
+        className="flex flex-1 flex-col items-center justify-center gap-1 text-[11px] text-white/70"
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-5 w-5">
+          <circle cx="12" cy="8" r="4" />
+          <path d="M4 21c0-4 4-6 8-6s8 2 8 6" />
+        </svg>
+        프로필
+      </button>
+    </nav>
+
+    {/* 로그인 상태 확인용 바텀시트 — "로그인됐는지 안 됐는지 안 보인다"는 혼란 때문에 추가.
+        프로필 탭을 눌렀을 때 바로 로그아웃시키는 대신, 이메일을 먼저 보여주고 로그아웃은
+        버튼을 한 번 더 눌러야 실행되게 함(실수로 즉시 로그아웃되는 것도 같이 방지). */}
+    {isProfileSheetOpen && userEmail && (
+      <div
+        className="animate-slide-up-in fixed inset-0 z-50 flex items-end justify-center bg-black/60 sm:hidden"
+        onClick={() => setIsProfileSheetOpen(false)}
+      >
+        <div
+          className="w-full rounded-t-xl border-t border-white/10 bg-neutral-900 p-5 pb-8"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <p className="mb-1 text-xs text-white/40">로그인됨</p>
+          <p className="mb-4 truncate text-sm font-medium">{userEmail}</p>
+          <button
+            type="button"
+            onClick={async () => {
+              await supabase?.auth.signOut();
+              setIsProfileSheetOpen(false);
+            }}
+            className="w-full rounded-md border border-white/15 px-3 py-2.5 text-sm text-white/80 hover:bg-white/10"
+          >
+            로그아웃
+          </button>
+        </div>
+      </div>
+    )}
+
     {/* 하단 고정 미니 플레이어 — Last.fm 페이지로도, 눈에 보이는 유튜브 iframe으로도 안 나가고
         Unbeat 자체 UI로 재생/일시정지/진행바를 직접 그림 (MiniPlayer 내부에서 처리) */}
     {nowPlaying && (
@@ -1430,6 +1972,8 @@ export default function Home() {
             }
             onRemoveTrack={(trackId) => handleRemoveTracksFromPlaylist(openPlaylistId, [trackId])}
             onDeleteSelected={(trackIds) => handleRemoveTracksFromPlaylist(openPlaylistId, trackIds)}
+            onToggleVisibility={() => handleToggleVisibility(playlist)}
+            isTogglingVisibility={isTogglingVisibility}
           />
         );
       })()}
@@ -1441,6 +1985,277 @@ export default function Home() {
         onClose={() => setIsCleanupOpen(false)}
         onDeleteSelected={handleDeleteStaleTracks}
       />
+    )}
+
+    {isAuthModalOpen && (
+      <AuthModal
+        onClose={() => setIsAuthModalOpen(false)}
+        onAuthSuccess={() => {
+          // userEmail은 onAuthStateChange 구독이 곧 알아서 채워주지만, 로그인 직후
+          // 버튼 텍스트가 바뀌는 게 한 박자 늦어 보이지 않도록 여기서도 즉시 갱신 시도.
+          supabase?.auth.getSession().then(({ data }) => {
+            setUserEmail(data.session?.user.email ?? null);
+          });
+        }}
+      />
+    )}
+
+    {/* (Phase 5-3) 감정 다이어리 모달 — AuthModal과 같은 "화면 중앙 모달" 패턴(fixed inset-0 +
+        z-50 + 배경 클릭 시 닫힘). 홈 피드엔 작은 진입 버튼만 남기고 실제 입력/결과는 여기로 분리. */}
+    {isDiaryOpen && (
+      <div
+        className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4"
+        onClick={() => setIsDiaryOpen(false)}
+      >
+        <div
+          className="max-h-[85vh] w-full max-w-lg overflow-y-auto rounded-lg border border-white/10 bg-neutral-900 p-5"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="mb-3 flex items-center justify-between">
+            <p className="text-sm font-medium text-white/90">오늘 하루 어땠나요?</p>
+            <button
+              type="button"
+              onClick={() => setIsDiaryOpen(false)}
+              className="text-white/40 hover:text-white/70"
+            >
+              닫기
+            </button>
+          </div>
+
+          <textarea
+            value={diaryText}
+            onChange={(e) => setDiaryText(e.target.value.slice(0, DIARY_TEXT_MAX_LENGTH))}
+            placeholder="오늘 있었던 일이나 지금 기분을 편하게 적어보세요"
+            rows={4}
+            autoFocus
+            className="w-full resize-none rounded-md border border-white/10 bg-black/30 p-3 text-sm text-white placeholder:text-white/30 focus:border-accent focus:outline-none"
+          />
+          <div className="mt-1.5 flex items-center justify-between">
+            <span className="text-[11px] text-white/30">
+              {diaryText.length}/{DIARY_TEXT_MAX_LENGTH}
+            </span>
+            <button
+              type="button"
+              onClick={handleSubmitDiary}
+              disabled={!diaryText.trim() || isDiaryLoading}
+              className="rounded-full bg-accent px-4 py-1.5 text-xs font-medium text-black disabled:opacity-40"
+            >
+              {isDiaryLoading ? "읽는 중..." : "위로받기"}
+            </button>
+          </div>
+
+          {diaryError && <p className="mt-2 text-xs text-red-400">{diaryError}</p>}
+
+          {diaryResult && (
+            <div className="mt-4 border-t border-white/10 pt-4">
+              <p className="text-sm leading-relaxed text-white/90">{diaryResult.message}</p>
+              <p className="mb-2 mt-3 text-xs text-white/40">
+                &quot;{diaryResult.moodLabel}&quot; 어울리는 곡
+              </p>
+              {diaryResult.domesticTracks.length > 0 && (
+                <div className="mb-2">
+                  <CompactTrackGrid
+                    tracks={diaryResult.domesticTracks}
+                    isFavorite={isTrackFavorite}
+                    onToggleFavorite={handleToggleFavoriteTrack}
+                    onPlay={handlePlay}
+                    onAddToPlaylist={handleOpenAddToPlaylist}
+                    scrollable
+                  />
+                </div>
+              )}
+              {diaryResult.internationalTracks.length > 0 && (
+                <CompactTrackGrid
+                  tracks={diaryResult.internationalTracks}
+                  isFavorite={isTrackFavorite}
+                  onToggleFavorite={handleToggleFavoriteTrack}
+                  onPlay={handlePlay}
+                  onAddToPlaylist={handleOpenAddToPlaylist}
+                  scrollable
+                />
+              )}
+            </div>
+          )}
+
+          {diaryHistory.length > 0 && (
+            <div className="mt-4 border-t border-white/10 pt-3">
+              <button
+                type="button"
+                onClick={() => setIsDiaryHistoryOpen((v) => !v)}
+                className="text-xs text-white/40 hover:text-white/70"
+              >
+                {isDiaryHistoryOpen ? "기록 접기" : `최근 기록 보기 (${diaryHistory.length})`}
+              </button>
+              {isDiaryHistoryOpen && (
+                <ul className="mt-2 space-y-2">
+                  {diaryHistory.map((entry, i) => (
+                    <li key={`${entry.date}-${i}`} className="rounded-md bg-black/20 p-2 text-xs">
+                      <div className="flex items-center justify-between text-white/40">
+                        <span>{entry.date}</span>
+                        <span>&quot;{entry.moodLabel}&quot;</span>
+                      </div>
+                      <p className="mt-1 line-clamp-2 text-white/70">{entry.message}</p>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    )}
+
+    {/* (게이미피케이션, UI 재구조화) 다른 사용자가 공개한 재생목록 둘러보기 — 전용 전체화면
+        페이지로 분리(RankingPage.tsx, PlaylistDetailOverlay와 같은 패턴). */}
+    {isPublicFeedOpen && (
+      <RankingPage
+        onClose={() => setIsPublicFeedOpen(false)}
+        publicPlaylists={publicPlaylists}
+        isLoading={isLoadingPublicFeed}
+        viewingProfileNickname={viewingProfileNickname}
+        profilePlaylists={profilePlaylists}
+        viewingPlaylistId={viewingPublicPlaylistId}
+        tracks={publicPlaylistTracks}
+        onSelectPlaylist={handleViewPublicPlaylist}
+        onViewProfile={handleViewProfile}
+        onBack={handleBackInRanking}
+        onPlayTrack={(track) => {
+          handlePlay(track);
+          setIsPublicFeedOpen(false);
+        }}
+        onToggleLike={handleToggleLike}
+      />
+    )}
+
+    {/* (랭킹 카테고리 필터, 2026-10-10 추가) 재생목록을 비공개 -> 공개로 전환하려 할 때 먼저
+        뜨는 카테고리 선택 모달 — 닉네임 모달과 같은 "화면 중앙 모달" 패턴, 칩은 MoodChips
+        스타일을 그대로 가져옴(디자인 재사용, 새 스타일 안 만듦). 선택 후 "선택하고 공개하기"를
+        누르면 handlePublish가 실제 API를 호출함. */}
+    {isCategoryModalOpen && (
+      <div
+        className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4"
+        onClick={() => {
+          if (!isTogglingVisibility) {
+            setIsCategoryModalOpen(false);
+            setPendingVisibilityPlaylist(null);
+            setSelectedCategory(null);
+          }
+        }}
+      >
+        <div
+          className="w-full max-w-sm rounded-lg border border-white/10 bg-neutral-900 p-5"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <p className="mb-1 text-sm font-medium text-white/90">카테고리를 선택해주세요</p>
+          <p className="mb-3 text-xs text-white/40">
+            랭킹 피드에서 어떤 장르인지 필터링할 수 있게 쓰여요. 나중에 다시 공개 전환하면서
+            바꿀 수도 있어요.
+          </p>
+          <div className="mb-2 flex flex-wrap gap-2">
+            {MUSIC_CATEGORIES.map((c) => (
+              <button
+                key={c.value}
+                type="button"
+                onClick={() => setSelectedCategory(c.value)}
+                className={`shrink-0 rounded-full border px-4 py-2 text-sm transition ${
+                  selectedCategory === c.value
+                    ? "border-accent bg-accent/10 text-accent"
+                    : "border-white/10 bg-white/5 hover:border-white/30"
+                }`}
+              >
+                {c.label}
+              </button>
+            ))}
+          </div>
+          <div className="mt-3 flex justify-end gap-2">
+            <button
+              type="button"
+              disabled={isTogglingVisibility}
+              onClick={() => {
+                setIsCategoryModalOpen(false);
+                setPendingVisibilityPlaylist(null);
+                setSelectedCategory(null);
+              }}
+              className="rounded-md px-3 py-1.5 text-sm text-white/60 hover:bg-white/10 disabled:opacity-40"
+            >
+              취소
+            </button>
+            <button
+              type="button"
+              disabled={isTogglingVisibility || !selectedCategory}
+              onClick={() => {
+                if (pendingVisibilityPlaylist && selectedCategory) {
+                  handlePublish(pendingVisibilityPlaylist, selectedCategory);
+                }
+              }}
+              className="rounded-md bg-accent px-3 py-1.5 text-sm text-black disabled:opacity-40"
+            >
+              {isTogglingVisibility ? "전환 중..." : "선택하고 공개하기"}
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+
+    {/* (게이미피케이션 2.5단계, 카테고리 필터에서 pendingVisibilityCategory 추가) 재생목록을
+        공개로 전환하려는데 닉네임이 없을 때(428) 뜨는 모달 — AuthModal/감정 다이어리와 같은
+        "화면 중앙 모달" 패턴. 저장되면 자동으로 원래 하려던 공개 전환(카테고리 포함)을 이어서
+        시도함(handleSetNickname). */}
+    {isNicknameModalOpen && (
+      <div
+        className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4"
+        onClick={() => {
+          if (!isSavingNickname) {
+            setIsNicknameModalOpen(false);
+            setPendingVisibilityPlaylist(null);
+            setPendingVisibilityCategory(null);
+          }
+        }}
+      >
+        <div
+          className="w-full max-w-sm rounded-lg border border-white/10 bg-neutral-900 p-5"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <p className="mb-1 text-sm font-medium text-white/90">닉네임을 정해주세요</p>
+          <p className="mb-3 text-xs text-white/40">
+            공개한 재생목록은 이 닉네임으로 랭킹 피드에 표시돼요. 나중에 다시 정해서 바꿀 수도 있어요.
+          </p>
+          <input
+            autoFocus
+            value={nicknameInput}
+            onChange={(e) => setNicknameInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") handleSetNickname();
+            }}
+            placeholder="2~20자"
+            maxLength={20}
+            className="mb-1 w-full rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm outline-none focus:border-accent"
+          />
+          {nicknameError && <p className="mb-2 text-xs text-red-400">{nicknameError}</p>}
+          <div className="mt-3 flex justify-end gap-2">
+            <button
+              type="button"
+              disabled={isSavingNickname}
+              onClick={() => {
+                setIsNicknameModalOpen(false);
+                setPendingVisibilityPlaylist(null);
+                setPendingVisibilityCategory(null);
+              }}
+              className="rounded-md px-3 py-1.5 text-sm text-white/60 hover:bg-white/10 disabled:opacity-40"
+            >
+              취소
+            </button>
+            <button
+              type="button"
+              disabled={isSavingNickname || nicknameInput.trim().length < 2}
+              onClick={handleSetNickname}
+              className="rounded-md bg-accent px-3 py-1.5 text-sm text-black disabled:opacity-40"
+            >
+              {isSavingNickname ? "저장 중..." : "설정하고 공개하기"}
+            </button>
+          </div>
+        </div>
+      </div>
     )}
     </>
   );

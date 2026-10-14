@@ -15,6 +15,8 @@ import re
 import requests
 import os
 
+from auth import get_user_from_auth_header
+
 # Last.fm의 artist.getCorrection은 영문 철자 간 편집 거리(edit distance) 기반이라
 # 한글 입력("아이위" 등)엔 아예 안 맞음 — 한글 오타와 영문 정식명("아이위" ↔ "IU")은
 # 글자 자체가 안 겹쳐서 전혀 엉뚱한 아티스트로 잘못 교정되는 걸 실제로 확인함.
@@ -273,6 +275,9 @@ from cache import (
     remove_search_history,
     push_recent_play,
     get_recent_plays,
+    add_next_track_override_index,
+    remove_next_track_override_index,
+    list_next_track_overrides,
 )
 
 
@@ -496,6 +501,20 @@ def track_image(track: dict) -> Optional[str]:
 @app.get("/")
 def root():
     return {"message": "Unbeat API 실행 중 (Last.fm 기반)"}
+
+
+@app.get("/auth/me")
+def auth_me(authorization: Optional[str] = Header(default=None)):
+    """
+    로그인 연동(ROADMAP 5-2) 확인용 엔드포인트. 프론트가 로그인 후 이걸 호출해서 토큰이
+    실제로 백엔드에서 검증되는지 확인할 수 있음 — 나중에 게이미피케이션 등 "로그인 필수"
+    기능이 생기면 여기 쓰인 것과 같은 get_user_from_auth_header() 패턴을 재사용하면 됨.
+    로그인은 선택 기능이라 토큰이 없어도 401이 아니라 "로그인 안 함" 응답을 줌.
+    """
+    user = get_user_from_auth_header(authorization)
+    if not user:
+        return {"logged_in": False}
+    return {"logged_in": True, **user}
 
 
 @app.get("/search-artist")
@@ -1359,6 +1378,102 @@ SIMILAR_TRACKS_RAW_CAP = 40  # 가사 필터로 걸러질 걸 감안해서, 후�
 # 덕분에 첫 호출부터 큐가 훨씬 꽉 차 보이고, 최대치(프론트 MAX_QUEUE_SIZE=40)까지도 이어붙이기
 # 한두 번이면 도달함. 너무 크게 올리지 않은 이유는 아래 이미지 리졸브 비용과 직결되기 때문.
 SIMILAR_TRACKS_FINAL_COUNT = 25  # 가사 있는 곡만 걸러낸 뒤 큐에 실제로 담을 개수
+SIMILAR_TRACKS_CACHE_VERSION = "v9"  # similar_tracks()와 next-tracks override 등록/삭제 엔드포인트가 같이 참조함
+
+# (§84) Last.fm 유사곡/유사 아티스트 결과가 이보다 적으면 AI 폴백을 추가로 돌림. "도요한"처럼
+# artist.getSimilar가 결과 1개만 던지는 경우가 실사용 중 발견돼서 추가 — 그 1개 결과도 그대로
+# 쓰면(§46/§81에서 계속 봐온) 엉뚱한 아티스트일 위험이 크니, 너무 적을 땐 아예 보충이 필요하다고 봄.
+AI_NEXT_TRACK_FALLBACK_MIN_COUNT = 5
+AI_NEXT_TRACK_FALLBACK_COUNT = 8  # Claude에게 요청할 추천 개수
+
+
+def _curated_catalog_pool() -> list[tuple[str, str, str]]:
+    """
+    CURATED_DOMESTIC_MOOD_TRACKS 전체를 (아티스트, 곡명, 무드) 평탄화한 목록. 같은 곡이 여러
+    무드에 걸쳐 등록돼 있으면 처음 나온 무드만 대표로 남김(프롬프트에 중복 안 보이게).
+    매 요청마다 새로 만들어도 손해 없을 정도로 가벼움(총 100여 곡 수준)이라 따로 캐싱 안 함.
+    """
+    seen = set()
+    pool = []
+    for mood, pairs in CURATED_DOMESTIC_MOOD_TRACKS.items():
+        for pool_artist, pool_track in pairs:
+            key = (pool_artist.lower().strip(), pool_track.lower().strip())
+            if key in seen:
+                continue
+            seen.add(key)
+            pool.append((pool_artist, pool_track, mood))
+    return pool
+
+
+def _ai_next_track_fallback(artist: str, track: str, exclude: set) -> list[dict]:
+    """
+    (§84) "수작업으로 모든 곡에 다 등록해줄 수는 없는데, Last.fm 데이터가 얇은 인디 곡은
+    여전히 엉뚱한 결과가 나온다"는 문제를 풀기 위한 마지막 폴백. §83 수작업 override와 달리
+    모든 곡을 미리 등록해둘 순 없으니, 우리가 이미 검증해둔 CURATED_DOMESTIC_MOOD_TRACKS
+    전체 목록을 Claude Haiku에게 보여주고 **그 목록 안에서만** 지금 재생 중인 곡과 어울리는
+    걸 고르게 함. "빠른 선곡"(/quick-picks/ai)과 달리 모델이 새 곡을 지어내게 하지 않음 —
+    지어낸 곡을 Last.fm으로 재검증하는 대신, 애초에 "검증된 목록 중에서 고르기"로 범위를
+    제한해서 환각 위험 자체를 없앰(그래도 응답에 목록 밖 곡이 섞여 오면 아래에서 걸러냄).
+    """
+    if not ANTHROPIC_API_KEY:
+        return []
+
+    pool = _curated_catalog_pool()
+    if not pool:
+        return []
+
+    pool_lookup = {(a.lower().strip(), t.lower().strip()): (a, t) for a, t, _mood in pool}
+    pool_text = "\n".join(f"- {a} - {t} ({mood})" for a, t, mood in pool)
+
+    prompt = f"""지금 "{artist} - {track}"를 재생 중이야.
+
+아래는 우리 서비스에 이미 등록돼서 검증된 곡 목록이야(괄호 안은 무드 태그):
+{pool_text}
+
+위 목록 중에서, 지금 재생 중인 곡과 장르/분위기가 잘 어울려서 "다음 트랙"으로 이어 틀기
+좋은 곡을 {AI_NEXT_TRACK_FALLBACK_COUNT}개 골라줘. 반드시 위 목록에 있는 곡만 골라야 하고,
+목록에 없는 곡을 새로 만들어내면 안 돼. 지금 재생 중인 곡 자체는 제외해줘.
+다른 설명 없이 JSON 배열로만 답해줘. 형식: [{{"artist": "아티스트명", "track": "곡명"}}, ...]"""
+
+    try:
+        client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+        message = client.messages.create(
+            model=ANTHROPIC_MODEL,
+            max_tokens=512,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        raw_text = message.content[0].text.strip()
+    except Exception as e:
+        print(f"[anthropic] 다음 트랙 폴백 요청 실패: {e}")
+        return []
+
+    if raw_text.startswith("```"):
+        raw_text = raw_text.strip("`")
+        if raw_text.startswith("json"):
+            raw_text = raw_text[4:]
+        raw_text = raw_text.strip()
+
+    try:
+        suggestions = json.loads(raw_text)
+    except json.JSONDecodeError as e:
+        print(f"[anthropic] 다음 트랙 폴백 JSON 파싱 실패: {e} / 원문: {raw_text[:300]}")
+        return []
+
+    picked_pairs = []
+    for item in suggestions:
+        if not isinstance(item, dict):
+            continue
+        picked_artist = str(item.get("artist", "")).strip()
+        picked_track = str(item.get("track", "")).strip()
+        key = (picked_artist.lower(), picked_track.lower())
+        if key not in pool_lookup:
+            continue  # 목록 밖 곡을 답했으면 환각으로 보고 버림 — 검증 없이는 못 내보냄
+        if key in exclude:
+            continue
+        exclude.add(key)
+        picked_pairs.append(pool_lookup[key])
+
+    return _resolve_curated_tracks(picked_pairs)
 
 
 @app.get("/similar-tracks")
@@ -1386,10 +1501,35 @@ def similar_tracks(artist: str, track: str, x_session_id: Optional[str] = Header
     # v5: (§60) Last.fm 후보가 하나도 없을 때 유튜브 "이 아티스트의 다른 곡"으로 채우는 폴백 추가
     # — 스키마/로직이 바뀌었으니 재적용(예전에 빈 목록으로 캐싱된 아티스트들이 새 폴백을 안 타고
     # 그대로 나가는 걸 막기 위함).
-    cache_key = f"similar-tracks:v5:{artist.lower().strip()}:{track.lower().strip()}"  # v4: 최종 개수 15→25 증량 + 이미지 지연 리졸브로 변경(§48). v3: 대표 버전 아티스트로 유사 아티스트 조회하도록 변경(§46)
+    # v6: "원래 아티스트가 검색 결과에 아예 없을 때만" 대표 버전으로 대체하도록 조건을 좁힌 1차 시도
+    # — 근데 Last.fm이 아티스트명을 한글/영문 중 하나로만 줘서(예: "Bolbbalgan4" 입력에 검색 결과는
+    # "볼빨간사춘기") 이름 문자열 비교 자체가 항상 실패해 효과가 없었음(§81). v7: 이름 비교 대신
+    # 원래 아티스트명으로 artist.getSimilar를 직접 호출해보고 결과가 있으면 그대로 쓰는 방식으로
+    # 재작성 — 표기가 뭐든 Last.fm이 그 이름을 인식하기만 하면 됨. v6 때 이미 잘못 캐싱된 것도 무효화.
+    # v8(§83): 수작업 "다음 트랙" override 체크를 맨 앞에 추가 — 이 키가 바뀐 게 아니라 분기 자체가
+    # 새로 생긴 거라, 예전에 override 없이 캐싱된 결과가 override 등록 후에도 그대로 나가지 않도록
+    # 버전업. v9(§84): Last.fm 결과가 빈약할 때 Claude Haiku 폴백(큐레이션 목록 중에서만 고름)
+    # 추가 — 로직이 또 바뀌었으니 재버전업. (버전 문자열을 SIMILAR_TRACKS_CACHE_VERSION 상수로
+    # 뺀 이유: override 등록/삭제 엔드포인트에서도 같은 캐시 키를 지워야 하는데, 문자열을 따로
+    # 하드코딩해두면 다음에 또 버전을 올릴 때 한 군데를 깜빡하기 쉬움 — 실제로 이번에도 처음엔
+    # 그렇게 3군데 중 2군데만 고치고 지나갈 뻔함.)
+    cache_key = f"similar-tracks:{SIMILAR_TRACKS_CACHE_VERSION}:{artist.lower().strip()}:{track.lower().strip()}"  # v4: 최종 개수 15→25 증량 + 이미지 지연 리졸브로 변경(§48). v3: 대표 버전 아티스트로 유사 아티스트 조회하도록 변경(§46)
     cached = get_cached(cache_key)
     if cached is not None:
         return {**cached, "cached": True}
+
+    # (§83) 운영자가 수작업으로 등록해둔 "다음 트랙" 매핑이 있으면 Last.fm을 아예 안 부르고
+    # 그걸 그대로 씀. §81까지 고쳐도 "여행"처럼 제목이 흔한 인디 곡은 Last.fm 데이터 자체가
+    # 얇아서(§82에서 확인한 ListenBrainz/Deezer도 마찬가지) 언제든 다시 장르 불일치가 재발할
+    # 수 있는데, 이 수작업 매핑은 외부 데이터에 전혀 의존하지 않아서 그 문제 자체가 안 생김.
+    # 가사 수동 등록(/lyrics/override)과 같은 패턴 — 오디오 파일은 전혀 안 건드리고, "이 곡
+    # 다음엔 이 곡"이라는 텍스트 정보만 직접 저장해둠.
+    override_pairs = get_cached(_next_track_override_key(artist, track))
+    if override_pairs:
+        resolved = _resolve_curated_tracks([(p["artist"], p["track"]) for p in override_pairs])
+        result = {"tracks": resolved[:SIMILAR_TRACKS_FINAL_COUNT], "source": "manual_override"}
+        set_cached(cache_key, result, ttl=60 * 60 * 24 * 7)  # 수작업 등록이라 자주 안 바뀜 — 1주일
+        return {**result, "cached": False}
 
     seen = {(artist.lower().strip(), track.lower().strip())}  # 지금 재생 중인 곡 자체는 큐에서 제외
     tracks = []
@@ -1440,36 +1580,58 @@ def similar_tracks(artist: str, track: str, x_session_id: Optional[str] = Header
     # 아티스트마다 들쭉날쭉해지는 걸(어떤 곡은 9개, 어떤 곡은 없음) 막기 위해 항상 넉넉히 채워둠.
     if len(tracks) < SIMILAR_TRACKS_RAW_CAP:
         # 유사 아티스트 조회에 쓸 이름을 정함 — 기본은 지금 재생 중인 아티스트 그대로지만,
-        # 같은 제목의 다른(더 많이 들은) 버전이 있으면 그쪽 아티스트로 바꿔서 오매칭 위험을 줄임(§46).
+        # Last.fm이 그 이름 자체를 모르면(커버/리메이크 등) 같은 제목의 다른(더 많이 들은)
+        # 버전으로 바꿔서 오매칭 위험을 줄임(§46).
+        #
+        # (버그 수정, 2026-10-07, 2차) "여행"(Bolbbalgan4)처럼 제목이 흔한 단어 하나뿐인 곡에서,
+        # 전혀 무관한 영어 인디/이모밴드로 "다음 트랙"이 채워지는 걸 실사용 중 발견. 처음엔
+        # "원래 아티스트가 검색 결과에 있으면 안 바꾼다"로 고쳤는데도 재현됨 — Last.fm이 track.search
+        # 결과의 아티스트명을 한글("볼빨간사춘기")로 주는데, 우리 큐레이션엔 영문("Bolbbalgan4")으로
+        # 적혀있어서 문자열 비교 자체가 실패했던 것(같은 아티스트인데 표기가 달라 "못 찾음"으로 오판).
+        # 이름 비교로 "같은 아티스트인지" 판단하는 대신, **원래 아티스트 이름으로 artist.getSimilar를
+        # 먼저 직접 호출해보고, 그게 비어있을 때만** 대표 버전 찾기로 넘어가도록 바꿈 — 표기가 뭐든
+        # Last.fm이 그 이름 자체를 인식하기만 하면(대부분의 경우) 원래 아티스트를 그대로 쓰게 됨.
         expand_artist_name = artist
+        similar_artists_data = None
         try:
-            versions_data = lastfm_get({"method": "track.search", "track": track, "limit": 10})
-            versions = versions_data.get("results", {}).get("trackmatches", {}).get("track", [])
+            similar_artists_data = lastfm_get({"method": "artist.getSimilar", "artist": artist, "limit": 6})
+            if not similar_artists_data.get("similarartists", {}).get("artist"):
+                similar_artists_data = None  # 원래 아티스트로는 결과가 비어서 아래 대체 로직으로
+        except HTTPException:
+            similar_artists_data = None
 
-            def _listeners(v):
-                try:
-                    return int(v.get("listeners") or 0)
-                except (TypeError, ValueError):
-                    return 0
+        if similar_artists_data is None:
+            # 원래 아티스트 이름 자체를 Last.fm이 모르는 경우(커버/리메이크 등)에만 여기로 옴 —
+            # 같은 제목의 다른(더 많이 들은) 버전을 찾아 그 아티스트로 대신 조회
+            try:
+                versions_data = lastfm_get({"method": "track.search", "track": track, "limit": 10})
+                versions = versions_data.get("results", {}).get("trackmatches", {}).get("track", [])
 
-            best_version = max(versions, key=_listeners, default=None)
-            if best_version and _listeners(best_version) > 0:
-                best_artist_name = _clean_artist_name(best_version.get("artist", ""))
-                if best_artist_name and best_artist_name.lower().strip() != artist.lower().strip():
-                    expand_artist_name = best_artist_name
-        except Exception as e:
-            # 대표 버전 조회는 부가 기능 — 실패해도 원래 아티스트로 그냥 진행 (장애 격리)
-            print(f"[similar-tracks] '{artist} - {track}' 대표 버전 조회 실패 (원래 아티스트로 진행): {e}")
+                def _listeners(v):
+                    try:
+                        return int(v.get("listeners") or 0)
+                    except (TypeError, ValueError):
+                        return 0
 
-        # (§60 추가 수정) 위 track.getSimilar와 같은 이유로 감쌈 — expand_artist_name 자체가
-        # Last.fm에 없는 아티스트(예: "Dom")면 artist.getSimilar도 HTTPException을 던져서
-        # 여기서 죽어버림. 이때도 빈 결과로 취급하고 §60 유튜브 폴백까지 내려가게 함.
+                best_version = max(versions, key=_listeners, default=None)
+                if best_version and _listeners(best_version) > 0:
+                    best_artist_name = _clean_artist_name(best_version.get("artist", ""))
+                    if best_artist_name and best_artist_name.lower().strip() != artist.lower().strip():
+                        expand_artist_name = best_artist_name
+            except Exception as e:
+                # 대표 버전 조회는 부가 기능 — 실패해도 원래 아티스트로 그냥 진행 (장애 격리)
+                print(f"[similar-tracks] '{artist} - {track}' 대표 버전 조회 실패 (원래 아티스트로 진행): {e}")
+
+        # (§60 추가 수정) expand_artist_name이 바뀌었으면(위에서 못 찾은 경우) 그 이름으로 다시 조회 —
+        # Last.fm에 없는 아티스트(예: "Dom")면 artist.getSimilar도 HTTPException을 던져서 여기서
+        # 죽어버리는데, 이때도 빈 결과로 취급하고 §60 유튜브 폴백까지 내려가게 함.
         try:
-            similar_artists_data = lastfm_get({
-                "method": "artist.getSimilar",
-                "artist": expand_artist_name,
-                "limit": 6,
-            })
+            if similar_artists_data is None:
+                similar_artists_data = lastfm_get({
+                    "method": "artist.getSimilar",
+                    "artist": expand_artist_name,
+                    "limit": 6,
+                })
             related_artists = similar_artists_data.get("similarartists", {}).get("artist", [])
             for related in related_artists:
                 if len(tracks) >= SIMILAR_TRACKS_RAW_CAP:
@@ -1488,7 +1650,16 @@ def similar_tracks(artist: str, track: str, x_session_id: Optional[str] = Header
     # (최대 40개) 중 가사가 실제로 있는 곡만 걸러서 최종 개수(25개)까지 자름.
     tracks = _filter_tracks_with_lyrics(tracks[:SIMILAR_TRACKS_RAW_CAP], SIMILAR_TRACKS_FINAL_COUNT)
 
-    # (§60) Last.fm 유사곡/유사 아티스트 확장까지 다 돌려도 후보가 하나도 없으면 — 이 아티스트가
+    # (§84) 여기까지 모은 게 너무 적으면("도요한"처럼 artist.getSimilar가 결과 1개만 주는 경우
+    # 등) Claude Haiku 폴백으로 보충 — 바로 아래 유튜브 "이 아티스트의 다른 곡" 폴백보다 먼저
+    # 시도함. 장르가 맞는 "다른 아티스트" 곡이, 장르 상관없이 "같은 아티스트의 다른 영상"보다
+    # 다음 트랙으로는 더 낫다고 판단해서 순서를 이렇게 둠. 수작업 override(§83)가 이미 있는
+    # 곡이면 이 함수 자체가 호출 안 됨(맨 위에서 override를 찾으면 바로 return하므로).
+    if len(tracks) < AI_NEXT_TRACK_FALLBACK_MIN_COUNT:
+        ai_tracks = _ai_next_track_fallback(artist, track, seen)
+        tracks.extend(ai_tracks)
+
+    # (§60) Last.fm 유사곡/유사 아티스트 확장 + 위 AI 폴백까지 다 돌려도 후보가 하나도 없으면 — 이 아티스트가
     # Last.fm 카탈로그 자체에 없는 경우일 가능성이 높음(§59의 유튜브 검색 폴백으로 재생된 곡에서
     # 특히 흔함, 예: "Dom" - "동암역 2번출구"). 이땐 유튜브에서 같은 아티스트명으로 검색해서 그
     # 아티스트의 다른 영상들로 큐를 채움 — 엄밀히는 "비슷한 곡"이 아니라 "이 아티스트의 다른 곡"
@@ -1533,9 +1704,13 @@ def similar_tracks(artist: str, track: str, x_session_id: Optional[str] = Header
             print(f"[similar-tracks-youtube-fallback] '{artist}' 요청 예외: {e}")
     else:
         # (§48) 필터를 통과해 실제로 큐에 남을 곡들만 이제 이미지를 채움 — add_track에서 미뤄둔 이유 참고.
-        # 유튜브 폴백 트랙은 위에서 이미 image/videoId를 다 채워서 여기 해당 안 됨.
+        # 유튜브 폴백 트랙은 위에서 이미 image/videoId를 다 채워서 여기 해당 안 됨. (§84) AI 폴백
+        # 트랙도 _resolve_curated_tracks가 이미 이미지를 채워서 반환하므로("_lastfm_images" 키
+        # 자체가 없음) 다시 조회하지 않고 건너뜀 — 안 그러면 이미 받아온 이미지를 버리고 불필요한
+        # iTunes 재조회가 한 번 더 나감.
         for t in tracks:
-            t["image"] = resolve_track_image(t["artist"], t["name"], t.pop("_lastfm_images", []))
+            if "_lastfm_images" in t:
+                t["image"] = resolve_track_image(t["artist"], t["name"], t.pop("_lastfm_images", []))
 
     result = {"tracks": tracks}
     set_cached(cache_key, result)
@@ -1823,6 +1998,80 @@ def list_lyrics_requests(x_admin_secret: Optional[str] = Header(default=None)):
     return {"requests": pending}
 
 
+# (§83) "다음 트랙" 수작업 매핑 — 오디오 분석/협업 필터링이 라이선스·데이터 문제로 다 막혀있는
+# 상황에서, 가사 수동 등록(/lyrics/override)과 같은 방식으로 "이 곡 다음엔 이 곡을 틀어달라"는
+# 걸 운영자가 직접 입력해서 저장해두는 기능. 외부 API 결과를 검증/보정하는 게 아니라 아예
+# Last.fm을 거치지 않으므로, Last.fm/ListenBrainz 둘 다 데이터가 얇은 인디 곡(§82)에서도
+# 장르 불일치가 원천적으로 안 생김. 오디오 파일은 전혀 안 건드림 — 재생은 그대로 유튜브
+# 임베드가 담당하고, 여기 저장하는 건 "아티스트/곡명" 텍스트 쌍뿐임.
+def _next_track_override_key(artist: str, track: str) -> str:
+    return f"next-track-override:{artist.lower().strip()}:{track.lower().strip()}"
+
+
+class NextTrackPair(BaseModel):
+    artist: str
+    track: str
+
+
+class NextTrackOverrideRequest(BaseModel):
+    artist: str
+    track: str
+    next_tracks: list[NextTrackPair]
+
+
+@app.post("/next-tracks/override")
+def add_next_tracks_override(
+    payload: NextTrackOverrideRequest,
+    x_admin_secret: Optional[str] = Header(default=None),
+):
+    """
+    (artist, track)이 재생 중일 때 similar_tracks()가 Last.fm 대신 바로 쓸 "다음 트랙" 목록을
+    등록/덮어씀. TTL 없이 영구 저장(가사 override와 동일한 방식) — 곡 자체가 바뀌는 게 아니니
+    만료시킬 이유가 없음. 등록/수정할 때마다 관리자 페이지 목록에 뜨도록 인덱스에도 추가함.
+    """
+    if not ADMIN_SECRET or x_admin_secret != ADMIN_SECRET:
+        raise HTTPException(status_code=403, detail="권한이 없어요.")
+    if not payload.next_tracks:
+        raise HTTPException(status_code=400, detail="다음 트랙을 최소 1개 이상 입력해주세요.")
+
+    pairs = [{"artist": p.artist.strip(), "track": p.track.strip()} for p in payload.next_tracks]
+    set_cached(_next_track_override_key(payload.artist, payload.track), pairs, ttl=None)
+    add_next_track_override_index(payload.artist.strip(), payload.track.strip())
+    # 이미 재생 흐름에서 캐싱된 예전(override 없던 시절) similar-tracks 결과가 남아있으면
+    # 등록 직후에도 그 캐시가 먼저 걸려서 바로 반영이 안 됨 — 즉시 지워서 다음 요청부터 반영되게 함.
+    delete_cached(f"similar-tracks:{SIMILAR_TRACKS_CACHE_VERSION}:{payload.artist.lower().strip()}:{payload.track.lower().strip()}")
+    return {"saved": True, "count": len(pairs)}
+
+
+@app.delete("/next-tracks/override")
+def delete_next_tracks_override(
+    artist: str,
+    track: str,
+    x_admin_secret: Optional[str] = Header(default=None),
+):
+    if not ADMIN_SECRET or x_admin_secret != ADMIN_SECRET:
+        raise HTTPException(status_code=403, detail="권한이 없어요.")
+    delete_cached(_next_track_override_key(artist, track))
+    remove_next_track_override_index(artist.strip(), track.strip())
+    delete_cached(f"similar-tracks:{SIMILAR_TRACKS_CACHE_VERSION}:{artist.lower().strip()}:{track.lower().strip()}")
+    return {"deleted": True}
+
+
+@app.get("/admin/next-track-overrides")
+def list_next_tracks_overrides(x_admin_secret: Optional[str] = Header(default=None)):
+    """관리자 페이지에 "지금까지 등록된 매핑" 목록을 보여주기 위한 조회용 엔드포인트."""
+    if not ADMIN_SECRET or x_admin_secret != ADMIN_SECRET:
+        raise HTTPException(status_code=403, detail="권한이 없어요.")
+
+    entries = []
+    for pair in list_next_track_overrides():
+        artist, track = pair.get("artist", ""), pair.get("track", "")
+        next_tracks = get_cached(_next_track_override_key(artist, track)) or []
+        entries.append({"artist": artist, "track": track, "nextTracks": next_tracks})
+    entries.sort(key=lambda e: (e["artist"].lower(), e["track"].lower()))
+    return {"overrides": entries}
+
+
 LYRICS_FILTER_MAX_WORKERS = 12  # 후보 여러 곡의 가사 유무를 순차로 물어보면 느려서, 스레드풀로 동시에 확인
 # (원래 8이었는데, 무드 탐색이 국내/해외 후보를 따로따로 필터링하면서 체감 속도가 느려진 걸 계기로
 # 12로 올림 — LRCLIB이 못 찾은 곡은 4단계 폴백을 다 시도해야 해서 개별 조회가 은근히 오래 걸림)
@@ -1973,6 +2222,9 @@ CURATED_DOMESTIC_MOOD_TRACKS: dict[str, list[tuple[str, str]]] = {
         ("BIGBANG", "BANG BANG BANG"),
         ("PSY", "GANGNAM STYLE"),
     ],
+    # (보충, 2026-10-07) 아래 "sad" 전면 감사 중, 같은 fuzzy-match 위험(§81 하단 참고)이 chill도
+    # 안고 있는 걸 확인 — 원래 8곡뿐이라 전부 매칭에 성공해도 RESULT_SIZE(10)에 못 미쳐서 k-pop
+    # 폴백이 항상 발동하는 구조였음. Last.fm에 실제로 질의해서 통과한 곡만 추가해 12곡으로 보충.
     "chill": [
         ("IU", "Through the Night"),
         ("Standing Egg", "오래된 노래"),
@@ -1982,7 +2234,13 @@ CURATED_DOMESTIC_MOOD_TRACKS: dict[str, list[tuple[str, str]]] = {
         ("Zion.T", "양화대교"),
         ("Suzy", "Yes No Maybe"),
         ("Heize", "헤픈 우연"),
+        ("IU", "가을 아침"),
+        ("Epik High", "Love Story"),
+        ("DAY6", "한 페이지가 될 수 있도록"),
+        ("IU", "금요일에 만나요"),
     ],
+    # (보충, 2026-10-07) chill과 같은 이유 — 8곡 중 "Lucy - 고래야"는 Last.fm fuzzy-match
+    # 검증에서 실패(엉뚱한 곡으로 치환됨)해서 제외하고, 통과한 곡으로 14곡까지 보충.
     "study": [
         ("IU", "Palette"),
         ("Epik High", "우산"),
@@ -1991,8 +2249,16 @@ CURATED_DOMESTIC_MOOD_TRACKS: dict[str, list[tuple[str, str]]] = {
         ("Suran", "Wine"),
         ("Crush", "Oasis"),
         ("Paul Kim", "안녕"),
-        ("Lucy", "고래야"),
+        ("IU", "가을 아침"),
+        ("Epik High", "Love Story"),
+        ("IU", "금요일에 만나요"),
+        ("Melomance", "선물"),
+        ("Standing Egg", "오래된 노래"),
+        ("DEAN", "instagram"),
+        ("Zion.T", "양화대교"),
     ],
+    # (보충, 2026-10-07) chill/study와 같은 이유로 8곡 → 19곡으로 보충(party는 전부 메이저
+    # 타이틀곡이라 매칭 자체는 다 통과했지만, 곡 수 자체가 RESULT_SIZE에 못 미쳤던 구조적 문제).
     "party": [
         ("TWICE", "Fancy"),
         ("BLACKPINK", "DDU-DU DDU-DU"),
@@ -2002,6 +2268,17 @@ CURATED_DOMESTIC_MOOD_TRACKS: dict[str, list[tuple[str, str]]] = {
         ("MOMOLAND", "BBoom BBoom"),
         ("EXID", "Up & Down"),
         ("Girls' Generation", "Gee"),
+        ("BLACKPINK", "Kill This Love"),
+        ("TWICE", "Cheer Up"),
+        ("ITZY", "LOCO"),
+        ("NewJeans", "Super Shy"),
+        ("LE SSERAFIM", "ANTIFRAGILE"),
+        ("aespa", "Spicy"),
+        ("Red Velvet", "Psycho"),
+        ("EXO", "Love Shot"),
+        ("Brown Eyed Girls", "Abracadabra"),
+        ("SISTAR", "Touch my Body"),
+        ("KARD", "Oh NaNa"),
     ],
     "mellow": [
         ("IU", "Blueming"),
@@ -2030,62 +2307,120 @@ CURATED_DOMESTIC_MOOD_TRACKS: dict[str, list[tuple[str, str]]] = {
         ("Kim Yeon Woo", "여전히 아름다운지"),
         ("Lyn", "진심"),
     ],
+    # (전면 교체, 2026-10-07) 사용자가 "슬픔" 무드에서 Gee(소녀시대)/Supernova(aespa)처럼
+    # 전혀 안 슬픈 K-팝 히트곡이 섞여 나온다고 지적 — 원인 조사하면서 10곡 중 4곡(Sam Kim-Breathe,
+    # Ben-너를 사랑하고 있어, Heize-저녁 하늘, Gummy-미안해 미워해)이 실제론 Last.fm fuzzy-match
+    # 검증에서 실패(엉뚱한 곡으로 치환되거나 제외)해서 국내 후보가 6곡까지 줄어들고, 그 결과
+    # discover_by_mood의 "국내 곡이 RESULT_SIZE(10) 미만이면 k-pop 인기차트로 보충" 로직이
+    # 발동하면서 무드랑 무관한 k-pop 히트곡이 섞여 들어간 것(§80 driving 버그와 동일 패턴).
+    # 실패한 4곡은 제목/표기를 못 찾는 경우라 제외하고, Last.fm에 실제로 질의해서 통과한 곡으로
+    # 16곡까지 다시 구성. "Ben - 너를 사랑하고 있어"는 실제 제목이 달라서 실패했던 거라 "열애중"으로
+    # 교체해서 다시 넣음.
     "sad": [
         ("Ailee", "I Will Show You"),
         ("Baek Yerin", "Square"),
         ("Kim Bum Soo", "보고 싶다"),
         ("IU", "eight"),
-        ("Sam Kim", "Breathe"),
-        ("Ben", "너를 사랑하고 있어"),
         ("Lee Hi", "한숨"),
-        ("Heize", "저녁 하늘"),
-        ("Gummy", "미안해 미워해"),
         ("Park Hyo Shin", "야생화"),
+        ("Sung Si Kyung", "두 사람"),
+        ("Davichi", "안녕이라고 말하지마"),
+        ("Kim Yeon Woo", "여전히 아름다운지"),
+        ("K.Will", "이러지마 제발"),
+        ("Baek Ji Young", "사랑안해"),
+        ("SG Wannabe", "내사람"),
+        ("Jo Sung Mo", "가시나무"),
+        ("Yoon Jong Shin", "오래전 그날"),
+        ("Ben", "열애중"),
+        ("IU", "너의 의미"),
     ],
+    # (부분 교체, 2026-10-07) "sad" 감사와 같은 때 발견 — 10곡 중 2곡(Crush-morning, Epik High-
+    # 본능적으로)이 fuzzy-match 검증 실패. 제외하고 통과한 곡으로 12곡까지 보충.
     "love": [
         ("Zion.T", "No Make Up"),
         ("Baekhyun", "UN Village"),
-        ("Crush", "morning"),
         ("DAY6", "I Like You"),
         ("Taeyeon", "Fine"),
         ("Jonghyun", "Lonely"),
         ("IU", "Love Poem"),
         ("Paul Kim", "모든 날, 모든 순간"),
-        ("Epik High", "본능적으로"),
         ("10cm", "사랑은 은하수 다방에서"),
+        ("IU", "좋은 날"),
+        ("Baekhyun", "Candy"),
+        ("DAY6", "예뻤어"),
+        ("Taeyeon", "Rain"),
     ],
+    # (전면 교체, 2026-10-07) 기존 10곡 중 실제로 "그 제목 그대로" Last.fm에 걸리는 건
+    # 3곡(노래방에서/Rush Hour/아메리카노)뿐이었고, 나머지 7곡은 바로 위 CURATED_TRACK_MATCH_THRESHOLD
+    # 버그 때문에 전혀 다른 곡으로 치환되고 있었음(§79 라이브 테스트 중 발견 — "우리가 쏜 화살은
+    # 어디로 갔을까"가 그 사례). Last.fm track.search에 실제로 질의해서 제목이 정확히(또는 거의)
+    # 일치하는 것만 추려서 19곡으로 다시 구성 — 사용자가 레퍼런스로 든 "볼빨간사춘기 - 여행" 포함.
     "driving": [
         ("Jang Beom June", "노래방에서"),
-        ("Standing Egg", "drive"),
         ("Crush", "Rush Hour"),
-        ("Peppertones", "도로 위에서"),
-        ("Kim Dong Ryul", "그대가 이렇게 내게 오듯이"),
         ("10cm", "아메리카노"),
-        ("Jang Beom June", "회전목마"),
-        ("Peppertones", "Jamboree"),
-        ("Standing Egg", "우리 아직 사랑한다면"),
-        ("Kim Dong Ryul", "감수성"),
+        ("Bolbbalgan4", "여행"),
+        ("Jannabi", "주저하는 연인들을 위해"),
+        ("10cm", "폰서트"),
+        ("10cm", "사랑은 은하수 다방에서"),
+        ("Crush", "beautiful"),
+        ("Hyukoh", "comes and goes"),
+        ("Bolbbalgan4", "우주를 줄게"),
+        ("AKMU", "어떻게 이별까지 사랑하겠어"),
+        ("Sam Kim", "Make Up"),
+        ("Crush", "Sometimes"),
+        ("Melomance", "선물"),
+        ("Lee Juck", "다행이다"),
+        ("Jung Seung Hwan", "너였다면"),
+        ("Yoon Jong Shin", "좋니"),
+        ("Paul Kim", "비"),
+        ("IU", "밤편지"),
     ],
 }
+
+
+# (버그 수정, 2026-10-07) "출퇴근길" 무드 실사용 중 전혀 엉뚱한 곡("Kim Dong Ryul - 감수성"을
+# 큐레이션에 넣었는데 실제로는 "우리가 쏜 화살은 어디로 갔을까"가 뜨는 등)이 섞여 나오는 걸 발견.
+# 원인: Last.fm의 한국 인디/발라드 곡 색인이 성겨서, track.search가 의도한 제목을 못 찾으면
+# "그나마 비슷한" 게 아니라 그 아티스트의 아무 인기곡이나 1등으로 반환하는 경우가 많았음(검증
+# 없이 결과 1개만 받아서 그대로 썼던 게 문제) — rapidfuzz로 실제 테스트해보니 제대로 된 매칭은
+# 전부 유사도 50점 이상, 엉뚱한 매칭은 전부 14점 이하로 깔끔하게 갈려서, 그 사이인 40점을
+# 기준으로 잡음.
+CURATED_TRACK_MATCH_THRESHOLD = 40
 
 
 def _resolve_single_curated_track(pair: tuple[str, str]) -> Optional[dict]:
     """_resolve_curated_tracks가 스레드풀로 병렬 호출하는 단일 (아티스트, 곡명) 처리 단위."""
     artist, track_name = pair
-    cache_key = f"curated-track:v1:{artist.lower()}:{track_name.lower()}"
+    cache_key = f"curated-track:v2:{artist.lower()}:{track_name.lower()}"
     cached_track = get_cached(cache_key)
     if cached_track is not None:
         return cached_track
     try:
+        # limit=1 대신 5개를 받아서, 검색어와 가장 가까운 제목을 고를 수 있게 함
+        # (기존엔 1개만 받아서 그게 틀려도 걸러낼 방법이 없었음)
         search_data = lastfm_get(
-            {"method": "track.search", "track": track_name, "artist": artist, "limit": 1}
+            {"method": "track.search", "track": track_name, "artist": artist, "limit": 5}
         )
     except HTTPException:
         return None
     matches = search_data.get("results", {}).get("trackmatches", {}).get("track", [])
     if not matches:
         return None
-    match = matches[0]
+
+    best_match, best_score = None, -1.0
+    for candidate in matches:
+        score = fuzz.token_sort_ratio(candidate.get("name", "").lower(), track_name.lower())
+        if score > best_score:
+            best_match, best_score = candidate, score
+
+    if best_match is None or best_score < CURATED_TRACK_MATCH_THRESHOLD:
+        # 큐레이션에 적어둔 곡을 Last.fm에서 못 찾았다는 뜻 — 엉뚱한 곡을 섞어 내보내느니
+        # 이 한 곡만 조용히 빠지는 게 나음(이 무드의 다른 큐레이션 항목들은 정상 진행됨)
+        print(f"[curated-track] 매칭 실패(유사도 {best_score:.0f}, 제외): {artist} - {track_name}")
+        return None
+
+    match = best_match
     matched_artist = _clean_artist_name(match.get("artist", ""))
     image = resolve_track_image(matched_artist, match["name"], match.get("image", []))
     if not image:
@@ -2136,6 +2471,201 @@ def _resolve_curated_tracks(pairs: list[tuple[str, str]]) -> list[dict]:
     return resolved
 
 
+OPEN_METEO_FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
+# 날씨는 자주 안 바뀌니 30분 캐싱 — Open-Meteo 호출 자체도 좌표당 매번 하지 않게 됨.
+CONTEXT_MOOD_CACHE_TTL = 60 * 30
+
+# CURATED_DOMESTIC_MOOD_TRACKS의 태그 키(영문) <-> 화면에 보여줄 한글 라벨.
+# MoodChips.tsx의 MOODS는 4개(운동/신나는/슬픔/출퇴근길)만 칩으로 보여주지만, 나머지 4개
+# (chill/study/mellow/love)도 큐레이션 데이터 자체는 이미 있어서 여기(컨텍스트 추천)서 재활용함
+# — §30에서 "나중에 다른 기능에 재활용할 가능성 열어둠"이라고 적어뒀던 바로 그 데이터.
+MOOD_LABELS_KO = {
+    "workout": "운동",
+    "party": "신나는",
+    "sad": "슬픔",
+    "driving": "출퇴근길",
+    "chill": "잔잔한",
+    "study": "집중",
+    "mellow": "휴식",
+    "love": "설렘",
+}
+
+
+def _map_weather_to_mood(weathercode: int, temp_c: float) -> tuple[str, str]:
+    """
+    Open-Meteo의 WMO 날씨 코드(https://open-meteo.com/en/docs 참고) + 기온을
+    기존 CURATED_DOMESTIC_MOOD_TRACKS 무드 태그로 매핑. 자의적인 매핑이라 실사용
+    피드백 받으면서 계속 다듬을 예정 — 일단은 한국에서 흔한 날씨-감성 연상을 따름
+    (비 오면 슬픔, 첫눈 오면 설렘 등).
+    """
+    if weathercode in (0, 1):  # 맑음/대체로 맑음
+        if temp_c >= 30:
+            return "workout", f"맑고 더워요 ({round(temp_c)}°C)"
+        if temp_c >= 22:
+            return "party", f"맑고 화창해요 ({round(temp_c)}°C)"
+        if temp_c < 8:
+            return "chill", f"맑지만 쌀쌀해요 ({round(temp_c)}°C)"
+        return "driving", f"맑고 선선해요 ({round(temp_c)}°C)"
+    if weathercode in (2, 3):  # 구름 조금/흐림
+        return "study", f"구름이 낀 날이에요 ({round(temp_c)}°C)"
+    if weathercode in (45, 48):  # 안개
+        return "mellow", "안개가 꼈어요"
+    if weathercode in (71, 73, 75, 77, 85, 86):  # 눈
+        return "love", "눈이 내리고 있어요"
+    if weathercode in (95, 96, 99):  # 뇌우
+        return "sad", "천둥번개가 치고 있어요"
+    # 그 외(이슬비/비/소나기 등 51~67, 80~82)는 전부 비로 묶어서 처리
+    return "sad", "비가 내리고 있어요"
+
+
+@app.get("/context-mood")
+def context_mood(lat: float, lon: float, x_session_id: Optional[str] = Header(default=None)):
+    """
+    (Phase 5-3, 2026-10-08) GPS 좌표 + 실시간 날씨로 무드를 자동 추천하는 "컨텍스트 인식 탐색".
+    로그인 불필요 — 좌표는 이 요청 처리에만 쓰고 서버에 저장하지 않음(프라이버시).
+    discover_by_mood()를 그대로 재사용해서 실제 트랙 목록을 받아옴(새 추천 로직을 또
+    만들지 않음 — 무드 태그만 날씨로 자동 선택해주는 셈).
+    """
+    if not (-90 <= lat <= 90) or not (-180 <= lon <= 180):
+        raise HTTPException(status_code=400, detail="올바르지 않은 좌표예요.")
+
+    # 프라이버시: 소수점 2자리(대략 1km 단위)로 반올림 — "동네 날씨" 수준이면 충분하고
+    # 정밀 위치를 보관/추적할 이유가 없음. 캐시 키로도 재사용되니 비슷한 위치끼리는
+    # Open-Meteo를 매번 다시 호출 안 해도 됨.
+    lat_r = round(lat, 2)
+    lon_r = round(lon, 2)
+
+    cache_key = f"context-mood:v1:{lat_r}:{lon_r}"
+    cached = get_cached(cache_key)
+    if cached is not None:
+        if x_session_id:
+            log_event(x_session_id, "context_mood_browse", cached["moodTag"])
+        return {**cached, "cached": True}
+
+    try:
+        res = requests.get(
+            OPEN_METEO_FORECAST_URL,
+            params={"latitude": lat_r, "longitude": lon_r, "current_weather": "true"},
+            timeout=5,
+        )
+        res.raise_for_status()
+        current = res.json()["current_weather"]
+    except Exception as e:
+        print(f"[context-mood] Open-Meteo 요청 실패: {e}")
+        raise HTTPException(status_code=502, detail="날씨 정보를 가져오지 못했어요.")
+
+    weathercode = int(current.get("weathercode", 0))
+    temp_c = float(current.get("temperature", 15))
+    mood_tag, description = _map_weather_to_mood(weathercode, temp_c)
+
+    # x_session_id=None으로 호출 — discover_by_mood 내부의 mood_browse 이벤트 로깅과
+    # 중복되지 않게, 컨텍스트 추천용 이벤트(context_mood_browse)는 이 함수에서 따로 남김.
+    mood_result = discover_by_mood(mood_tag, x_session_id=None)
+
+    result = {
+        "moodTag": mood_tag,
+        "moodLabel": MOOD_LABELS_KO.get(mood_tag, mood_tag),
+        "description": description,
+        "temperature": temp_c,
+        "domesticTracks": mood_result["domesticTracks"],
+        "internationalTracks": mood_result["internationalTracks"],
+    }
+    set_cached(cache_key, result, ttl=CONTEXT_MOOD_CACHE_TTL)
+    if x_session_id:
+        total = len(result["domesticTracks"]) + len(result["internationalTracks"])
+        log_event(x_session_id, "context_mood_browse", mood_tag, result_count=total)
+    return {**result, "cached": False}
+
+
+class DiaryReflectionRequest(BaseModel):
+    text: str
+
+
+DIARY_TEXT_MAX_LENGTH = 500  # 프롬프트 비용/남용 방지용 상한
+
+
+@app.post("/diary-reflection")
+def diary_reflection(payload: DiaryReflectionRequest, x_session_id: Optional[str] = Header(default=None)):
+    """
+    (Phase 5-3, 2026-10-08) "감정 다이어리" — 사용자가 오늘 하루/기분을 자유 텍스트로 적으면
+    Claude Haiku가 읽고 (1) 짧은 공감/위로 메시지, (2) 그 감정에 어울리는 무드 태그를 돌려줌.
+    무드 태그는 기존 discover_by_mood()에 그대로 태워서 실제 추천곡까지 함께 내려줌 —
+    컨텍스트 인식 탐색(날씨 기반)과 같은 무드 엔진을 재사용하되, 입력이 날씨 코드가 아니라
+    사용자가 직접 쓴 자유 텍스트라서 실제 개인화 신호가 더 강함(§87에서 지적된 "그냥 무드칩을
+    자동으로 고른 것"에 불과하다는 한계를 메시지 생성 쪽에서 보완하는 셈).
+
+    로그인 불필요, 서버에 일기 원문을 저장하지 않음(프라이버시) — 프론트가 각자 기기의
+    localStorage에 기록을 남기는 기존 즐겨찾기/플레이리스트와 같은 패턴. 이벤트 로그에도
+    원문 대신 결과 무드 태그만 남김.
+    """
+    if not ANTHROPIC_API_KEY:
+        raise HTTPException(status_code=503, detail="ANTHROPIC_API_KEY가 설정되지 않았습니다")
+
+    text = payload.text.strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="일기 내용이 비어있어요.")
+    if len(text) > DIARY_TEXT_MAX_LENGTH:
+        raise HTTPException(status_code=400, detail=f"일기는 {DIARY_TEXT_MAX_LENGTH}자 이하로 적어주세요.")
+
+    allowed_tags = ", ".join(MOOD_LABELS_KO.keys())
+    prompt = f"""다음은 한 사용자가 오늘 쓴 짧은 감정 일기야:
+"{text}"
+
+이 사람의 감정을 공감하며 짧고 따뜻한 위로/응원 메시지를 2~4문장으로 써줘.
+진단하거나 섣부른 조언을 늘어놓지 말고, 그냥 곁에서 들어주는 느낌으로 써줘.
+혹시 일기 내용에서 자해나 위기 신호가 느껴지면, 스스로 해결하려 들지 말고 믿을 수 있는
+사람이나 전문가에게 이야기해보길 부드럽게 권하는 문장을 한 줄 포함해줘.
+
+그리고 이 감정과 가장 잘 어울리는 무드 태그를 다음 중 하나만 골라줘: {allowed_tags}
+
+다른 설명 없이 JSON으로만 답해줘. 형식: {{"message": "...", "moodTag": "..."}}"""
+
+    try:
+        client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+        message = client.messages.create(
+            model=ANTHROPIC_MODEL,
+            max_tokens=512,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        raw_text = message.content[0].text.strip()
+    except Exception as e:
+        print(f"[anthropic] 감정 다이어리 요청 실패: {e}")
+        raise HTTPException(status_code=502, detail="AI 응답 요청에 실패했어요.")
+
+    # 모델이 가끔 ```json 코드블록으로 감싸서 주는 경우가 있어서 벗겨냄
+    if raw_text.startswith("```"):
+        raw_text = raw_text.strip("`")
+        if raw_text.startswith("json"):
+            raw_text = raw_text[4:]
+        raw_text = raw_text.strip()
+
+    try:
+        parsed = json.loads(raw_text)
+        healing_message = str(parsed.get("message", "")).strip()
+        mood_tag = str(parsed.get("moodTag", "")).strip()
+    except (json.JSONDecodeError, AttributeError) as e:
+        print(f"[anthropic] 감정 다이어리 JSON 파싱 실패: {e} / 원문: {raw_text[:300]}")
+        raise HTTPException(status_code=502, detail="AI 응답을 해석하지 못했어요.")
+
+    if not healing_message:
+        raise HTTPException(status_code=502, detail="AI가 빈 응답을 돌려줬어요.")
+    if mood_tag not in MOOD_LABELS_KO:
+        mood_tag = "chill"  # 모델이 엉뚱한 태그를 주거나 빠뜨리면 무난한 기본값으로 폴백
+
+    mood_result = discover_by_mood(mood_tag, x_session_id=None)
+
+    if x_session_id:
+        log_event(x_session_id, "diary_reflection", mood_tag)
+
+    return {
+        "message": healing_message,
+        "moodTag": mood_tag,
+        "moodLabel": MOOD_LABELS_KO.get(mood_tag, mood_tag),
+        "domesticTracks": mood_result["domesticTracks"],
+        "internationalTracks": mood_result["internationalTracks"],
+    }
+
+
 @app.get("/discover-by-mood")
 def discover_by_mood(tag: str, x_session_id: Optional[str] = Header(default=None)):
     """
@@ -2170,7 +2700,11 @@ def discover_by_mood(tag: str, x_session_id: Optional[str] = Header(default=None
     # 변주 폭 확보용) — 캐시 키(v6)만 보고 "로직은 안 바뀌었으니 자동 반영될 것"이라고 착각했다가
     # 실제로는 v6 때 이미 10곡짜리 풀이 캐싱돼 있어서 20곡으로 안 늘어나는 걸 라이브로 확인함.
     # 데이터(큐레이션 목록) 변경도 로직 변경과 똑같이 캐시 무효화 대상이라는 걸 다시 확인한 케이스.
-    cache_key = f"discover-by-mood:v7:{tag.lower().strip()}"
+    # v8: _resolve_single_curated_track에 매칭 검증 추가 + driving 목록 전면 교체(§79) — 이전
+    # 버전 때 잘못 매칭된 채로 캐싱된 풀(curated-track:v1 캐시 기반)이 안 섞이도록 재버전업.
+    # v9: "sad"에서 Gee/Supernova 같은 무관 k-pop이 섞이는 버그 발견 후 전체 무드 감사 — sad/love/
+    # study/chill/party 큐레이션 목록을 실제 Last.fm 매칭 검증 거쳐 재구성(아래 딕셔너리 주석 참고).
+    cache_key = f"discover-by-mood:v9:{tag.lower().strip()}"
     pool = get_cached(cache_key)
 
     if pool is None:
@@ -2337,17 +2871,43 @@ YOUTUBE_SEARCH_CACHE_TTL_SECONDS = 60 * 60 * 24 * 14  # 14일. 같은 곡의 대
 # YouTube Data API 검색은 호출당 100 유닛(일일 무료 할당량 10,000 유닛=하루 100번)이라 최대한 아껴 씀.
 
 
+YOUTUBE_ISO8601_DURATION_PATTERN = re.compile(
+    r"P(?:\d+D)?T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?"
+)
+# 재생 버튼이 매칭하는 영상은 원곡 싱글이어야 하는데, 제목/채널명이 흔한 단어거나 덜 알려진
+# 곡이면 유튜브 검색 1등이 몇 시간짜리 "노래모음"/"플레이리스트" 영상으로 잘못 걸리는 걸
+# 실사용 중 발견함(§5-2 테스트 중, Standing Egg "나 오늘따라" 재생 시 514분짜리 외국어 영상이
+# 재생된 사례). 대부분의 정식 싱글은 10분을 안 넘으므로, 이보다 길면 "모음/믹스"일 가능성이
+# 높다고 보고 걸러냄 — 리믹스/라이브 버전처럼 좀 긴 정상 영상까지 넉넉히 포함하려고 10분으로 잡음.
+YOUTUBE_MAX_SONG_DURATION_SECONDS = 10 * 60
+
+
+def _parse_youtube_duration_seconds(iso8601: str) -> Optional[int]:
+    match = YOUTUBE_ISO8601_DURATION_PATTERN.fullmatch(iso8601 or "")
+    if not match:
+        return None
+    hours, minutes, seconds = (int(g) if g else 0 for g in match.groups())
+    return hours * 3600 + minutes * 60 + seconds
+
+
 @app.get("/youtube-search")
 def youtube_search(artist: str, track: str, x_session_id: Optional[str] = Header(default=None)):
     """
-    트랙 카드의 '재생' 버튼용 — 아티스트+곡 이름으로 유튜브에서 가장 관련도 높은 영상 1개를 찾아
+    트랙 카드의 '재생' 버튼용 — 아티스트+곡 이름으로 유튜브에서 가장 관련도 높은 영상을 찾아
     videoId만 돌려줌. 프론트는 이 videoId로 사이트 안에 유튜브 iframe을 띄워서, Last.fm 자체 페이지로
     나가지 않고도(우리가 자체 오디오 스트리밍 라이선스는 없으니) 그 자리에서 바로 들을 수 있게 함.
+
+    (버그 수정, 2026-10-07) 원래 검색 결과 1등만 그대로 썼는데, 그 1등이 가끔 몇 시간짜리
+    "노래모음"/다른 나라 영상처럼 전혀 엉뚱한 게 걸려도 걸러낼 방법이 없었음(실사용 중 발견 —
+    위 YOUTUBE_MAX_SONG_DURATION_SECONDS 주석 참고). search.list는 maxResults를 늘려도
+    과금 단가(100유닛)가 그대로라서 5개까지 받아본 뒤, videos.list(건당 1유닛, 훨씬 저렴)로
+    길이를 확인해서 "노래 길이"로 보이는 첫 후보를 고르도록 변경 — 전부 너무 길면(필터링이
+    오히려 결과를 아예 없애버리는 것보단 낫다고 보고) 원래대로 1등 후보로 폴백함.
     """
     if not YOUTUBE_API_KEY:
         raise HTTPException(status_code=503, detail="YOUTUBE_API_KEY가 설정 안 돼있어요.")
 
-    cache_key = f"youtube-search:{artist.lower().strip()}:{track.lower().strip()}"
+    cache_key = f"youtube-search:v2:{artist.lower().strip()}:{track.lower().strip()}"
     cached = get_cached(cache_key)
     if cached is not None:
         if x_session_id:
@@ -2357,7 +2917,7 @@ def youtube_search(artist: str, track: str, x_session_id: Optional[str] = Header
     res = requests.get(YOUTUBE_SEARCH_URL, params={
         "part": "snippet",
         "type": "video",
-        "maxResults": 1,
+        "maxResults": 5,
         "q": f"{artist} {track}",
         "key": YOUTUBE_API_KEY,
     })
@@ -2368,7 +2928,31 @@ def youtube_search(artist: str, track: str, x_session_id: Optional[str] = Header
         return {"videoId": None, "cached": False}
 
     items = res.json().get("items", [])
-    video_id = items[0]["id"]["videoId"] if items else None
+    candidate_ids = [item["id"]["videoId"] for item in items if item.get("id", {}).get("videoId")]
+    video_id = candidate_ids[0] if candidate_ids else None
+
+    if len(candidate_ids) > 1:
+        try:
+            duration_res = requests.get(YOUTUBE_VIDEOS_URL, params={
+                "part": "contentDetails",
+                "id": ",".join(candidate_ids),
+                "key": YOUTUBE_API_KEY,
+            }, timeout=5)
+            if duration_res.status_code == 200:
+                durations = {
+                    item["id"]: _parse_youtube_duration_seconds(item.get("contentDetails", {}).get("duration", ""))
+                    for item in duration_res.json().get("items", [])
+                }
+                # candidate_ids 순서(검색 관련도 순)를 그대로 유지하면서, 그중 "노래 길이"로
+                # 보이는 첫 번째를 고름 — 관련도 1등이 길어도 2~5등 중에 정상 길이가 있으면 그걸 씀
+                for cid in candidate_ids:
+                    d = durations.get(cid)
+                    if d is not None and d <= YOUTUBE_MAX_SONG_DURATION_SECONDS:
+                        video_id = cid
+                        break
+        except requests.RequestException as e:
+            # 길이 확인이 실패해도 재생 자체는 막으면 안 되니, 기존처럼 1등 후보로 조용히 진행
+            print(f"[youtube-search] 영상 길이 확인 실패(1등 후보로 진행): {e}")
 
     result = {"videoId": video_id}
     set_cached(cache_key, result, ttl=YOUTUBE_SEARCH_CACHE_TTL_SECONDS)

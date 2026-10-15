@@ -1596,7 +1596,7 @@ export default function Home() {
           피드백도 모바일 한정이었음). 검색 결과가 하나도 없으면 이 래퍼 자체가 아예 없는 셈이라
           평소 홈 화면엔 전혀 영향 없음. */}
       {(searchTracks.length > 0 || tagSearchTracks.length > 0 || artists.length > 0) && (
-        <div className="fixed inset-0 z-40 flex flex-col gap-6 overflow-y-auto bg-black p-4 pb-24 sm:static sm:z-auto sm:flex sm:flex-col sm:gap-6 sm:overflow-visible sm:bg-transparent sm:p-0">
+        <div className="fixed inset-0 z-20 flex flex-col gap-6 overflow-y-auto bg-black p-4 pb-44 sm:static sm:z-auto sm:flex sm:flex-col sm:gap-6 sm:overflow-visible sm:bg-transparent sm:p-0">
           <button
             type="button"
             onClick={clearSearchResults}

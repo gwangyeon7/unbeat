@@ -7,6 +7,21 @@ body {
   color: #f5f5f7;
 }
 
+/* (버그 수정, 2026-10-15) 화면이 좌우로 밀리는 현상 방지 + iOS가 16px 미만 입력창에서 자동
+   확대하는 걸 막기 위해 모바일 입력창 글자를 16px로 맞춤(layout.tsx의 viewport 설정과 같은 목적). */
+html,
+body {
+  max-width: 100%;
+  overflow-x: clip;
+}
+@media (max-width: 639px) {
+  input,
+  textarea,
+  select {
+    font-size: 16px !important;
+  }
+}
+
 /* 가로 스크롤 영역에서 스크롤 자체는 그대로 쓰되(드래그/휠), 브라우저 기본 회색 스크롤바만
    숨김 — "옆으로만 밀리면 되지 스크롤바까지 보일 필요는 없다"는 피드백. */
 .scrollbar-none {

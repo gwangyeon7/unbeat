@@ -4,10 +4,12 @@ import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "re
 import { createPortal } from "react-dom";
 import { searchSuggest, type SearchSuggestion } from "@/lib/api";
 
+export type RecentSearchEntry = { query: string; image: string | null };
+
 type SearchBarProps = {
   onSearch: (query: string) => void;
   isLoading?: boolean;
-  recentSearches?: string[];
+  recentSearches?: RecentSearchEntry[];
   onRemoveRecent?: (query: string) => void;
   // (모바일 하단 탭바 도입) "검색" 탭이 이 컴포넌트 내부의 모바일 전체화면 검색을 대신 열어줄 수
   // 있게 됨에 따라, 헤더에 있던 돋보기 아이콘 자체는 더 이상 안 보여줘도 됨(탭바와 기능이 겹침).
@@ -148,36 +150,51 @@ const SearchBar = forwardRef<SearchBarHandle, SearchBarProps>(function SearchBar
   }
 
   // 최근 검색 목록 — 위 자동완성과 같은 이유로 데스크톱/모바일 공용.
+  // (UI 재구조화, 2026-10-14) "화면이 텅 비어 보인다, 유튜브 뮤직처럼 위에 썸네일 카드로
+  // 보여달라"는 요청으로 세로 텍스트 목록(시계 아이콘 + 글자)에서 가로 스크롤 썸네일 카드
+  // 행으로 교체 — 각 카드는 그 검색의 첫 트랙/아티스트 이미지(없으면 음표 플레이스홀더) 위에
+  // 검색어를 라벨로 붙임. 삭제 버튼은 카드 공간이 좁아서 옆이 아니라 카드 우상단에 작은 ✕로
+  // 겹쳐서 올림(길게 눌러 지우는 느낌의 작은 오버레이 버튼).
   function renderRecentList() {
     return (
       <>
         <p className="px-4 pt-2 text-[10px] uppercase tracking-wide text-white/30">최근 검색</p>
-        <ul className="max-h-64 overflow-y-auto py-1 sm:max-h-64">
-          {recentSearches.map((query) => (
-            <li key={query} className="flex items-center justify-between px-2">
-              <button
-                type="button"
-                onClick={() => handleSelectRecent(query)}
-                className="flex flex-1 items-center gap-2 rounded-md px-2 py-2.5 text-left text-sm text-white/80 hover:bg-white/5"
-              >
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-4 w-4 shrink-0 text-white/30">
-                  <circle cx="12" cy="12" r="9" />
-                  <path d="M12 7v5l3 3" />
-                </svg>
-                <span className="truncate">{query}</span>
-              </button>
-              <button
-                type="button"
-                aria-label="최근 검색에서 삭제"
-                onClick={() => onRemoveRecent?.(query)}
-                className="shrink-0 rounded-md p-2 text-white/30 hover:bg-white/5 hover:text-white/60"
-              >
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-4 w-4">
-                  <path d="M3 6h18" />
-                  <path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2" />
-                  <path d="M19 6l-1 14a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1L5 6" />
-                </svg>
-              </button>
+        <ul className="flex gap-3 overflow-x-auto px-4 py-3">
+          {recentSearches.map(({ query, image }) => (
+            <li key={query} className="w-24 shrink-0">
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => handleSelectRecent(query)}
+                  className="block h-24 w-24 overflow-hidden rounded-lg bg-white/10"
+                >
+                  {image ? (
+                    // eslint-disable-next-line @next/next/no-img-element -- 외부(Last.fm/iTunes/유튜브) 썸네일이라 next/image 최적화 대상이 아님(프로젝트 전역에서 동일 패턴)
+                    <img src={image} alt="" className="h-full w-full object-cover" />
+                  ) : (
+                    <span className="flex h-full w-full items-center justify-center text-white/20">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-6 w-6">
+                        <path d="M9 18V5l12-2v13" />
+                        <circle cx="6" cy="18" r="3" />
+                        <circle cx="18" cy="16" r="3" />
+                      </svg>
+                    </span>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  aria-label="최근 검색에서 삭제"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => onRemoveRecent?.(query)}
+                  className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-black/80 text-white/70 hover:text-white"
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="h-3 w-3">
+                    <path d="M18 6 6 18" />
+                    <path d="M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+              <p className="mt-1.5 truncate text-center text-xs text-white/70">{query}</p>
             </li>
           ))}
         </ul>

@@ -204,8 +204,19 @@ def _is_junk_track_match(item: dict) -> bool:
     return is_junk
 
 
+def _first_search_thumbnail(artists: list, tracks: list) -> Optional[str]:
+    """(UI 재구조화, 2026-10-14) '최근 검색어' 카드에 붙일 썸네일 — 그 검색의 첫 번째 트랙
+    이미지를 우선 쓰고(검색은 보통 곡을 찾으려는 의도가 많아서), 트랙이 없으면 첫 번째
+    아티스트 이미지로 대체. 둘 다 없으면 None(프론트가 플레이스홀더로 처리)."""
+    if tracks and tracks[0].get("image"):
+        return tracks[0]["image"]
+    if artists and artists[0].get("image"):
+        return artists[0]["image"]
+    return None
+
+
 def _build_track_results(track_matches: list) -> list:
-    return [
+    tracks = [
         {
             "name": item["name"],
             # track.search만 예외적으로 artist가 dict가 아니라 문자열로 옴
@@ -219,6 +230,7 @@ def _build_track_results(track_matches: list) -> list:
         for item in track_matches
         if not _is_junk_track_match(item)
     ]
+    return _apply_korean_titles(tracks)
 
 
 # "2010년대 kpop"처럼 아티스트/곡 이름이 아니라 장르·연대 키워드로 검색하는 경우를 위해 추가.
@@ -319,6 +331,186 @@ YOUTUBE_SEARCH_URL = "https://www.googleapis.com/youtube/v3/search"
 # artist.getSimilar 방식으로 자동 폴백한다(신규 개발자가 API 키 없이 클론해도 앱 전체가 죽지 않게).
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
 ANTHROPIC_MODEL = "claude-haiku-4-5-20251001"  # 추천 하나에 몇백 토큰이면 충분해서 저렴한 Haiku로 선택
+
+# (2026-10-14 추가) 제목 한글 보완 기능. Last.fm은 전 세계 스크로블 기준 메타데이터라 한글 제목
+# 필드가 아예 없음 — 국내 아티스트 곡도 전부 로마자/영어 표기로만 내려옴(예: 블랙핑크 "뚜두뚜두"가
+# "DDU-DU DDU-DU"로만 나옴). 수동으로 전 곡을 매핑하는 건 현실적으로 불가능해서, Claude Haiku에게
+# "이 아티스트·곡의 실제 한글 정식 제목이 뭐야?"를 물어보고 캐싱하는 방식으로 자동화함.
+# 할루시네이션(모델이 없는 제목을 지어내는 것) 위험이 있어서: (1) 모르면 null로만 답하도록
+# 프롬프트로 강하게 제약, (2) 결과에 한글이 안 섞여 있으면 무시, (3) 국내 아티스트(_is_domestic_artist)
+# 곡 중 제목에 한글이 전혀 없는 경우에만 호출해서 불필요한 낭비를 줄임.
+KOREAN_TITLE_TTL_SECONDS = 60 * 60 * 24 * 180  # 180일 — 곡 제목은 안 바뀌니 길게 캐싱(성공/실패 모두 캐싱)
+
+
+def _korean_title_cache_key(artist: str, track_name: str) -> str:
+    # v2: (버그 수정, 2026-10-14) Claude가 ```json 코드블록으로 감싸서 답하면 파싱이 실패해서
+    # title=None이 180일 캐싱되는 버그가 있었음 — 그 실패 결과가 이미 캐싱돼있을 수 있어서
+    # 버전업으로 무효화(파싱 수정 자체는 바로 위 resolve_korean_title에 반영함).
+    # v3: 디버그 로그 추가 후 "모델이 null을 줬는지 vs 호출 자체가 실패했는지" 구분하려고
+    # 다시 한 번 무효화 — v2로도 title=None이 캐싱됐을 수 있어서(원인 미확인 상태였음) 재시도 유도.
+    return f"ko-title:v5:{artist.strip().lower()}:{track_name.strip().lower()}"
+
+
+def resolve_korean_title(artist: str, track_name: str, assume_domestic: bool = False) -> Optional[str]:
+    if not artist or not track_name:
+        return None
+    if not assume_domestic and not _is_domestic_artist(artist):
+        return None
+    if HANGUL_PATTERN.search(track_name):
+        return None  # 이미 한글이 섞여 있으면 보완 불필요
+
+    cache_key = _korean_title_cache_key(artist, track_name)
+    cached = get_cached(cache_key)
+    if cached is not None:
+        return cached.get("title")
+
+    if not ANTHROPIC_API_KEY:
+        return None
+
+    title = None
+    try:
+        client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+        message = client.messages.create(
+            model=ANTHROPIC_MODEL,
+            max_tokens=100,
+            messages=[{
+                "role": "user",
+                "content": (
+                    f'아티스트 "{artist}"의 곡 "{track_name}"의 한국 공식 발매 제목(한글)이 뭔지 알려줘.\n\n'
+                    '예시1: 아티스트 "BLACKPINK", 곡 "DDU-DU DDU-DU" → {"korean_title": "뚜두뚜두"}\n'
+                    '예시2: 아티스트 "방탄소년단", 곡 "Spring Day" → {"korean_title": "봄날"}\n'
+                    '예시3: 아티스트 "Dua Lipa", 곡 "Levitating" → {"korean_title": null} (국내 아티스트가 아니거나 별도 한글 제목이 없음)\n\n'
+                    "위 예시들처럼, 잘 알려진 곡이면 망설이지 말고 한글 제목을 답해 — "
+                    "완벽히 100% 확신이 없어도 네가 아는 한 가장 유력한 한글 제목이면 그걸로 답해도 돼. "
+                    "정말 들어본 적 없는 곡이거나 애초에 한글 제목 없이 발매된 곡일 때만 null로 답해. "
+                    '다른 설명 없이 JSON으로만 답해: {"korean_title": "한글 제목" 또는 null}'
+                ),
+            }],
+        )
+        raw_text = message.content[0].text.strip()
+        # (버그 수정, 2026-10-14) Claude가 답을 ```json ... ``` 코드블록으로 감싸서 주는 경우가
+        # 있어서 그대로 json.loads()하면 "Expecting value: line 1 column 1" 파싱 에러가 남 —
+        # 실사용 중 로그로 직접 확인함(_ai_guess_query에선 이미 처리하고 있던 걸 여기선 빠뜨렸었음).
+        if raw_text.startswith("```"):
+            raw_text = raw_text.strip("`")
+            if raw_text.startswith("json"):
+                raw_text = raw_text[4:]
+            raw_text = raw_text.strip()
+        parsed = json.loads(raw_text)
+        candidate = parsed.get("korean_title")
+        if candidate and isinstance(candidate, str) and HANGUL_PATTERN.search(candidate):
+            title = candidate.strip()
+        # (디버그용 로그, 2026-10-14) 에러 없이 "그냥 null을 답한" 경우가 실패랑 구분이 안 돼서
+        # 원인 진단이 안 되는 문제가 있었음 — 성공/실패 상관없이 항상 결과를 남겨서 "모델이
+        # 호출됐는데 null을 줬다"와 "호출 자체가 실패했다"를 구분할 수 있게 함.
+        print(f"[ko-title] '{artist} - {track_name}' -> Claude 원문: {raw_text[:150]!r} -> 최종 title={title!r}")
+    except Exception as e:
+        print(f"[anthropic] 한글 제목 보완 요청 실패 ({artist} - {track_name}): {e}")
+
+    set_cached(cache_key, {"title": title}, ttl=KOREAN_TITLE_TTL_SECONDS)
+    return title
+
+
+def _korean_artist_cache_key(artist: str) -> str:
+    return f"ko-artist:v3:{artist.strip().lower()}"
+
+
+# (버그 수정, 2026-10-14) 제목만 한글로 보완했더니 "뚜두뚜두 (DDU-DU DDU-DU) / BLACKPINK"처럼
+# 아티스트명은 여전히 로마자로 남는 걸 발견 — Last.fm 아티스트명도 트랙 제목과 똑같은 이유
+# (전 세계 스크로블 기준이라 한글 필드 자체가 없음)로 로마자뿐임. resolve_korean_title과 완전히
+# 같은 패턴(할루시네이션 방지용 null 허용 + 캐싱)으로 아티스트명도 보완함 — 다만 아티스트명은
+# 음원사이트 관례상 "한글 (영문)"으로 안 합치고 한글로만 교체함(블랙핑크/아이유처럼 국내
+# 플랫폼에선 보통 영문 병기 없이 한글만 씀 — 제목과는 다른 표기 관례).
+def resolve_korean_artist_name(artist: str, assume_domestic: bool = False) -> Optional[str]:
+    if not artist:
+        return None
+    # (버그 수정, 2026-10-15) "Suzy"처럼 KNOWN_KOREAN_ARTIST_NAMES_LATIN 목록에 없는 국내 가수는
+    # 한글이 없고 목록에도 없어서 여기서 막혀 LLM 호출 자체가 안 나갔음. 호출부가 이미 "국내 곡
+    # 목록"임을 알고 있을 땐(무드 추천의 domestic 풀 등) assume_domestic=True로 이 게이트를 건너뜀.
+    if not assume_domestic and not _is_domestic_artist(artist):
+        return None
+    if HANGUL_PATTERN.search(artist):
+        return None  # 이미 한글이면 보완 불필요
+
+    cache_key = _korean_artist_cache_key(artist)
+    cached = get_cached(cache_key)
+    if cached is not None:
+        return cached.get("name")
+
+    if not ANTHROPIC_API_KEY:
+        return None
+
+    name = None
+    try:
+        client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+        message = client.messages.create(
+            model=ANTHROPIC_MODEL,
+            max_tokens=60,
+            messages=[{
+                "role": "user",
+                "content": (
+                    f'아티스트 "{artist}"가 한국에서 실제로 가장 많이 쓰이는 표기가 뭔지 알려줘.\n\n'
+                    '규칙:\n'
+                    '- 한국에서 한글 표기가 통용되는 아티스트면 그 한글 이름을 답해. '
+                    '예: "BLACKPINK" → {"korean_name": "블랙핑크"}, "IU" → {"korean_name": "아이유"}, '
+                    '"Zion.T" → {"korean_name": "자이언티"}\n'
+                    '- 한국 아티스트지만 영문 표기가 더 익숙하게 쓰이면 null (한글로 바꾸지 마). '
+                    '예: "Crush" → {"korean_name": null}, "Jay Park" → {"korean_name": null}\n'
+                    '- 영어 이름을 소리 나는 대로 한글로 옮긴 음차(예: Zion.T → "지온티")는 절대 만들지 마. '
+                    '실제로 한국에서 쓰이는 한글 표기를 아는 경우에만 답하고, 모르면 null.\n'
+                    '- 한국 아티스트가 아니면 null. 예: "Dua Lipa" → {"korean_name": null}\n'
+                    '다른 설명 없이 JSON으로만 답해: {"korean_name": "한글 이름" 또는 null}'
+                ),
+            }],
+        )
+        raw_text = message.content[0].text.strip()
+        if raw_text.startswith("```"):
+            raw_text = raw_text.strip("`")
+            if raw_text.startswith("json"):
+                raw_text = raw_text[4:]
+            raw_text = raw_text.strip()
+        parsed = json.loads(raw_text)
+        candidate = parsed.get("korean_name")
+        if candidate and isinstance(candidate, str) and HANGUL_PATTERN.search(candidate):
+            name = candidate.strip()
+        print(f"[ko-artist] '{artist}' -> Claude 원문: {raw_text[:150]!r} -> 최종 name={name!r}")
+    except Exception as e:
+        print(f"[anthropic] 한글 아티스트명 보완 요청 실패 ({artist}): {e}")
+
+    set_cached(cache_key, {"name": name}, ttl=KOREAN_TITLE_TTL_SECONDS)
+    return name
+
+
+def _apply_korean_titles(tracks: list, assume_domestic: bool = False) -> list:
+    """여러 트랙에 한글 제목+아티스트명을 병렬로 보완. 순차 호출하면 Claude 응답 지연이 곡
+    수만큼 누적되니(아티스트 이미지 보완 때와 같은 이유로) 스레드풀로 동시에 처리함. 제목은
+    "한글 제목 (기존 제목)" 형태로 합치고, 아티스트명은 한글로 교체함(바로 위 주석 참고) —
+    실제 국내 음원사이트들의 표기 관례와 동일. 같은 아티스트의 곡이 여러 개면 resolve_korean_
+    artist_name의 캐싱(아티스트명 단위) 덕분에 Claude 호출은 사실상 아티스트당 1번만 나감."""
+    if not tracks:
+        return tracks
+
+    def resolve(track):
+        name = track.get("name", "")
+        artist = track.get("artist", "")
+        # (개선, 2026-10-15) 이름 목록에 없는 국내 가수(예: Suzy)도 잡도록, 아티스트명 변환은
+        # 목록 게이트 없이 항상 Claude에게 물어봄 — 국내 가수가 아니면 null로 답하고(프롬프트
+        # 예시 참고) 그 null도 180일 캐싱되므로 아티스트당 호출은 사실상 1번뿐. 변환에 성공했다는
+        # 건 국내 가수라는 뜻이니, 그 경우엔 제목 보완도 게이트를 건너뛰고 진행함.
+        ko_artist = resolve_korean_artist_name(artist, assume_domestic=True)
+        is_korean = assume_domestic or bool(ko_artist) or _is_domestic_artist(artist)
+        ko_title = resolve_korean_title(artist, name, assume_domestic=is_korean)
+        if not ko_title and not ko_artist:
+            return track
+        updated = dict(track)
+        if ko_title:
+            updated["name"] = f"{ko_title} ({name})"
+        if ko_artist:
+            updated["artist"] = ko_artist
+        return updated
+
+    with ThreadPoolExecutor(max_workers=10) as executor:
+        return list(executor.map(resolve, tracks))
 
 
 def lastfm_get(params: dict):
@@ -653,7 +845,24 @@ def search(q: str, x_session_id: Optional[str] = Header(default=None)):
     # v19: 장르+연대 태그를 합칠 때 순차로 다 채우고 넘어가던 걸 라운드로빈으로 바꿈(바로 아래
     # 주석 참고, "2010년대 kpop" 결과가 전부 서구 팝이던 문제 수정) — 이 키를 안 올리면 예전에
     # 한쪽 태그가 독식한 채로 캐싱된 검색어들이 그대로 나감.
-    cache_key = f"search:v19:{q.lower().strip()}"
+    # v20: (버그 수정, 2026-10-14) "블랙핑크 뚜두뚜두"처럼 "아티스트명 + 한글로 옮겨 적은 곡명"을
+    # 같이 치면, 아티스트 파트("블랙핑크")는 위 KNOWN_KOREAN_ARTIST_NAMES 교정으로 쉽게 찾아져서
+    # artists가 비지 않는데, track.search는 합쳐진 문자열("블랙핑크 뚜두뚜두") 그대로를 찾아서
+    # Last.fm엔 그런 제목의 곡이 없으니 0건 — 그런데 AI 추측 폴백(§53)이 `not artists`일 때만
+    # 발동하도록 짜여있어서, 아티스트가 이미 찾아졌다는 이유로 정작 필요한 "곡 추측"이 아예
+    # 스킵되는 게 원인이었음(실사용 중 발견). "아티스트는 맞는데 그 자체가 검색어 전체는 아님"을
+    # 구분해서(corrected_artist_name이 원래 검색어와 다르면 = 뒤에 곡명으로 보이는 말이 더 있다는
+    # 뜻) 그 경우엔 아티스트가 이미 있어도 트랙 추측 폴백을 같이 시도하도록 조건을 넓힘 — 이 키를
+    # 안 올리면 예전에 "곡 없음"으로 캐싱된 이런 조합 검색어들이 새 로직을 안 타고 그대로 나감.
+    # v21: (버그 수정, 2026-10-14) 바로 아래 AI 폴백 중첩 캐시를 v2→v3로 올린 것과 같은 이유 —
+    # _build_track_results에 한글 제목 보완이 추가됐는데, 이 바깥쪽 캐시도 과거에 한글 제목 없이
+    # 채워진 결과를 그대로 들고 있을 수 있어서 같이 버전업.
+    # v22: 한글 제목 파싱 버그 수정(ko-title v2, 아래 search-ai-fallback v4와 동일한 이유)으로 같이 버전업
+    # v25: (버그 수정, 2026-10-14) 제목은 한글로 나오는데 아티스트명은 여전히 로마자(BLACKPINK
+    # 등)로 남는 버그 발견 — _apply_korean_titles에 아티스트명 보완(resolve_korean_artist_name)
+    # 추가했으니 과거 캐시 무효화를 위해 버전업(v23/v24 버전 번호는 실제로 안 쓰였음 — 직전
+    # 중간 수정 때 혼선으로 건너뜀, 동작엔 영향 없음).
+    cache_key = f"search:v27:{q.lower().strip()}"
     cached = get_cached(cache_key)
     if cached is not None:
         if x_session_id:
@@ -661,7 +870,7 @@ def search(q: str, x_session_id: Optional[str] = Header(default=None)):
             # (스키마를 바꿀 때 캐시 키를 버전업 안 해도 되도록, 없는 키는 없는 대로 취급).
             total = len(cached["artists"]) + len(cached["tracks"]) + len(cached.get("tagTracks", []))
             log_event(x_session_id, "search", q, result_count=total)
-            push_search_history(x_session_id, q)
+            push_search_history(x_session_id, q, image=_first_search_thumbnail(cached["artists"], cached["tracks"]))
         return {**cached, "cached": True}
 
     # 한글 검색어는 먼저 자체 후보 목록에서 "정확한 철자"를 찾아 그걸로 검색한다 —
@@ -800,9 +1009,19 @@ def search(q: str, x_session_id: Optional[str] = Header(default=None)):
     # 예전에 잘못 "검증됨=True"로 캐싱된 값이 새 로직을 안 타고 그대로 재사용됨 — 실제로 이
     # 문제로 §58 수정이 반영 안 되는 걸 라이브에서 직접 겪음. 중첩 캐시는 바깥쪽 캐시 키를
     # 올려도 안쪽 캐시가 별도로 살아있다는 걸 놓치기 쉬우니 앞으로 주의할 것.
+    # (v20) "블랙핑크 뚜두뚜두"처럼 아티스트는 찾았지만 그게 검색어 전체는 아닌 경우(뒤에 곡명으로
+    # 보이는 말이 더 붙어있는 경우) — artists가 안 비어있어도 트랙 추측 폴백을 같이 시도해야 함.
+    query_has_extra_beyond_artist = bool(corrected_artist_name) and q.strip().lower() != corrected_artist_name.lower()
     ai_guessed_query = None
-    if not artists and tracks_low_confidence and not is_genre_or_decade_query:
-        ai_fallback_cache_key = f"search-ai-fallback:v2:{q.lower().strip()}"
+    if (not artists or query_has_extra_beyond_artist) and tracks_low_confidence and not is_genre_or_decade_query:
+        # v3: (버그 수정, 2026-10-14) _build_track_results가 한글 제목 보완(_apply_korean_titles)을
+        # 포함하도록 바뀌었는데, 이 캐시는 그 함수의 "결과물"을 90일(검증 성공 시)까지 그대로
+        # 얼려서 저장하는 레이어라 — 코드 수정 전에 이미 한 번 채워진 캐시가 있으면 그 안의 트랙
+        # 이름엔 한글 제목이 없는 채로 90일간 고정됨(바로 위 §58 주석에서 이미 겪은 "중첩 캐시
+        # 버전 안 올리면 새 로직이 반영 안 된다"는 문제와 똑같은 패턴). 그래서 이 안쪽 캐시도
+        # 같이 버전업.
+        # v4: ko-title 캐시 키를 v2로 올린 것과 같은 이유로 같이 버전업 (한글 제목 파싱 버그 수정)
+        ai_fallback_cache_key = f"search-ai-fallback:v9:{q.lower().strip()}"
         cached_fallback = get_cached(ai_fallback_cache_key)
         if cached_fallback is not None:
             print(f"[search-ai-fallback] '{q}' -> 캐시된 결과 재사용(호출 없음), 검증됨={cached_fallback.get('verified')}")
@@ -862,7 +1081,7 @@ def search(q: str, x_session_id: Optional[str] = Header(default=None)):
                 # 같은 종류의 문제). 그래서 이 아티스트 단독 검증은 "AI가 애초에 트랙 추측 자체를
                 # 안 했을 때"(= 진짜로 아티스트 검색이라고 판단한 경우)만 시도하도록 좁힘 — 트랙을
                 # 추측했는데 그게 틀렸으면, 아티스트만이라도 보여주지 말고 그냥 전체를 실패로 처리.
-                if guessed_artist and not guessed_track:
+                if guessed_artist and not guessed_track and not artists:
                     verify_artist_data = lastfm_get({"method": "artist.search", "artist": guessed_artist, "limit": 5})
                     verified_artists = _build_artist_results(
                         verify_artist_data.get("results", {}).get("artistmatches", {}).get("artist", [])
@@ -954,14 +1173,15 @@ def search(q: str, x_session_id: Optional[str] = Header(default=None)):
 
     if x_session_id:
         log_event(x_session_id, "search", q, result_count=len(artists) + len(tracks) + len(tag_tracks))
-        push_search_history(x_session_id, q)
+        push_search_history(x_session_id, q, image=_first_search_thumbnail(artists, tracks))
 
     return {**result, "cached": False}
 
 
 @app.get("/recommend")
 def recommend_by_artist(artist_name: str, x_session_id: Optional[str] = Header(default=None)):
-    cache_key = f"recommend:v2:{artist_name.lower().strip()}"  # v2: 이미지 우선순위 변경(§31) 캐시 무효화
+    # v3: 한글 아티스트명 보완(_apply_korean_titles) 추가로 버전업
+    cache_key = f"recommend:v5:{artist_name.lower().strip()}"
     cached = get_cached(cache_key)
     if cached is not None:
         if x_session_id:
@@ -1014,6 +1234,7 @@ def recommend_by_artist(artist_name: str, x_session_id: Optional[str] = Header(d
             })
 
     tracks = _filter_tracks_with_lyrics(tracks, 15)
+    tracks = _apply_korean_titles(tracks)
 
     result = {"tracks": tracks}
     set_cached(cache_key, result)
@@ -1037,7 +1258,9 @@ def artist_top_tracks(artist_name: str, x_session_id: Optional[str] = Header(def
     건 "이 아티스트와 비슷한 다른 아티스트"가 아니라 "이 아티스트의 다른 곡"이라는 좁고 명확한
     의도라서, 기존 엔드포인트를 재활용하지 않고 분리함.
     """
-    cache_key = f"artist-top-tracks:v2:{artist_name.lower().strip()}"
+    # v3: 한글 제목 보완 파싱 버그 수정(ko-title v2)으로 같이 버전업 — 안 올리면 버그로
+    # title=None이었던 예전 캐시가 그대로 재사용됨
+    cache_key = f"artist-top-tracks:v8:{artist_name.lower().strip()}"
     cached = get_cached(cache_key)
     if cached is not None:
         return {**cached, "cached": True}
@@ -1073,6 +1296,7 @@ def artist_top_tracks(artist_name: str, x_session_id: Optional[str] = Header(def
 
     # "둘러보기" 목적의 목록이라 가사 있는 곡만 걸러서 내려줌(§44와 동일 원칙, 검색 자체와는 별개 취급)
     tracks = _filter_tracks_with_lyrics(tracks, 15)
+    tracks = _apply_korean_titles(tracks)
     print(f"[artist-top-tracks] '{artist_name}' -> 가사 필터 통과 {len(tracks)}곡")
 
     result = {"tracks": tracks}
@@ -1378,7 +1602,7 @@ SIMILAR_TRACKS_RAW_CAP = 40  # 가사 필터로 걸러질 걸 감안해서, 후�
 # 덕분에 첫 호출부터 큐가 훨씬 꽉 차 보이고, 최대치(프론트 MAX_QUEUE_SIZE=40)까지도 이어붙이기
 # 한두 번이면 도달함. 너무 크게 올리지 않은 이유는 아래 이미지 리졸브 비용과 직결되기 때문.
 SIMILAR_TRACKS_FINAL_COUNT = 25  # 가사 있는 곡만 걸러낸 뒤 큐에 실제로 담을 개수
-SIMILAR_TRACKS_CACHE_VERSION = "v9"  # similar_tracks()와 next-tracks override 등록/삭제 엔드포인트가 같이 참조함
+SIMILAR_TRACKS_CACHE_VERSION = "v12"  # similar_tracks()와 next-tracks override 등록/삭제 엔드포인트가 같이 참조함. v10: 한글 제목/아티스트명 보완(_apply_korean_titles) 추가로 버전업
 
 # (§84) Last.fm 유사곡/유사 아티스트 결과가 이보다 적으면 AI 폴백을 추가로 돌림. "도요한"처럼
 # artist.getSimilar가 결과 1개만 던지는 경우가 실사용 중 발견돼서 추가 — 그 1개 결과도 그대로
@@ -1711,6 +1935,12 @@ def similar_tracks(artist: str, track: str, x_session_id: Optional[str] = Header
         for t in tracks:
             if "_lastfm_images" in t:
                 t["image"] = resolve_track_image(t["artist"], t["name"], t.pop("_lastfm_images", []))
+
+    # (버그 수정, 2026-10-14) 다른 트랙 목록 엔드포인트(top_chart, artist_top_tracks,
+    # _build_track_results, discover_by_mood, recommend_by_artist)에는 이미 한글 제목/아티스트명
+    # 보완(_apply_korean_titles)을 적용했는데 "다음 트랙" 큐(이 엔드포인트)만 빠져있었음 —
+    # MiniPlayer 자동재생 큐에도 그대로 로마자 표기 제목/아티스트가 나오던 버그.
+    tracks = _apply_korean_titles(tracks)
 
     result = {"tracks": tracks}
     set_cached(cache_key, result)
@@ -2761,6 +2991,14 @@ def discover_by_mood(tag: str, x_session_id: Optional[str] = Header(default=None
     international_pool = pool["internationalPool"]
     domestic_tracks = random.sample(domestic_pool, min(RESULT_SIZE, len(domestic_pool)))
     international_tracks = random.sample(international_pool, min(RESULT_SIZE, len(international_pool)))
+    # (버그 수정, 2026-10-14) 무드 추천(감성 카드 diary_reflection/context_mood도 이 함수를
+    # 그대로 재사용함)에 한글 아티스트명 보완이 빠져있었음 — 제목은 국내 발라드/인디 가수는
+    # Last.fm에 이미 한글로 등록된 경우가 많아 멀쩡해 보였는데, 아티스트명은 (인지도 낮은
+    # 가수일수록) 여전히 로마자로만 나와서 헷갈린다는 라이브 피드백으로 발견. 캐싱된 pool
+    # 자체가 아니라 매 요청 최종 결과에만 적용해서 별도 캐시 버전업 불필요(풀 캐시와 무관).
+    # international_tracks는 resolve_korean_artist_name 내부에서 _is_domestic_artist로 어차피
+    # 걸러지니 굳이 안 거쳐도 되지만, 명시적으로 domestic만 거쳐 불필요한 호출을 아예 줄임.
+    domestic_tracks = _apply_korean_titles(domestic_tracks, assume_domestic=True)
 
     if x_session_id:
         total = len(domestic_tracks) + len(international_tracks)
@@ -2782,7 +3020,8 @@ def top_chart(country: Optional[str] = None):
     """
     # v2: 이미지 우선순위 변경(§31) 캐시 무효화 — 안 그러면 카드마다 같은 아티스트 프로필
     # 사진이 반복되는 옛 캐시가 만료 전까지 계속 나감(실사용 중 발견).
-    cache_key = f"chart:top-tracks:v2:{country.lower()}" if country else "chart:top-tracks:v2"
+    # v3: 한글 제목 보완 파싱 버그 수정(ko-title v2)으로 같이 버전업
+    cache_key = f"chart:top-tracks:v8:{country.lower()}" if country else "chart:top-tracks:v8"
     cached = get_cached(cache_key)
     if cached is not None:
         return {**cached, "cached": True}
@@ -2815,6 +3054,7 @@ def top_chart(country: Optional[str] = None):
         for track in track_list
     ]
     tracks = _filter_tracks_with_lyrics(tracks, FINAL_COUNT)
+    tracks = _apply_korean_titles(tracks)
 
     result = {"tracks": tracks}
     set_cached(cache_key, result)

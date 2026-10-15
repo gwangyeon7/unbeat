@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import SearchBar, { type SearchBarHandle } from "@/components/SearchBar";
+import SearchBar, { type SearchBarHandle, type RecentSearchEntry } from "@/components/SearchBar";
 import ArtistCard from "@/components/ArtistCard";
 import TrackList from "@/components/TrackList";
 import CompactTrackGrid from "@/components/CompactTrackGrid";
@@ -105,7 +105,7 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [favorites, setFavorites] = useState<Favorite[]>([]);
   const [favoriteTracks, setFavoriteTracks] = useState<FavoriteTrack[]>([]);
-  const [recentSearches, setRecentSearches] = useState<string[]>([]);
+  const [recentSearches, setRecentSearches] = useState<RecentSearchEntry[]>([]);
   // (§49) 홈 화면 "다시 듣기" 섹션용 — 원래 favoriteTracks(즐겨찾기)를 그대로 재사용했는데,
   // "즐겨찾기는 사이드바에 이미 따로 있는데 다시 듣기도 즐겨찾기를 보여주면 중복 아니냐"는
   // 지적을 받고 진짜 "최근에 재생 시작한 곡" 기록으로 분리함.
@@ -687,6 +687,24 @@ export default function Home() {
     // 매 렌더마다 다시 섞이면 스크롤/재생 중에도 계속 바뀌어 버리니, 두 값이 실제로 바뀔 때만.
   }, [favoriteTracks, chartTracks]);
 
+  // (UI 재구조화, 2026-10-14) "검색창(전체화면)을 벗어나도 메인 화면에 검색 결과가 그대로
+  // 섞여서 나온다"는 피드백 — 지금까지는 검색 결과가 홈 화면 스크롤 중간에 그냥 끼워져서,
+  // 검색을 그만두려면 새로고침밖에 방법이 없었음. 아래 "뒤로" 버튼이 이 함수로 검색 관련
+  // state를 전부 비워서 홈 화면으로 돌아가게 함 — handleSearch의 에러 처리 분기와 같은 목록을
+  // 비우지만, 에러 메시지는 안 지움(사용자가 직접 누른 거라 에러가 아니므로).
+  function clearSearchResults() {
+    setArtists([]);
+    setSearchTracks([]);
+    setTagSearchTracks([]);
+    setCorrectedArtistName(null);
+    setAiGuessedQuery(null);
+    setYoutubeFallbackUsed(false);
+    setSearchContextArtist(null);
+    setSearchArtistTracks([]);
+    setSelectedArtist(null);
+    setTracks([]);
+  }
+
   async function handleSearch(query: string) {
     setError(null);
     setIsSearching(true);
@@ -876,7 +894,9 @@ export default function Home() {
   // 검색창 드롭다운 '최근 검색'에서 항목 하나 삭제. 낙관적으로 먼저 화면에서 지우고,
   // 실패해도 사용자 입장에선 "다시 검색하면 또 나타나는" 정도라 되돌릴 필요는 없음.
   function handleRemoveRecent(query: string) {
-    setRecentSearches((prev) => prev.filter((q) => q !== query));
+    // (UI 재구조화, 2026-10-14) recentSearches 원소가 string에서 {query, image} 객체로 바뀌어서
+    // 비교 기준을 entry.query로 변경.
+    setRecentSearches((prev) => prev.filter((entry) => entry.query !== query));
     removeRecentSearch(query).catch(() => {});
   }
 
@@ -1329,13 +1349,16 @@ export default function Home() {
             <h1 className="text-lg font-bold">Unbeat</h1>
           </div>
           <div className="flex items-center justify-end gap-1 lg:justify-center">
+            {/* (UI 재구조화, 2026-10-14) 유튜브 뮤직처럼 로고 옆에 검색/프로필 아이콘을 두고
+                하단 탭바는 4개(홈/보관함/랭킹/하이라이트)로 줄이기로 함 — 그래서 SearchBar의
+                모바일 전용 돋보기 아이콘을 더 이상 숨기지 않음(hideMobileTrigger 제거, 헤더에서
+                바로 보이게). 전체화면 검색 자체는 그대로 SearchBar 내부 로직 재사용. */}
             <SearchBar
               ref={searchBarRef}
               onSearch={handleSearch}
               isLoading={isSearching}
               recentSearches={recentSearches}
               onRemoveRecent={handleRemoveRecent}
-              hideMobileTrigger
             />
             {/* (하단 탭바 도입) "보관함"은 이제 하단 탭바가 폰 화면(sm 미만)에서 전담해서
                 여기 아이콘은 더 안 그림 — 탯 화면(sm~lg)에서는 사이드바가 아직 없어서 접근할
@@ -1364,13 +1387,18 @@ export default function Home() {
                 <path d="M5 4H3v2a4 4 0 0 0 4 4M19 4h2v2a4 4 0 0 1-4 4" />
               </svg>
             </button>
-            {/* 모바일용 로그인/로그아웃 — 하단 탭바의 "프로필" 탭이 폰 화면을 전담하므로
-                여기선 탭 화면(sm~lg)만 보이게 둠. 로그인 상태면 바로 로그아웃, 아니면 모달 오픈. */}
+            {/* (UI 재구조화, 2026-10-14) 원래는 하단 탭바의 "프로필" 탭이 폰 화면을 전담해서
+                이 아이콘은 탭 화면(sm~lg)에서만 보였는데, 하단 탭바에서 "프로필" 탭을 빼고
+                유튜브 뮤직처럼 헤더 아이콘으로 옮기면서 폰 화면(sm 미만)에서도 보이게 함
+                (hidden/sm:flex 제거). 로그인 상태면 (§버그수정 2026-10-08과 동일한 이유로)
+                바로 로그아웃시키지 않고 이메일 확인용 바텀시트를 먼저 띄움 — 예전엔 이 버튼이
+                바로 signOut()을 호출해서 탭 화면에서만 "실수로 즉시 로그아웃" 버그가 있었는데,
+                이제 폰 화면에서도 똑같이 쓰이니 하단 탭바 "프로필"과 동작을 통일함. */}
             <button
               type="button"
-              aria-label={userEmail ? "로그아웃" : "로그인"}
-              onClick={() => (userEmail ? supabase?.auth.signOut() : setIsAuthModalOpen(true))}
-              className="hidden h-11 w-11 shrink-0 items-center justify-center rounded-full text-white/80 hover:bg-white/10 sm:flex lg:hidden"
+              aria-label={userEmail ? "프로필" : "로그인"}
+              onClick={() => (userEmail ? setIsProfileSheetOpen(true) : setIsAuthModalOpen(true))}
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-white/80 hover:bg-white/10 lg:hidden"
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-5 w-5">
                 <circle cx="12" cy="8" r="4" />
@@ -1561,6 +1589,24 @@ export default function Home() {
         </div>
       )}
 
+      {/* (UI 재구조화, 2026-10-14) 검색 결과 영역(검색된 곡/관련 곡/검색된 아티스트/비슷한
+          아티스트 곡/"OO의 다른 곡") 전체를 모바일(sm 미만)에서만 전체화면으로 덮어서, 홈 피드랑
+          시각적으로 섞이지 않게 함 — 유튜브 뮤직처럼 "검색은 검색대로 별도 화면"이 되게 하려는
+          목적. 데스크톱(sm 이상)은 원래처럼 인라인으로 그대로 둠(화면이 넓어서 안 섞여 보였고,
+          피드백도 모바일 한정이었음). 검색 결과가 하나도 없으면 이 래퍼 자체가 아예 없는 셈이라
+          평소 홈 화면엔 전혀 영향 없음. */}
+      {(searchTracks.length > 0 || tagSearchTracks.length > 0 || artists.length > 0) && (
+        <div className="fixed inset-0 z-40 flex flex-col gap-6 overflow-y-auto bg-black p-4 pb-24 sm:static sm:z-auto sm:flex sm:flex-col sm:gap-6 sm:overflow-visible sm:bg-transparent sm:p-0">
+          <button
+            type="button"
+            onClick={clearSearchResults}
+            className="flex items-center gap-1 text-sm text-white/70 hover:text-white sm:hidden"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-4 w-4">
+              <path d="m15 18-6-6 6-6" />
+            </svg>
+            뒤로
+          </button>
       {searchTracks.length > 0 && (
         <div className="w-full max-w-xl">
           <p className="mb-2 text-xs text-white/40">
@@ -1660,6 +1706,8 @@ export default function Home() {
             onPlay={handlePlay}
             onAddToPlaylist={handleOpenAddToPlaylist}
           />
+        </div>
+      )}
         </div>
       )}
 
@@ -1804,7 +1852,10 @@ export default function Home() {
 
     {/* 모바일 하단 탭바 — "하단 네비게이션이 없음" 피드백 반영. 데스크톱/탭 화면(sm 이상)은
         기존 헤더 아이콘·사이드바로 충분해서 폰 화면(sm 미만)에만 둠. 미니 플레이어(z-30, bottom-0)
-        와 겹치지 않도록 미니 플레이어 쪽을 bottom-16으로 올려서 이 탭바 위에 쌓이게 함. */}
+        와 겹치지 않도록 미니 플레이어 쪽을 bottom-16으로 올려서 이 탭바 위에 쌓이게 함.
+        (UI 재구조화, 2026-10-14) 원래 홈/검색/보관함/랭킹/프로필 5개였는데, "검색"/"프로필"을
+        유튜브 뮤직처럼 로고 옆 헤더 아이콘으로 옮기고 하단은 홈/보관함/랭킹/하이라이트 4개로
+        줄임 — 탭이 너무 많다는 피드백 반영. */}
     <nav
       className="fixed inset-x-0 bottom-0 z-30 flex h-16 items-stretch justify-between border-t border-white/10 bg-black/95 px-2 backdrop-blur sm:hidden"
       aria-label="하단 메뉴"
@@ -1820,17 +1871,6 @@ export default function Home() {
           <path d="M6 10v10h5v-6h2v6h5V10" />
         </svg>
         홈
-      </button>
-      <button
-        type="button"
-        onClick={() => searchBarRef.current?.openMobileSearch()}
-        className="flex flex-1 flex-col items-center justify-center gap-1 text-[11px] text-white/70"
-      >
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-5 w-5">
-          <circle cx="11" cy="11" r="7" />
-          <path d="m21 21-4.3-4.3" />
-        </svg>
-        검색
       </button>
       <button
         type="button"
@@ -1856,16 +1896,20 @@ export default function Home() {
         </svg>
         랭킹
       </button>
+      {/* (UI 재구조화, 2026-10-14) "검색"/"프로필" 탭을 헤더 아이콘(로고 옆)으로 옮기면서 빈
+          4번째 자리에 뭘 넣을지 물었고, 홈 화면 "빠른 선곡"의 하이라이트 믹스 재생을 하단 탭
+          어디서든 바로 시작할 수 있는 단축 버튼으로 넣기로 함 — 다른 탭들처럼 화면을 바꾸는 게
+          아니라 handleStartMix(true)를 바로 실행하는 "액션 버튼"이라는 점이 다름(눌러도 현재
+          화면은 그대로 유지되고 재생만 시작됨). */}
       <button
         type="button"
-        onClick={() => (userEmail ? setIsProfileSheetOpen(true) : setIsAuthModalOpen(true))}
+        onClick={() => handleStartMix(true)}
         className="flex flex-1 flex-col items-center justify-center gap-1 text-[11px] text-white/70"
       >
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-5 w-5">
-          <circle cx="12" cy="8" r="4" />
-          <path d="M4 21c0-4 4-6 8-6s8 2 8 6" />
+          <path d="M13 2 4 14h6l-1 8 9-12h-6l1-8Z" strokeLinejoin="round" />
         </svg>
-        프로필
+        하이라이트
       </button>
     </nav>
 

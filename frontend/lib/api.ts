@@ -138,7 +138,11 @@ export function getDiaryReflection(text: string): Promise<DiaryReflectionResult>
 
 // 검색창 드롭다운용 '최근 검색' 목록. 분석 이벤트 로그가 아니라 Redis에 세션별로 저장된
 // UI 전용 목록이라 사용자가 개별 삭제 가능함 (removeRecentSearch).
-export function getRecentSearches(): Promise<{ queries: string[] }> {
+// (UI 재구조화, 2026-10-14) 유튜브 뮤직처럼 썸네일 카드로 보여달라는 요청으로 응답 형태가
+// 문자열 목록(string[])에서 {query, image} 객체 목록으로 바뀜 — 백엔드 cache.py의
+// push_search_history/get_search_history 참고.
+export type RecentSearchEntry = { query: string; image: string | null };
+export function getRecentSearches(): Promise<{ queries: RecentSearchEntry[] }> {
   return fetchJson(`/recent-searches`);
 }
 

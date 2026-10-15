@@ -1,5 +1,6 @@
 import json
 import os
+from typing import Optional
 
 import redis
 
@@ -51,18 +52,31 @@ RECENT_SEARCH_LIMIT = 10
 RECENT_SEARCH_TTL_SECONDS = 60 * 60 * 24 * 30  # 30일
 
 
-def push_search_history(session_id: str, query: str):
+def push_search_history(session_id: str, query: str, image: Optional[str] = None):
     """
     검색창 드롭다운에 쓸 '최근 검색' 목록. 분석용 이벤트 로그(MariaDB events 테이블)와는
     의도적으로 분리해서 Redis 리스트에 세션별로 저장함 — 사용자가 드롭다운에서 삭제 버튼을
     누르면 이 목록에서만 지워지고, AARRR/코호트 분석에 쓰는 원본 이벤트 데이터는 그대로
     남아야 하기 때문(사용자 편의 기능과 분석 원본 데이터를 같은 저장소에 두면 안 됨).
+
+    (버그 아님, UI 재구조화 2026-10-14) 원래는 검색어(문자열) 하나만 저장했는데, "최근 검색어가
+    유튜브 뮤직처럼 앨범 썸네일 카드로 보였으면 좋겠다"는 요청으로 각 항목에 썸네일 이미지도
+    같이 저장하도록 바꿈 — 그래서 리스트 원소가 plain string이 아니라 {"query", "image"} JSON이
+    됨. 호출부(main.py)가 그 검색의 첫 번째 트랙/아티스트 이미지를 넘겨줌(없으면 None).
     """
     key = f"recent-searches:{session_id}"
+    entry = json.dumps({"query": query, "image": image}, ensure_ascii=False)
     try:
-        # 이미 있던 같은 검색어는 지우고 맨 앞에 다시 넣어서 "최신순 + 중복 없음" 유지
-        _client.lrem(key, 0, query)
-        _client.lpush(key, query)
+        # 이미 있던 같은 검색어는 지우고 맨 앞에 다시 넣어서 "최신순 + 중복 없음" 유지.
+        # 저장 형식이 JSON으로 바뀌어서 lrem(key, 0, query)로 직접 매치가 안 되니, 기존 목록을
+        # 읽어와 query가 같은 항목만 걸러내고 다시 쓰는 방식으로 변경.
+        raw_list = _client.lrange(key, 0, -1)
+        remaining = [r for r in raw_list if json.loads(r).get("query") != query]
+        if len(remaining) != len(raw_list):
+            _client.delete(key)
+            if remaining:
+                _client.rpush(key, *remaining)
+        _client.lpush(key, entry)
         _client.ltrim(key, 0, RECENT_SEARCH_LIMIT - 1)
         _client.expire(key, RECENT_SEARCH_TTL_SECONDS)
     except redis.RedisError as e:
@@ -70,19 +84,38 @@ def push_search_history(session_id: str, query: str):
 
 
 def get_search_history(session_id: str) -> list:
+    """반환 형식이 문자열 목록에서 {"query", "image"} 객체 목록으로 바뀜(위 push_search_history
+    참고) — 과거(마이그레이션 전)에 plain string으로 저장된 값이 TTL 만료 전까지 섞여 있을 수
+    있어서, JSON 파싱이 안 되는 옛 항목은 image 없는 객체로 방어적으로 변환해서 내려줌."""
     key = f"recent-searches:{session_id}"
     try:
-        return _client.lrange(key, 0, RECENT_SEARCH_LIMIT - 1)
+        raw_list = _client.lrange(key, 0, RECENT_SEARCH_LIMIT - 1)
     except redis.RedisError as e:
         print(f"[cache] 최근 검색 조회 실패 (빈 목록으로 대체): {e}")
         return []
+    result = []
+    for r in raw_list:
+        try:
+            parsed = json.loads(r)
+            if isinstance(parsed, dict) and "query" in parsed:
+                result.append(parsed)
+            else:
+                result.append({"query": str(parsed), "image": None})
+        except (json.JSONDecodeError, TypeError):
+            result.append({"query": r, "image": None})  # 마이그레이션 전 plain string 항목
+    return result
 
 
 def remove_search_history(session_id: str, query: str):
     key = f"recent-searches:{session_id}"
     try:
-        _client.lrem(key, 0, query)
-    except redis.RedisError as e:
+        raw_list = _client.lrange(key, 0, -1)
+        remaining = [r for r in raw_list if json.loads(r).get("query") != query]
+        if len(remaining) != len(raw_list):
+            _client.delete(key)
+            if remaining:
+                _client.rpush(key, *remaining)
+    except (redis.RedisError, json.JSONDecodeError, TypeError) as e:
         print(f"[cache] 최근 검색 삭제 실패 (무시하고 진행): {e}")
 
 

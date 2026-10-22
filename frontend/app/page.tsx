@@ -1706,7 +1706,13 @@ export default function Home() {
               </div>
             </div>
           </div>
-          <div className="overflow-y-auto px-4 pb-4 sm:overflow-visible sm:p-0">
+          <div
+            className={
+              MOOD_RESULT_MODE === "sheet"
+                ? "overflow-y-auto px-4 pb-4 sm:overflow-visible sm:p-0"
+                : "w-full"
+            }
+          >
       {isLoadingMood && <p className="text-sm text-white/50">곡 불러오는 중...</p>}
 
       {/* 국내/해외 구분해서 보여달라는 피드백 — Last.fm 무드 태그가 서구 팝 위주라

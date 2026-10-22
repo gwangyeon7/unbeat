@@ -2815,7 +2815,11 @@ DIARY_TEXT_MAX_LENGTH = 500  # 프롬프트 비용/남용 방지용 상한
 
 
 @app.post("/diary-reflection")
-def diary_reflection(payload: DiaryReflectionRequest, x_session_id: Optional[str] = Header(default=None)):
+def diary_reflection(
+    payload: DiaryReflectionRequest,
+    include_tracks: bool = True,
+    x_session_id: Optional[str] = Header(default=None),
+):
     """
     (Phase 5-3, 2026-10-08) "감정 다이어리" — 사용자가 오늘 하루/기분을 자유 텍스트로 적으면
     Claude Haiku가 읽고 (1) 짧은 공감/위로 메시지, (2) 그 감정에 어울리는 무드 태그를 돌려줌.
@@ -2882,7 +2886,14 @@ def diary_reflection(payload: DiaryReflectionRequest, x_session_id: Optional[str
     if mood_tag not in MOOD_LABELS_KO:
         mood_tag = "chill"  # 모델이 엉뚱한 태그를 주거나 빠뜨리면 무난한 기본값으로 폴백
 
-    mood_result = discover_by_mood(mood_tag, x_session_id=None)
+    # (체감 속도 개선, 2026-10-19) include_tracks=false면 추천곡 조회를 건너뛰고 공감 메시지와
+    # 무드 태그만 먼저 돌려줌 — 프론트가 메시지를 바로 보여주고, 곡 목록은 기존
+    # /discover-by-mood로 이어서 받아 채움(곡 조회가 느릴 때 "위로받기" 응답 전체가 같이
+    # 늦어지던 문제 완화). 기본값 true는 기존 호출과의 호환용.
+    if include_tracks:
+        mood_result = discover_by_mood(mood_tag, x_session_id=None)
+    else:
+        mood_result = {"domesticTracks": [], "internationalTracks": []}
 
     if x_session_id:
         log_event(x_session_id, "diary_reflection", mood_tag)

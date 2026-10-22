@@ -140,6 +140,7 @@ export default function Home() {
   const DIARY_HISTORY_CAP = 10;
   type DiaryHistoryEntry = {
     date: string; // YYYY-MM-DD
+    at?: string; // ISO 일시 — 시각 표시용(예전에 저장된 기록엔 없을 수 있음)
     text: string;
     message: string;
     moodLabel: string;
@@ -804,10 +805,22 @@ export default function Home() {
     setDiaryError(null);
     setIsDiaryLoading(true);
     try {
-      const data = await getDiaryReflection(text);
+      // 공감 메시지를 먼저 받아 바로 보여주고, 추천곡은 이어서 따로 채움(곡 조회가 느려도
+      // "위로받기" 응답이 같이 늦어지지 않게)
+      const data = await getDiaryReflection(text, false);
       setDiaryResult(data);
+      discoverByMood(data.moodTag)
+        .then((tracks) => {
+          setDiaryResult((prev) =>
+            prev && prev.moodTag === data.moodTag
+              ? { ...prev, domesticTracks: tracks.domesticTracks, internationalTracks: tracks.internationalTracks }
+              : prev
+          );
+        })
+        .catch((e) => console.warn("[diary] 추천곡 조회 실패:", e));
       const entry: DiaryHistoryEntry = {
         date: new Date().toISOString().slice(0, 10),
+        at: new Date().toISOString(),
         text,
         message: data.message,
         moodLabel: data.moodLabel,
@@ -2068,7 +2081,10 @@ export default function Home() {
 
           <textarea
             value={diaryText}
-            onChange={(e) => setDiaryText(e.target.value.slice(0, DIARY_TEXT_MAX_LENGTH))}
+            onChange={(e) => setDiaryText(e.target.value)}
+            maxLength={DIARY_TEXT_MAX_LENGTH}
+            autoCorrect="off"
+            autoCapitalize="off"
             placeholder="오늘 있었던 일이나 지금 기분을 편하게 적어보세요"
             rows={4}
             autoFocus
@@ -2133,12 +2149,26 @@ export default function Home() {
               {isDiaryHistoryOpen && (
                 <ul className="mt-2 space-y-2">
                   {diaryHistory.map((entry, i) => (
-                    <li key={`${entry.date}-${i}`} className="rounded-md bg-black/20 p-2 text-xs">
+                    <li key={`${entry.at ?? entry.date}-${i}`} className="rounded-md bg-black/20 p-2 text-xs">
                       <div className="flex items-center justify-between text-white/40">
-                        <span>{entry.date}</span>
+                        <span>
+                          {entry.at
+                            ? new Date(entry.at).toLocaleString("ko-KR", {
+                                month: "numeric",
+                                day: "numeric",
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              })
+                            : entry.date}
+                        </span>
                         <span>&quot;{entry.moodLabel}&quot;</span>
                       </div>
-                      <p className="mt-1 line-clamp-2 text-white/70">{entry.message}</p>
+                      {entry.text && (
+                        <p className="mt-1 whitespace-pre-wrap break-words text-white/50">
+                          내 일기: {entry.text}
+                        </p>
+                      )}
+                      <p className="mt-1 text-white/70">{entry.message}</p>
                     </li>
                   ))}
                 </ul>

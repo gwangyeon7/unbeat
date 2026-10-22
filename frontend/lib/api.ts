@@ -128,8 +128,12 @@ export type DiaryReflectionResult = {
   internationalTracks: Track[];
 };
 
-export function getDiaryReflection(text: string): Promise<DiaryReflectionResult> {
-  return fetchJson(`/diary-reflection`, {
+// includeTracks=false면 공감 메시지+무드 태그만 먼저 받음(추천곡은 discoverByMood로 이어서 조회).
+export function getDiaryReflection(
+  text: string,
+  includeTracks: boolean = true
+): Promise<DiaryReflectionResult> {
+  return fetchJson(`/diary-reflection?include_tracks=${includeTracks}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ text }),

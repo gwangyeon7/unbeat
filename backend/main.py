@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 from pydantic import BaseModel
 from typing import Optional
 from rapidfuzz import process as fuzzy_process, fuzz
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, wait
 from datetime import date
 from urllib.parse import quote
 import anthropic
@@ -216,8 +216,13 @@ def _first_search_thumbnail(artists: list, tracks: list) -> Optional[str]:
 
 
 def _build_track_results(track_matches: list) -> list:
-    tracks = [
-        {
+    # (속도 개선, 2026-10-22) 검색이 너무 느리다는 피드백(5-1) — 원래는 곡마다 iTunes 이미지 조회
+    # (resolve_track_image, 건당 최대 3초)를 리스트 컴프리헨션 안에서 "순서대로" 불러서 최대 8곡
+    # 분량의 대기가 그대로 누적됐음(캐시가 죽어있으면 매 검색마다 반복). 스레드풀로 동시에 조회.
+    items = [item for item in track_matches if not _is_junk_track_match(item)]
+
+    def build(item):
+        return {
             "name": item["name"],
             # track.search만 예외적으로 artist가 dict가 아니라 문자열로 옴
             "artist": _clean_artist_name(item.get("artist", "")),
@@ -227,10 +232,14 @@ def _build_track_results(track_matches: list) -> list:
                 _clean_artist_name(item.get("artist", "")), item["name"], item.get("image", [])
             ),
         }
-        for item in track_matches
-        if not _is_junk_track_match(item)
-    ]
-    return _apply_korean_titles(tracks)
+
+    if not items:
+        return []
+    with ThreadPoolExecutor(max_workers=min(len(items), 10)) as executor:
+        tracks = list(executor.map(build, items))
+    # 한글 제목/아티스트 보완(Claude 호출)은 최대 3초만 기다림 — 못 끝낸 곡은 원본 이름으로 먼저
+    # 내려주고, 백그라운드에서 계속 돌아 캐시에 채워져서 다음 검색부터 한글로 나옴.
+    return _apply_korean_titles(tracks, deadline=3.0)
 
 
 # "2010년대 kpop"처럼 아티스트/곡 이름이 아니라 장르·연대 키워드로 검색하는 경우를 위해 추가.
@@ -481,7 +490,7 @@ def resolve_korean_artist_name(artist: str, assume_domestic: bool = False) -> Op
     return name
 
 
-def _apply_korean_titles(tracks: list, assume_domestic: bool = False) -> list:
+def _apply_korean_titles(tracks: list, assume_domestic: bool = False, deadline: Optional[float] = None) -> list:
     """여러 트랙에 한글 제목+아티스트명을 병렬로 보완. 순차 호출하면 Claude 응답 지연이 곡
     수만큼 누적되니(아티스트 이미지 보완 때와 같은 이유로) 스레드풀로 동시에 처리함. 제목은
     "한글 제목 (기존 제목)" 형태로 합치고, 아티스트명은 한글로 교체함(바로 위 주석 참고) —
@@ -509,8 +518,23 @@ def _apply_korean_titles(tracks: list, assume_domestic: bool = False) -> list:
             updated["artist"] = ko_artist
         return updated
 
-    with ThreadPoolExecutor(max_workers=10) as executor:
-        return list(executor.map(resolve, tracks))
+    if deadline is None:
+        with ThreadPoolExecutor(max_workers=10) as executor:
+            return list(executor.map(resolve, tracks))
+
+    # deadline(초)이 있으면: 그 안에 끝난 곡만 한글로 바꾸고, 못 끝낸 곡은 원본 그대로 반환.
+    # 스레드는 끝까지 돌아서(shutdown(wait=False)) Claude 결과가 Redis에 캐싱됨 → 다음엔 즉시 적용.
+    executor = ThreadPoolExecutor(max_workers=10)
+    futures = [executor.submit(resolve, t) for t in tracks]
+    wait(futures, timeout=deadline)
+    executor.shutdown(wait=False)
+    results = []
+    for track, future in zip(tracks, futures):
+        try:
+            results.append(future.result(timeout=0) if future.done() else track)
+        except Exception:
+            results.append(track)
+    return results
 
 
 def lastfm_get(params: dict):
@@ -897,6 +921,14 @@ def search(q: str, x_session_id: Optional[str] = Header(default=None)):
             effective_artist_query = match[0]
             corrected_artist_name = match[0]
 
+    # (속도 개선, 2026-10-22) track.search는 artist.search 결과와 무관(검색어 q만 사용)하므로
+    # 미리 백그라운드로 던져놓고 아티스트 쪽과 동시에 기다림 — Last.fm 왕복 1회분 단축.
+    _search_executor = ThreadPoolExecutor(max_workers=1)
+    track_future = _search_executor.submit(
+        lastfm_get, {"method": "track.search", "track": q, "limit": 8}
+    )
+    _search_executor.shutdown(wait=False)
+
     artist_data = lastfm_get({"method": "artist.search", "artist": effective_artist_query, "limit": 5})
     artist_matches = artist_data.get("results", {}).get("artistmatches", {}).get("artist", [])
 
@@ -918,7 +950,7 @@ def search(q: str, x_session_id: Optional[str] = Header(default=None)):
 
     artists = _build_artist_results(artist_matches)
 
-    track_data = lastfm_get({"method": "track.search", "track": q, "limit": 8})
+    track_data = track_future.result()
     track_matches = track_data.get("results", {}).get("trackmatches", {}).get("track", [])
     tracks = _build_track_results(track_matches)
 

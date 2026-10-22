@@ -1,7 +1,32 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
+
+// (2026-10-22, 피드백) 홈 화면에 설치한 앱에서 구글 로그인(OAuth 리다이렉트)을 하면 앱을 벗어나
+// 삼성 인터넷 같은 브라우저로 빠져서, 앱이 아니라 브라우저 화면(하단바 3겹)이 돼버림. 리다이렉트
+// 없이 이 화면 안에서 끝나는 Google Identity Services(GIS)로 받은 ID 토큰을 Supabase에 넘겨서
+// 로그인함(signInWithIdToken). NEXT_PUBLIC_GOOGLE_CLIENT_ID가 없으면 예전 리다이렉트 방식으로 폴백.
+const GOOGLE_CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
+const GIS_SCRIPT_SRC = "https://accounts.google.com/gsi/client";
+
+function loadGisScript(): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if ((window as any).google?.accounts?.id) return resolve();
+    const existing = document.querySelector(`script[src="${GIS_SCRIPT_SRC}"]`);
+    if (existing) {
+      existing.addEventListener("load", () => resolve());
+      existing.addEventListener("error", () => reject(new Error("gis load failed")));
+      return;
+    }
+    const s = document.createElement("script");
+    s.src = GIS_SCRIPT_SRC;
+    s.async = true;
+    s.onload = () => resolve();
+    s.onerror = () => reject(new Error("gis load failed"));
+    document.head.appendChild(s);
+  });
+}
 
 type AuthModalProps = {
   onClose: () => void;
@@ -20,6 +45,53 @@ export default function AuthModal({ onClose, onAuthSuccess }: AuthModalProps) {
   const [error, setError] = useState<string | null>(null);
   const [signupDone, setSignupDone] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
+  const googleButtonRef = useRef<HTMLDivElement>(null);
+  const [gisReady, setGisReady] = useState(false);
+
+  // GIS 버튼: 구글이 그려주는 공식 로그인 버튼을 띄우고, 로그인되면 callback으로 ID 토큰(credential)이 옴.
+  useEffect(() => {
+    if (!GOOGLE_CLIENT_ID || !supabase) return;
+    let cancelled = false;
+    loadGisScript()
+      .then(() => {
+        if (cancelled || !googleButtonRef.current) return;
+        const google = (window as any).google;
+        google.accounts.id.initialize({
+          client_id: GOOGLE_CLIENT_ID,
+          callback: async (response: { credential: string }) => {
+            setIsGoogleLoading(true);
+            setError(null);
+            const { error: idTokenError } = await supabase!.auth.signInWithIdToken({
+              provider: "google",
+              token: response.credential,
+            });
+            setIsGoogleLoading(false);
+            if (idTokenError) {
+              setError("구글 로그인에 실패했어요. 잠시 후 다시 시도해주세요.");
+              return;
+            }
+            onAuthSuccess();
+            onClose();
+          },
+        });
+        google.accounts.id.renderButton(googleButtonRef.current, {
+          theme: "filled_black",
+          size: "large",
+          text: "continue_with",
+          shape: "rectangular",
+          width: 280,
+          locale: "ko",
+        });
+        setGisReady(true);
+      })
+      .catch(() => {
+        // 스크립트를 못 불러오면(오프라인/차단) 예전 리다이렉트 버튼이 그대로 보임
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // (구글 로그인, 2026-10-14) OAuth는 이메일/비번과 달리 즉시 세션을 안 주고 구글 로그인
   // 화면으로 리다이렉트했다가 돌아오는 방식 — 그래서 이 함수가 끝나도 onAuthSuccess()를
@@ -135,11 +207,16 @@ export default function AuthModal({ onClose, onAuthSuccess }: AuthModalProps) {
           </div>
         ) : (
           <div className="flex flex-col gap-3">
+            {GOOGLE_CLIENT_ID && (
+              <div ref={googleButtonRef} className="flex min-h-[40px] justify-center" />
+            )}
             <button
               type="button"
               disabled={isGoogleLoading}
               onClick={handleGoogleSignIn}
-              className="flex items-center justify-center gap-2 rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm font-medium hover:bg-white/10 disabled:opacity-50"
+              className={`flex items-center justify-center gap-2 rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm font-medium hover:bg-white/10 disabled:opacity-50 ${
+                GOOGLE_CLIENT_ID && gisReady ? "hidden" : ""
+              }`}
             >
               <svg viewBox="0 0 48 48" className="h-4 w-4" aria-hidden="true">
                 <path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.8 32.7 29.3 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34.5 6.2 29.5 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.7-.4-3.5z"/>

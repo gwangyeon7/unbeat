@@ -61,15 +61,25 @@ export default function AuthModal({ onClose, onAuthSuccess }: AuthModalProps) {
   }, []);
 
   // GIS 버튼: 구글이 그려주는 공식 로그인 버튼을 띄우고, 로그인되면 callback으로 ID 토큰(credential)이 옴.
+  // 설치형 앱에서는 팝업 버튼 대신 FedCM(브라우저 내장 계정 선택창) 기반 prompt()를 직접 호출함 —
+  // 팝업/리다이렉트가 없어서 앱 안에서 끝날 수 있는지 시험하는 방식(실기기 확인 필요).
+  const [isInstalledChecked, setIsInstalledChecked] = useState(false);
   useEffect(() => {
-    if (!GOOGLE_CLIENT_ID || !supabase || isInstalledApp) return;
+    setIsInstalledChecked(true);
+  }, [isInstalledApp]);
+  useEffect(() => {
+    if (!GOOGLE_CLIENT_ID || !supabase || !isInstalledChecked) return;
     let cancelled = false;
     loadGisScript()
       .then(() => {
-        if (cancelled || !googleButtonRef.current) return;
+        if (cancelled) return;
+        if (!isInstalledApp && !googleButtonRef.current) return;
         const google = (window as any).google;
         google.accounts.id.initialize({
           client_id: GOOGLE_CLIENT_ID,
+          use_fedcm_for_prompt: true,
+          use_fedcm_for_button: true,
+          button_auto_select: false,
           callback: async (response: { credential: string }) => {
             setIsGoogleLoading(true);
             setError(null);
@@ -86,14 +96,16 @@ export default function AuthModal({ onClose, onAuthSuccess }: AuthModalProps) {
             onClose();
           },
         });
-        google.accounts.id.renderButton(googleButtonRef.current, {
-          theme: "filled_black",
-          size: "large",
-          text: "continue_with",
-          shape: "rectangular",
-          width: 280,
-          locale: "ko",
-        });
+        if (!isInstalledApp && googleButtonRef.current) {
+          google.accounts.id.renderButton(googleButtonRef.current, {
+            theme: "filled_black",
+            size: "large",
+            text: "continue_with",
+            shape: "rectangular",
+            width: 280,
+            locale: "ko",
+          });
+        }
         setGisReady(true);
       })
       .catch(() => {
@@ -103,7 +115,22 @@ export default function AuthModal({ onClose, onAuthSuccess }: AuthModalProps) {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [isInstalledChecked, isInstalledApp]);
+
+  // 설치형 앱 전용: FedCM 계정 선택창 띄우기. 안 뜨면(차단/미지원) 이유를 안내.
+  function handleInstalledGoogle() {
+    const google = (window as any).google;
+    if (!google?.accounts?.id) {
+      setError("구글 로그인을 불러오지 못했어요. 이메일로 로그인해주세요.");
+      return;
+    }
+    setError(null);
+    google.accounts.id.prompt((n: any) => {
+      if (n.isNotDisplayed?.() || n.isSkippedMoment?.()) {
+        setError("이 앱에서는 구글 계정 선택창을 못 띄웠어요. 이메일로 로그인하거나 브라우저(unbeat.org)에서 구글로 로그인해주세요.");
+      }
+    });
+  }
 
   // (구글 로그인, 2026-10-14) OAuth는 이메일/비번과 달리 즉시 세션을 안 주고 구글 로그인
   // 화면으로 리다이렉트했다가 돌아오는 방식 — 그래서 이 함수가 끝나도 onAuthSuccess()를
@@ -219,10 +246,15 @@ export default function AuthModal({ onClose, onAuthSuccess }: AuthModalProps) {
           </div>
         ) : (
           <div className="flex flex-col gap-3">
-            {isInstalledApp && (
-              <p className="rounded-md bg-white/5 px-3 py-2 text-xs text-white/60">
-                앱에서는 이메일로 로그인해주세요. (구글 로그인은 브라우저에서 unbeat.org로 접속하면 쓸 수 있어요)
-              </p>
+            {isInstalledApp && GOOGLE_CLIENT_ID && (
+              <button
+                type="button"
+                disabled={!gisReady}
+                onClick={handleInstalledGoogle}
+                className="flex items-center justify-center gap-2 rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm font-medium hover:bg-white/10 disabled:opacity-50"
+              >
+                구글로 계속하기
+              </button>
             )}
             {GOOGLE_CLIENT_ID && !isInstalledApp && (
               <div ref={googleButtonRef} className="flex min-h-[40px] justify-center" />

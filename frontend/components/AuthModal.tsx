@@ -47,10 +47,22 @@ export default function AuthModal({ onClose, onAuthSuccess }: AuthModalProps) {
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const googleButtonRef = useRef<HTMLDivElement>(null);
   const [gisReady, setGisReady] = useState(false);
+  // (2026-10-22 실기기 확인) 홈 화면에 설치한 앱(standalone/fullscreen)에서는 구글 로그인이 앱을 벗어나
+  // 삼성 인터넷 등 브라우저로 빠지거나(리다이렉트 방식), 팝업이 결과를 앱으로 못 돌려줘서 빈 화면에서
+  // 멈춤(GIS 팝업 방식) — 구글이 임베디드/설치형 웹앱의 OAuth를 제한하는 동작이라 코드로 우회가
+  // 어려움. 그래서 설치형 앱에서는 구글 로그인을 숨기고 이메일 로그인만 보여줌(브라우저 접속은 그대로).
+  const [isInstalledApp, setIsInstalledApp] = useState(false);
+  useEffect(() => {
+    const mq = ["standalone", "fullscreen", "minimal-ui"].some(
+      (m) => window.matchMedia(`(display-mode: ${m})`).matches
+    );
+    const iosStandalone = (window.navigator as any).standalone === true;
+    setIsInstalledApp(mq || iosStandalone);
+  }, []);
 
   // GIS 버튼: 구글이 그려주는 공식 로그인 버튼을 띄우고, 로그인되면 callback으로 ID 토큰(credential)이 옴.
   useEffect(() => {
-    if (!GOOGLE_CLIENT_ID || !supabase) return;
+    if (!GOOGLE_CLIENT_ID || !supabase || isInstalledApp) return;
     let cancelled = false;
     loadGisScript()
       .then(() => {
@@ -207,7 +219,12 @@ export default function AuthModal({ onClose, onAuthSuccess }: AuthModalProps) {
           </div>
         ) : (
           <div className="flex flex-col gap-3">
-            {GOOGLE_CLIENT_ID && (
+            {isInstalledApp && (
+              <p className="rounded-md bg-white/5 px-3 py-2 text-xs text-white/60">
+                앱에서는 이메일로 로그인해주세요. (구글 로그인은 브라우저에서 unbeat.org로 접속하면 쓸 수 있어요)
+              </p>
+            )}
+            {GOOGLE_CLIENT_ID && !isInstalledApp && (
               <div ref={googleButtonRef} className="flex min-h-[40px] justify-center" />
             )}
             <button
@@ -215,7 +232,7 @@ export default function AuthModal({ onClose, onAuthSuccess }: AuthModalProps) {
               disabled={isGoogleLoading}
               onClick={handleGoogleSignIn}
               className={`flex items-center justify-center gap-2 rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm font-medium hover:bg-white/10 disabled:opacity-50 ${
-                GOOGLE_CLIENT_ID && gisReady ? "hidden" : ""
+                isInstalledApp || (GOOGLE_CLIENT_ID && gisReady) ? "hidden" : ""
               }`}
             >
               <svg viewBox="0 0 48 48" className="h-4 w-4" aria-hidden="true">

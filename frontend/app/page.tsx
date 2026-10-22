@@ -79,6 +79,9 @@ function shuffleArray<T>(arr: T[]): T[] {
   return copy;
 }
 
+// 무드 칩 결과 표시 방식 비교용: "sheet" = 하단 시트, "scroll" = 결과 위치로 자동 스크롤
+const MOOD_RESULT_MODE: "sheet" | "scroll" = "scroll";
+
 export default function Home() {
   const [artists, setArtists] = useState<Artist[]>([]);
   const [searchTracks, setSearchTracks] = useState<Track[]>([]);
@@ -818,6 +821,7 @@ export default function Home() {
   }
 
   const moodSheetSwipeRef = useRef<{ x: number; y: number } | null>(null);
+  const moodResultRef = useRef<HTMLDivElement | null>(null);
 
   // 무드 바텀시트 닫기 — 선택한 무드와 결과 곡을 비워서 홈 화면 원래 상태로
   function handleCloseMoodSheet() {
@@ -847,6 +851,10 @@ export default function Home() {
       const data = await discoverByMood(tag);
       setDomesticMoodTracks(data.domesticTracks);
       setInternationalMoodTracks(data.internationalTracks);
+      // 자동 스크롤 모드: 결과가 렌더된 뒤 그 위치로 부드럽게 이동
+      if (MOOD_RESULT_MODE === "scroll") {
+        setTimeout(() => moodResultRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
+      }
     } catch (err) {
       setError("무드 곡을 불러오지 못했어요.");
     } finally {
@@ -1636,14 +1644,21 @@ export default function Home() {
           아래(z-25)에 두고, 재생 중이면 재생바 위로 올려서 재생바를 안 가리게 함. */}
       {selectedMood && (
         <div
-          className={`fixed inset-x-0 z-[25] flex max-h-[62dvh] flex-col rounded-t-2xl border-t border-white/10 bg-neutral-950 shadow-2xl ${
-            nowPlaying ? "bottom-[8.5rem]" : "bottom-16"
-          } sm:static sm:z-auto sm:max-h-none sm:w-full sm:max-w-xl sm:rounded-none sm:border-0 sm:bg-transparent sm:shadow-none`}
+          ref={moodResultRef}
+          className={
+            MOOD_RESULT_MODE === "sheet"
+              ? `fixed inset-x-0 z-[25] flex max-h-[62dvh] flex-col rounded-t-2xl border-t border-white/10 bg-neutral-950 shadow-2xl ${
+                  nowPlaying ? "bottom-[8.5rem]" : "bottom-16"
+                } sm:static sm:z-auto sm:max-h-none sm:w-full sm:max-w-xl sm:rounded-none sm:border-0 sm:bg-transparent sm:shadow-none`
+              : "w-full max-w-xl scroll-mt-20"
+          }
         >
           <div
             // 터치와 마우스(Mac 반응형 미리보기 테스트용) 모두 받도록 포인터 이벤트 사용.
             // 헤더 안 버튼(믹스 재생/새로고침/✕)을 누르는 건 드래그로 취급하지 않음.
-            className="shrink-0 touch-none select-none px-4 pb-2 pt-2 sm:hidden"
+            className={`shrink-0 touch-none select-none px-4 pb-2 pt-2 sm:hidden ${
+              MOOD_RESULT_MODE === "sheet" ? "" : "hidden"
+            }`}
             onPointerDown={(e) => {
               if ((e.target as HTMLElement).closest("button")) return;
               moodSheetSwipeRef.current = { x: e.clientX, y: e.clientY };

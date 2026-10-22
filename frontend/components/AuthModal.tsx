@@ -161,6 +161,25 @@ export default function AuthModal({ onClose, onAuthSuccess }: AuthModalProps) {
   // 전엔 이 구분 없이 무조건 "바로 로그인됐어요"로 띄워서, 실제로는 로그인 안 된 사용자가
   // 로그인된 줄 알고 혼란스러워하는 버그가 있었음(2026-10-08 실사용 중 발견).
   const [needsEmailConfirmation, setNeedsEmailConfirmation] = useState(false);
+  const [resetSent, setResetSent] = useState(false);
+
+  // 비밀번호 재설정 메일 보내기 — 위 이메일 칸에 적은 주소로 보냄. 링크는 /reset-password로 연결.
+  async function handleForgotPassword() {
+    if (!supabase) return;
+    if (!email) {
+      setError("위 이메일 칸에 가입한 이메일을 먼저 적어주세요.");
+      return;
+    }
+    setError(null);
+    const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/reset-password`,
+    });
+    if (resetError) {
+      setError("재설정 메일을 보내지 못했어요. 잠시 후 다시 시도해주세요.");
+      return;
+    }
+    setResetSent(true);
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -307,6 +326,20 @@ export default function AuthModal({ onClose, onAuthSuccess }: AuthModalProps) {
             >
               {isSubmitting ? "처리 중..." : mode === "signin" ? "로그인" : "회원가입"}
             </button>
+            {mode === "signin" && (
+              <button
+                type="button"
+                onClick={handleForgotPassword}
+                className="text-xs text-white/50 hover:text-white/80"
+              >
+                비밀번호를 잊으셨나요?
+              </button>
+            )}
+            {resetSent && (
+              <p className="text-xs text-accent">
+                재설정 메일을 보냈어요. 메일함(스팸함도)에서 링크를 눌러주세요.
+              </p>
+            )}
             <button
               type="button"
               onClick={() => {

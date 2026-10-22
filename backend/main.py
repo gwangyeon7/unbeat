@@ -113,6 +113,32 @@ KNOWN_KOREAN_ARTIST_NAMES_LATIN = {
 }
 
 
+# (2026-10-22) "HYUKOH"/"CHANGMO"처럼 한국에서는 한글 이름(혁오/창모)이 훨씬 익숙한데 화면엔 로마자로
+# 나온다는 피드백 — Claude에게 매번 물으면 "영문이 익숙하면 null" 규칙 때문에 보수적으로 null을
+# 주고(그 null이 180일 캐싱까지 됨), 호출 지연도 생김. 자주 나오는 아티스트는 확정된 한글 표기를
+# 직접 매핑해서 LLM 호출 없이 바로 적용함. 목록에 없는 아티스트만 아래 LLM 경로로 감.
+KOREAN_ARTIST_NAME_OVERRIDES = {
+    "hyukoh": "혁오", "changmo": "창모", "jannabi": "잔나비", "akmu": "악뮤",
+    "day6": "데이식스", "mamamoo": "마마무", "zico": "지코", "epik high": "에픽하이",
+    "winner": "위너", "ikon": "아이콘", "bigbang": "빅뱅", "big bang": "빅뱅", "shinee": "샤이니",
+    "exo": "엑소", "bts": "방탄소년단", "blackpink": "블랙핑크", "newjeans": "뉴진스",
+    "ive": "아이브", "aespa": "에스파", "twice": "트와이스", "stray kids": "스트레이 키즈",
+    "seventeen": "세븐틴", "itzy": "있지", "red velvet": "레드벨벳", "(g)i-dle": "(여자)아이들",
+    "g-idle": "(여자)아이들", "gidle": "(여자)아이들", "le sserafim": "르세라핌", "nmixx": "엔믹스",
+    "enhypen": "엔하이픈", "txt": "투모로우바이투게더", "tomorrow x together": "투모로우바이투게더",
+    "riize": "라이즈", "zerobaseone": "제로베이스원", "zb1": "제로베이스원", "ateez": "에이티즈",
+    "got7": "갓세븐", "monsta x": "몬스타엑스", "super junior": "슈퍼주니어",
+    "girls' generation": "소녀시대", "girls generation": "소녀시대", "snsd": "소녀시대",
+    "apink": "에이핑크", "2ne1": "투애니원", "sistar": "씨스타", "wonder girls": "원더걸스",
+    "gfriend": "여자친구", "oh my girl": "오마이걸", "stayc": "스테이씨", "kara": "카라",
+    "psy": "싸이", "iu": "아이유", "dean": "딘", "heize": "헤이즈", "sunmi": "선미",
+    "taeyeon": "태연", "sokodomo": "소코도모", "paul kim": "폴킴", "10cm": "10cm",
+    "lee hi": "이하이", "baekhyun": "백현", "younha": "윤하", "bol4": "볼빨간사춘기",
+    "melomance": "멜로망스", "car, the garden": "카더가든", "silica gel": "실리카겔",
+    "se so neon": "세소년", "ahn ye-eun": "안예은", "sik-k": "식케이", "keem hyo eun": "김효은",
+}
+
+
 def _is_domestic_artist(artist_name: str) -> bool:
     if HANGUL_PATTERN.search(artist_name):
         return True
@@ -421,7 +447,8 @@ def resolve_korean_title(artist: str, track_name: str, assume_domestic: bool = F
 
 
 def _korean_artist_cache_key(artist: str) -> str:
-    return f"ko-artist:v3:{artist.strip().lower()}"
+    # v4: (2026-10-22) 보수적으로 null이 캐싱된 결과("CHANGMO" 등)를 무효화 — 프롬프트도 완화함
+    return f"ko-artist:v4:{artist.strip().lower()}"
 
 
 # (버그 수정, 2026-10-14) 제목만 한글로 보완했더니 "뚜두뚜두 (DDU-DU DDU-DU) / BLACKPINK"처럼
@@ -440,6 +467,10 @@ def resolve_korean_artist_name(artist: str, assume_domestic: bool = False) -> Op
         return None
     if HANGUL_PATTERN.search(artist):
         return None  # 이미 한글이면 보완 불필요
+
+    override = KOREAN_ARTIST_NAME_OVERRIDES.get(artist.strip().lower())
+    if override:
+        return override if override.lower() != artist.strip().lower() else None
 
     cache_key = _korean_artist_cache_key(artist)
     cached = get_cached(cache_key)
@@ -463,7 +494,8 @@ def resolve_korean_artist_name(artist: str, assume_domestic: bool = False) -> Op
                     '- 한국에서 한글 표기가 통용되는 아티스트면 그 한글 이름을 답해. '
                     '예: "BLACKPINK" → {"korean_name": "블랙핑크"}, "IU" → {"korean_name": "아이유"}, '
                     '"Zion.T" → {"korean_name": "자이언티"}\n'
-                    '- 한국 아티스트지만 영문 표기가 더 익숙하게 쓰이면 null (한글로 바꾸지 마). '
+                    '- 한국 아티스트는 한글 표기가 실제로 널리 쓰이면(예: HYUKOH → 혁오, CHANGMO → 창모, '
+                    'JANNABI → 잔나비) 반드시 한글로 답해. 한글 표기가 거의 안 쓰이고 영문이 훨씬 익숙할 때만 null. '
                     '예: "Crush" → {"korean_name": null}, "Jay Park" → {"korean_name": null}\n'
                     '- 영어 이름을 소리 나는 대로 한글로 옮긴 음차(예: Zion.T → "지온티")는 절대 만들지 마. '
                     '실제로 한국에서 쓰이는 한글 표기를 아는 경우에만 답하고, 모르면 null.\n'
@@ -810,7 +842,7 @@ def _search_exact_pick(q: str, artist: str, x_session_id: Optional[str]):
     같은 제목의 다른 곡(예: "Meteor" 수십 개)과 이름이 비슷한 엉뚱한 아티스트가 훨씬 많이 떠서,
     사용자가 고른 바로 그 곡이 묻혔음(2026-10-22 피드백). 아티스트까지 넘겨서 그 곡을 맨 앞에,
     아티스트 카드는 그 아티스트 하나를 맨 앞에 둠."""
-    cache_key = f"search-pick:v1:{artist.lower().strip()}:{q.lower().strip()}"
+    cache_key = f"search-pick:v2:{artist.lower().strip()}:{q.lower().strip()}"
     cached = get_cached(cache_key)
     if cached is not None:
         if x_session_id:
@@ -950,7 +982,7 @@ def _search_by_query(q: str, x_session_id: Optional[str] = None):
     # 등)로 남는 버그 발견 — _apply_korean_titles에 아티스트명 보완(resolve_korean_artist_name)
     # 추가했으니 과거 캐시 무효화를 위해 버전업(v23/v24 버전 번호는 실제로 안 쓰였음 — 직전
     # 중간 수정 때 혼선으로 건너뜀, 동작엔 영향 없음).
-    cache_key = f"search:v27:{q.lower().strip()}"
+    cache_key = f"search:v28:{q.lower().strip()}"
     cached = get_cached(cache_key)
     if cached is not None:
         if x_session_id:
@@ -3041,7 +3073,7 @@ def discover_by_mood(tag: str, x_session_id: Optional[str] = Header(default=None
     # 버전 때 잘못 매칭된 채로 캐싱된 풀(curated-track:v1 캐시 기반)이 안 섞이도록 재버전업.
     # v9: "sad"에서 Gee/Supernova 같은 무관 k-pop이 섞이는 버그 발견 후 전체 무드 감사 — sad/love/
     # study/chill/party 큐레이션 목록을 실제 Last.fm 매칭 검증 거쳐 재구성(아래 딕셔너리 주석 참고).
-    cache_key = f"discover-by-mood:v9:{tag.lower().strip()}"
+    cache_key = f"discover-by-mood:v10:{tag.lower().strip()}"
     pool = get_cached(cache_key)
 
     if pool is None:

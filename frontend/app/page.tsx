@@ -817,6 +817,15 @@ export default function Home() {
     }
   }
 
+  const moodSheetSwipeRef = useRef<{ x: number; y: number } | null>(null);
+
+  // 무드 바텀시트 닫기 — 선택한 무드와 결과 곡을 비워서 홈 화면 원래 상태로
+  function handleCloseMoodSheet() {
+    setSelectedMood(null);
+    setDomesticMoodTracks([]);
+    setInternationalMoodTracks([]);
+  }
+
   async function handleSelectMood(tag: string) {
     setError(null);
     setSelectedMood(tag);
@@ -1621,6 +1630,62 @@ export default function Home() {
         </div>
       )}
 
+      {/* (B단계 3-2, 2026-10-22) 무드 칩을 눌러도 결과가 화면 한참 아래에 나와서 변화가 안 보인다는
+          피드백 — 모바일(sm 미만)은 결과를 아래에서 올라오는 바텀시트로 띄워서 바로 보이게 함(위로
+          쓸어내리듯 아래로 쓸면 닫힘). 데스크톱(sm 이상)은 원래처럼 인라인으로 그대로 둠. 재생바(z-30)
+          아래(z-25)에 두고, 재생 중이면 재생바 위로 올려서 재생바를 안 가리게 함. */}
+      {selectedMood && (
+        <div
+          className={`fixed inset-x-0 z-[25] flex max-h-[62dvh] flex-col rounded-t-2xl border-t border-white/10 bg-neutral-950 shadow-2xl ${
+            nowPlaying ? "bottom-[8.5rem]" : "bottom-16"
+          } sm:static sm:z-auto sm:max-h-none sm:w-full sm:max-w-xl sm:rounded-none sm:border-0 sm:bg-transparent sm:shadow-none`}
+        >
+          <div
+            className="shrink-0 px-4 pb-2 pt-2 sm:hidden"
+            onTouchStart={(e) => {
+              const t = e.touches[0];
+              moodSheetSwipeRef.current = { x: t.clientX, y: t.clientY };
+            }}
+            onTouchEnd={(e) => {
+              const start = moodSheetSwipeRef.current;
+              moodSheetSwipeRef.current = null;
+              if (!start) return;
+              const t = e.changedTouches[0];
+              if (t.clientY - start.y > 60 && t.clientY - start.y > Math.abs(t.clientX - start.x) * 1.5) {
+                handleCloseMoodSheet();
+              }
+            }}
+          >
+            <div className="mx-auto mb-2 h-1 w-10 rounded-full bg-white/20" />
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-sm font-semibold">&quot;{selectedMoodLabel}&quot;</p>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => handleStartMix(false)}
+                  className="rounded-full bg-white px-3 py-1 text-[11px] font-medium text-black"
+                >
+                  믹스 재생
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSelectMood(selectedMood)}
+                  className="rounded-full border border-white/15 px-2.5 py-1 text-[11px] text-white/70"
+                >
+                  새로고침
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCloseMoodSheet}
+                  aria-label="닫기"
+                  className="rounded-full p-1.5 text-white/50 hover:bg-white/10 hover:text-white"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+          </div>
+          <div className="overflow-y-auto px-4 pb-4 sm:overflow-visible sm:p-0">
       {isLoadingMood && <p className="text-sm text-white/50">곡 불러오는 중...</p>}
 
       {/* 국내/해외 구분해서 보여달라는 피드백 — Last.fm 무드 태그가 서구 팝 위주라
@@ -1660,6 +1725,9 @@ export default function Home() {
               )}
             </>
           )}
+        </div>
+      )}
+          </div>
         </div>
       )}
 

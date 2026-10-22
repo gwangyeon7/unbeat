@@ -10,13 +10,22 @@ REDIS_DB = int(os.getenv("REDIS_DB", "0"))
 
 CACHE_TTL_SECONDS = 60 * 60  # 1시간. 아티스트 정보는 자주 안 바뀌니까 넉넉하게 잡음.
 
-_client = redis.Redis(
+# Render 무료 Key Value는 동시 연결 수 제한이 작아서 "max number of clients reached"가 로그에
+# 쏟아졌음. 기본 풀은 상한이 없어 FastAPI 스레드가 몰리면 연결을 계속 늘리므로, 상한(10)을 두고
+# 넘치면 잠깐 기다리게(BlockingConnectionPool) 함. 기다리다 timeout 나면 RedisError라 기존처럼
+# "캐시 없이 진행"으로 빠짐. health_check로 죽은 연결은 재사용 전에 걸러냄.
+_pool = redis.BlockingConnectionPool(
     host=REDIS_HOST,
     port=REDIS_PORT,
     db=REDIS_DB,
     decode_responses=True,
+    max_connections=int(os.getenv("REDIS_MAX_CONNECTIONS", "10")),
+    timeout=2,
     socket_connect_timeout=1,
+    socket_timeout=2,
+    health_check_interval=30,
 )
+_client = redis.Redis(connection_pool=_pool)
 
 
 def get_cached(key: str):

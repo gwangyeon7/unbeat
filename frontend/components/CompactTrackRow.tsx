@@ -70,7 +70,7 @@ export default function CompactTrackRow({
               onAddToPlaylist();
             }}
             aria-label="재생목록에 추가"
-            className="rounded-full px-1 py-1 text-sm text-white/50 hover:bg-white/10 hover:text-white sm:px-1.5"
+            className="rounded-full px-2 py-1.5 text-base text-white/70 hover:bg-white/10 hover:text-white sm:px-1.5 sm:py-1 sm:text-sm sm:text-white/50"
           >
             ＋
           </button>

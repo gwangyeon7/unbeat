@@ -43,6 +43,11 @@ type MiniPlayerProps = {
   // MiniPlayer가 이미 떠 있는 상태(다른 곡 재생 중)에서 믹스를 눌러도 동작해야 해서, 마운트
   // 시점이 아니라 이 prop 변화를 감지하는 방식으로 구현.
   mixRequest?: { id: number; highlight: boolean } | null;
+  // 다음곡 / 이전곡 버튼 (친구 피드백 #1) — 재생바 버튼과 잠금화면/알림창 미디어 컨트롤이 같이 씀.
+  onNext?: () => void;
+  onPrevious?: () => void;
+  // 지금 재생 중인 곡을 재생목록에 담기 (친구 피드백 #1-2) — 확장 화면의 ＋ 버튼
+  onAddCurrentToPlaylist?: () => void;
 };
 
 // YouTube IFrame Player API는 <script> 태그로 전역에 한 번만 로드하면 됨.
@@ -334,9 +339,18 @@ export default function MiniPlayer({
   onSaveQueueToPlaylist,
   onNativeAutoAdvance,
   mixRequest,
+  onNext,
+  onPrevious,
+  onAddCurrentToPlaylist,
 }: MiniPlayerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const playerRef = useRef<any>(null);
+  // mediaSession 핸들러는 한 번만 등록되니, 최신 콜백/재생시간을 ref로 들고 있다가 호출 시점에 읽음
+  const onNextRef = useRef(onNext);
+  const onPreviousRef = useRef(onPrevious);
+  const currentTimeRef = useRef(0);
+  onNextRef.current = onNext;
+  onPreviousRef.current = onPrevious;
   const hasFiredPlayingRef = useRef(false);
   // onEnded/onActuallyPlaying은 page.tsx에서 매 렌더 새로 만들어(인라인 화살표 함수) 넘기는데,
   // 아래 플레이어 생성 useEffect는 deps가 []라 최초 1회만 실행돼서 onStateChange 클로저가 마운트
@@ -366,6 +380,17 @@ export default function MiniPlayer({
   const nativeLookaheadRef = useRef<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
+  currentTimeRef.current = currentTime;
+
+  // 이전곡: 3초 넘게 들었으면 현재 곡 처음부터, 아니면 직전에 듣던 곡으로
+  function goPrevious() {
+    if (currentTimeRef.current > 3) {
+      playerRef.current?.seekTo?.(0, true);
+      setCurrentTime(0);
+      return;
+    }
+    onPreviousRef.current?.();
+  }
   const [duration, setDuration] = useState(0);
   const [volume, setVolume] = useState(70);
   const [isMuted, setIsMuted] = useState(false);
@@ -381,6 +406,18 @@ export default function MiniPlayer({
   // 유튜브 뮤직의 확장 재생 화면(앨범아트 크게 + 다음 트랙/관련 항목/가사 탭)을 참고해서 추가.
   // 미니 플레이어 하단 바의 앨범아트나 곡 정보를 누르면 이 전체화면 오버레이가 열림.
   const [isExpanded, setIsExpanded] = useState(false);
+  // "재생목록에 저장" 메뉴(현재 곡 / 전체 / 선택) 상태
+  const [saveMenuOpen, setSaveMenuOpen] = useState(false);
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIdx, setSelectedIdx] = useState<Set<number>>(new Set());
+  function toggleSelected(idx: number) {
+    setSelectedIdx((prev) => {
+      const next = new Set(prev);
+      if (next.has(idx)) next.delete(idx);
+      else next.add(idx);
+      return next;
+    });
+  }
   const [activeTab, setActiveTab] = useState<ExpandedTab>("queue");
 
   // "가사" 탭 — 원래는 Genius/YouTube 둘 다 가사 원문을 못 줘서 보류했다가, API 키 없이 무료로
@@ -734,10 +771,14 @@ export default function MiniPlayer({
       playerRef.current?.seekTo?.(details.seekTime, true);
       setCurrentTime(details.seekTime);
     });
+    navigator.mediaSession.setActionHandler("nexttrack", () => onNextRef.current?.());
+    navigator.mediaSession.setActionHandler("previoustrack", () => goPrevious());
     return () => {
       navigator.mediaSession.setActionHandler("play", null);
       navigator.mediaSession.setActionHandler("pause", null);
       navigator.mediaSession.setActionHandler("seekto", null);
+      navigator.mediaSession.setActionHandler("nexttrack", null);
+      navigator.mediaSession.setActionHandler("previoustrack", null);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -848,11 +889,27 @@ export default function MiniPlayer({
           </button>
           <button
             type="button"
+            onClick={goPrevious}
+            aria-label="이전 곡"
+            className="shrink-0 rounded-full p-1.5 text-white/70 hover:bg-white/10 hover:text-white"
+          >
+            ⏮
+          </button>
+          <button
+            type="button"
             onClick={togglePlay}
             aria-label={isPlaying ? "일시정지" : "재생"}
             className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-sm text-black"
           >
             {isPlaying ? "❚❚" : "▶"}
+          </button>
+          <button
+            type="button"
+            onClick={() => onNext?.()}
+            aria-label="다음 곡"
+            className="shrink-0 rounded-full p-1.5 text-white/70 hover:bg-white/10 hover:text-white"
+          >
+            ⏭
           </button>
           <button
             type="button"
@@ -919,11 +976,27 @@ export default function MiniPlayer({
           <div className="flex items-center gap-2">
             <button
               type="button"
+              onClick={goPrevious}
+              aria-label="이전 곡"
+              className="shrink-0 rounded-full p-1.5 text-white/70 hover:bg-white/10 hover:text-white"
+            >
+              ⏮
+            </button>
+            <button
+              type="button"
               onClick={togglePlay}
               aria-label={isPlaying ? "일시정지" : "재생"}
               className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-sm text-black"
             >
               {isPlaying ? "❚❚" : "▶"}
+            </button>
+            <button
+              type="button"
+              onClick={() => onNext?.()}
+              aria-label="다음 곡"
+              className="shrink-0 rounded-full p-1.5 text-white/70 hover:bg-white/10 hover:text-white"
+            >
+              ⏭
             </button>
             <button
               type="button"
@@ -1121,11 +1194,27 @@ export default function MiniPlayer({
                 )}
                 <button
                   type="button"
+                  onClick={goPrevious}
+                  aria-label="이전 곡"
+                  className="rounded-full p-2 text-2xl text-white/80 hover:bg-white/10 hover:text-white"
+                >
+                  ⏮
+                </button>
+                <button
+                  type="button"
                   onClick={togglePlay}
                   aria-label={isPlaying ? "일시정지" : "재생"}
                   className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-white text-lg text-black"
                 >
                   {isPlaying ? "❚❚" : "▶"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onNext?.()}
+                  aria-label="다음 곡"
+                  className="rounded-full p-2 text-2xl text-white/80 hover:bg-white/10 hover:text-white"
+                >
+                  ⏭
                 </button>
                 <button
                   type="button"
@@ -1194,24 +1283,109 @@ export default function MiniPlayer({
                           하나씩 담을 필요 없이 지금 큐에 뜬 목록 전체를 한 번에 옮길 수 있음.
                           "관련 항목" 탭을 없앤 대신 생긴 자리라 탭 콘텐츠 맨 위에 둠. */}
                       {onSaveQueueToPlaylist && (
-                        <div className="flex justify-end px-2 pb-1">
-                          <button
-                            type="button"
-                            onClick={() => onSaveQueueToPlaylist(queue)}
-                            className="flex items-center gap-1 rounded-full border border-white/15 px-3 py-1 text-xs text-white/70 hover:bg-white/10 hover:text-white"
-                          >
-                            <span className="text-sm leading-none">＋</span>
-                            재생목록에 저장
-                          </button>
+                        <div className="relative flex justify-end gap-2 px-2 pb-1">
+                          {selectMode ? (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSelectMode(false);
+                                  setSelectedIdx(new Set());
+                                }}
+                                className="rounded-full border border-white/15 px-3 py-1 text-xs text-white/60 hover:bg-white/10"
+                              >
+                                취소
+                              </button>
+                              <button
+                                type="button"
+                                disabled={selectedIdx.size === 0}
+                                onClick={() => {
+                                  onSaveQueueToPlaylist(queue.filter((_, i) => selectedIdx.has(i)));
+                                  setSelectMode(false);
+                                  setSelectedIdx(new Set());
+                                }}
+                                className="rounded-full bg-white px-3 py-1 text-xs font-medium text-black disabled:opacity-40"
+                              >
+                                {selectedIdx.size}곡 담기
+                              </button>
+                            </>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => setSaveMenuOpen((v) => !v)}
+                              className="flex items-center gap-1 rounded-full border border-white/15 px-3 py-1 text-xs text-white/70 hover:bg-white/10 hover:text-white"
+                            >
+                              <span className="text-sm leading-none">＋</span>
+                              재생목록에 저장
+                            </button>
+                          )}
+                          {saveMenuOpen && !selectMode && (
+                            <div className="absolute right-2 top-8 z-10 w-52 overflow-hidden rounded-xl border border-white/15 bg-neutral-900 text-sm shadow-xl">
+                              {onAddCurrentToPlaylist && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setSaveMenuOpen(false);
+                                    onAddCurrentToPlaylist();
+                                  }}
+                                  className="block w-full px-4 py-3 text-left hover:bg-white/10"
+                                >
+                                  지금 듣는 곡 추가
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSaveMenuOpen(false);
+                                  onSaveQueueToPlaylist(queue);
+                                }}
+                                className="block w-full border-t border-white/10 px-4 py-3 text-left hover:bg-white/10"
+                              >
+                                다음 트랙 전체 ({queue.length}곡)
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSaveMenuOpen(false);
+                                  setSelectMode(true);
+                                }}
+                                className="block w-full border-t border-white/10 px-4 py-3 text-left hover:bg-white/10"
+                              >
+                                곡 선택해서 추가
+                              </button>
+                            </div>
+                          )}
                         </div>
                       )}
                       {queue.map((t, idx) => (
-                        <ExpandedTrackRow
-                          key={`${t.artist}-${t.name}-${idx}`}
-                          track={t}
-                          index={idx}
-                          onClick={() => onSelectQueueTrack?.(t)}
-                        />
+                        <div key={`${t.artist}-${t.name}-${idx}`} className="flex items-center">
+                          {selectMode && (
+                            <button
+                              type="button"
+                              onClick={() => toggleSelected(idx)}
+                              aria-label={selectedIdx.has(idx) ? "선택 해제" : "선택"}
+                              className="flex h-10 w-10 shrink-0 items-center justify-center"
+                            >
+                              <span
+                                className={`flex h-5 w-5 items-center justify-center rounded border text-xs ${
+                                  selectedIdx.has(idx) ? "border-white bg-white text-black" : "border-white/30"
+                                }`}
+                              >
+                                {selectedIdx.has(idx) ? "✓" : ""}
+                              </span>
+                            </button>
+                          )}
+                          <div className="min-w-0 flex-1">
+                            <ExpandedTrackRow
+                              track={t}
+                              index={idx}
+                              onClick={() => {
+                                if (!selectMode) return onSelectQueueTrack?.(t);
+                                toggleSelected(idx);
+                              }}
+                            />
+                          </div>
+                        </div>
                       ))}
                     </>
                   ))}

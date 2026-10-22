@@ -101,6 +101,8 @@ export default function Home() {
   const [tracks, setTracks] = useState<Track[]>([]);
   const [selectedArtist, setSelectedArtist] = useState<string | null>(null);
   const [isSearching, setIsSearching] = useState(false);
+  const [searchingQuery, setSearchingQuery] = useState("");
+  const swipeBackRef = useRef<{ x: number; y: number } | null>(null);
   const [isRecommending, setIsRecommending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [favorites, setFavorites] = useState<Favorite[]>([]);
@@ -181,6 +183,10 @@ export default function Home() {
   // 유튜브 iframe 자체(로고/자막 버튼/재생바)를 그대로 보여주면 여전히 "남의 사이트를 빌려온 느낌"이라는
   // 추가 피드백을 받고, 재생/진행바 UI는 전부 MiniPlayer가 자체적으로 그림 — 여긴 videoId만 넘겨줌.
   const [nowPlaying, setNowPlaying] = useState<NowPlayingTrack | null>(null);
+  // 이전곡 버튼용: 직전에 재생하던 곡들을 쌓아둠 (최대 30곡)
+  const nowPlayingRef = useRef<NowPlayingTrack | null>(null);
+  nowPlayingRef.current = nowPlaying;
+  const playHistoryRef = useRef<NowPlayingTrack[]>([]);
 
   // (Task #44-3) "믹스" 시작 버튼 2개(하이라이트 믹스/전체 믹스) 전용 신호 — "빠른 선곡" 풀에서
   // 무작위 곡 하나를 골라 바로 재생 시작. MiniPlayer의 번개 토글 버튼(지금 재생 중인 곡 하나를
@@ -706,8 +712,35 @@ export default function Home() {
     setTracks([]);
   }
 
+  // 갤럭시 뒤로가기(제스처/버튼)도 검색 결과 화면을 닫도록: 결과 화면이 뜰 때 history 항목을 하나
+  // 쌓아두고, 뒤로가기(popstate)가 오면 앱이 닫히는 대신 결과 화면만 닫음. 화면 안 "뒤로"
+  // 버튼으로 닫은 경우엔 쌓아둔 항목을 되돌려서(history.back) 항목이 남지 않게 함.
+  const hasSearchResults = searchTracks.length > 0 || tagSearchTracks.length > 0 || artists.length > 0;
+  const searchHistoryPushedRef = useRef(false);
+  useEffect(() => {
+    if (hasSearchResults && !searchHistoryPushedRef.current) {
+      window.history.pushState({ unbeatSearch: true }, "");
+      searchHistoryPushedRef.current = true;
+    } else if (!hasSearchResults && searchHistoryPushedRef.current) {
+      searchHistoryPushedRef.current = false;
+      if (window.history.state?.unbeatSearch) window.history.back();
+    }
+  }, [hasSearchResults]);
+  useEffect(() => {
+    function onPopState() {
+      if (searchHistoryPushedRef.current) {
+        searchHistoryPushedRef.current = false;
+        clearSearchResults();
+      }
+    }
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   async function handleSearch(query: string) {
     setError(null);
+    setSearchingQuery(query);
     setIsSearching(true);
     setSelectedArtist(null);
     setSelectedMood(null);
@@ -934,6 +967,8 @@ export default function Home() {
       // 검색/차트/즐겨찾기/재생목록처럼 큐 바깥에서 완전히 다른 곡을 골랐을 땐 false(기본값)로
       // 남아서, 이전 곡과 장르가 전혀 다른 후보들이 새 큐에 섞여 들어가지 않도록 통째로 새로 채움.
       fromQueue?: boolean;
+      // 이전곡 버튼으로 돌아가는 재생이면 true — 히스토리에 현재 곡을 다시 쌓지 않음
+      skipHistory?: boolean;
     }
   ) {
     setError(null);
@@ -943,6 +978,10 @@ export default function Home() {
       // 더 여유 있게 쓸 수 있음.
       const videoId = track.videoId ?? (await searchYoutubeVideo(track.artist, track.name)).videoId;
       if (videoId) {
+        const prev = nowPlayingRef.current;
+        if (prev && !options?.skipHistory && prev.videoId !== videoId) {
+          playHistoryRef.current = [...playHistoryRef.current, prev].slice(-30);
+        }
         setNowPlaying({ videoId, name: track.name, artist: track.artist, image: track.image ?? null });
         if (options?.manualNext !== undefined) {
           // 재생목록에서 고른 곡들을 순서대로 재생 중 — 큐를 비슷한 곡으로 덮어쓰지 않고
@@ -1445,6 +1484,15 @@ export default function Home() {
           </div>
         </div>
       </header>
+      {/* 모바일은 검색을 누르면 전체화면 검색창이 바로 닫혀서, 결과가 올 때까지 아무 변화 없이
+          메인 화면만 보였음("검색이 안 되고 그냥 메인으로 간다"는 피드백 5-1). 결과가 올 때까지
+          로딩 표시를 띄워서 검색이 진행 중이라는 걸 알 수 있게 함. */}
+      {isSearching && (
+        <div className="sticky top-[57px] z-10 flex items-center justify-center gap-2 border-b border-white/10 bg-neutral-900/95 px-4 py-2.5 text-sm text-white/80 backdrop-blur">
+          <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+          &quot;{searchingQuery}&quot; 검색 중...
+        </div>
+      )}
 
       {/* 모바일 "보관함" 전체화면 서랍 — 즐겨찾기 아티스트/즐겨찾기 곡/내 재생목록을 데스크톱
           사이드바와 완전히 같은 내용(renderFavoriteArtists/renderLibraryPanel)으로 보여줌. */}
@@ -1609,11 +1657,28 @@ export default function Home() {
           피드백도 모바일 한정이었음). 검색 결과가 하나도 없으면 이 래퍼 자체가 아예 없는 셈이라
           평소 홈 화면엔 전혀 영향 없음. */}
       {(searchTracks.length > 0 || tagSearchTracks.length > 0 || artists.length > 0) && (
-        <div className="fixed inset-0 z-20 flex flex-col gap-6 overflow-y-auto bg-black p-4 pb-44 sm:static sm:z-auto sm:flex sm:flex-col sm:gap-6 sm:overflow-visible sm:bg-transparent sm:p-0">
+        <div
+          className="fixed inset-0 z-20 flex flex-col gap-6 overflow-y-auto bg-black p-4 pb-44 sm:static sm:z-auto sm:flex sm:flex-col sm:gap-6 sm:overflow-visible sm:bg-transparent sm:p-0"
+          // 아이폰처럼 화면 왼쪽 가장자리에서 오른쪽으로 쓸어서 뒤로 가기(모바일 전용 — 가로 스크롤 목록과
+          // 안 겹치게 왼쪽 가장자리 48px에서 시작한 제스처만 인정).
+          onTouchStart={(e) => {
+            const t = e.touches[0];
+            swipeBackRef.current = t.clientX <= 48 ? { x: t.clientX, y: t.clientY } : null;
+          }}
+          onTouchEnd={(e) => {
+            const start = swipeBackRef.current;
+            swipeBackRef.current = null;
+            if (!start) return;
+            const t = e.changedTouches[0];
+            if (t.clientX - start.x > 70 && Math.abs(t.clientY - start.y) < 60) {
+              clearSearchResults();
+            }
+          }}
+        >
           <button
             type="button"
             onClick={clearSearchResults}
-            className="flex items-center gap-1 text-sm text-white/70 hover:text-white sm:hidden"
+            className="sticky top-0 z-10 -mx-4 -mt-4 flex items-center gap-1 bg-black/95 px-4 py-4 text-base text-white/80 hover:text-white sm:hidden"
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-4 w-4">
               <path d="m15 18-6-6 6-6" />
@@ -1962,6 +2027,17 @@ export default function Home() {
         onClose={() => setNowPlaying(null)}
         onActuallyPlaying={() => handleActuallyPlaying(nowPlaying)}
         onEnded={() => handleTrackEnded()}
+        onNext={() => handleTrackEnded()}
+        onAddCurrentToPlaylist={() =>
+          nowPlaying &&
+          handleOpenAddToPlaylist({ name: nowPlaying.name, artist: nowPlaying.artist, image: nowPlaying.image })
+        }
+        onPrevious={() => {
+          const prev = playHistoryRef.current[playHistoryRef.current.length - 1];
+          if (!prev) return;
+          playHistoryRef.current = playHistoryRef.current.slice(0, -1);
+          handlePlay(prev, { skipHistory: true });
+        }}
         onNativeAutoAdvance={(data) =>
           handleTrackEnded({ videoId: data.videoId, name: data.title, artist: data.artist })
         }

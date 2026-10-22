@@ -61,10 +61,16 @@ export default function CompactTrackGrid({
     // 많이 눌렸던 것. 버튼을 없애는 대신(기능 유지), sm 미만 화면에서만 카드 폭을 260px로
     // 넓혀 숨 쉴 공간을 줌 — 한 화면에 보이는 카드 수는 줄어도 가로 스크롤은 그대로라 손실 없음.
     return (
+      // (B단계 3번, 2026-10-22) 빠르게 쓸어도 한 칸(3곡 한 열)씩 딱딱 멈추며 넘어가게
+      // CSS 스크롤 스냅 적용 — snap-always는 빠른 스와이프에도 열을 건너뛰지 않게 함.
       <div
-        className="scrollbar-none grid w-full auto-cols-[minmax(260px,1fr)] grid-flow-col grid-rows-3 gap-x-4 overflow-x-auto pb-2 sm:auto-cols-[minmax(220px,1fr)]"
+        className="scrollbar-none grid w-full snap-x snap-mandatory auto-cols-[minmax(260px,1fr)] grid-flow-col grid-rows-3 gap-x-4 overflow-x-auto pb-2 sm:auto-cols-[minmax(220px,1fr)]"
       >
-        {tracks.map(renderRow)}
+        {tracks.map((track, idx) => (
+          <div key={`${track.artist}-${track.name}-${idx}`} className="snap-start snap-always">
+            {renderRow(track, idx)}
+          </div>
+        ))}
       </div>
     );
   }

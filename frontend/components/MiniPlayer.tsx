@@ -406,6 +406,25 @@ export default function MiniPlayer({
   // 유튜브 뮤직의 확장 재생 화면(앨범아트 크게 + 다음 트랙/관련 항목/가사 탭)을 참고해서 추가.
   // 미니 플레이어 하단 바의 앨범아트나 곡 정보를 누르면 이 전체화면 오버레이가 열림.
   const [isExpanded, setIsExpanded] = useState(false);
+  // 확장 재생 화면: 위쪽(헤더/앨범아트/곡 정보)을 아래로 쓸어내리면 닫힘 (스포티파이/유튜브 뮤직처럼).
+  // 아래 큐/가사 목록은 스크롤해야 하니 이 핸들러를 안 붙이고, 세로로 80px 이상 + 가로보다 확실히
+  // 길게 움직였을 때만 인정해서 슬라이더 조작/탭과 안 겹치게 함.
+  const swipeDownStartRef = useRef<{ x: number; y: number } | null>(null);
+  const swipeDownHandlers = {
+    onTouchStart: (e: React.TouchEvent) => {
+      const t = e.touches[0];
+      swipeDownStartRef.current = { x: t.clientX, y: t.clientY };
+    },
+    onTouchEnd: (e: React.TouchEvent) => {
+      const start = swipeDownStartRef.current;
+      swipeDownStartRef.current = null;
+      if (!start) return;
+      const t = e.changedTouches[0];
+      const dy = t.clientY - start.y;
+      const dx = Math.abs(t.clientX - start.x);
+      if (dy > 80 && dy > dx * 1.5) setIsExpanded(false);
+    },
+  };
   // "재생목록에 저장" 메뉴(현재 곡 / 전체 / 선택) 상태
   const [saveMenuOpen, setSaveMenuOpen] = useState(false);
   const [selectMode, setSelectMode] = useState(false);
@@ -1136,7 +1155,7 @@ export default function MiniPlayer({
               overflow-hidden/overflow-y-auto로 따로 잘려서, 화면 하나에 다 안 들어가면 남는 부분이
               스크롤 없이 그냥 안 보이게 잘렸던 것 — 데스크톱(lg)에서만 내부 스크롤을 쓰고, 모바일에선
               이 바깥 오버레이 전체가 통째로 스크롤되게 바꿈. */}
-          <div className="flex items-center justify-between px-6 py-4">
+          <div className="flex items-center justify-between px-6 py-4" {...swipeDownHandlers}>
             <button
               type="button"
               onClick={() => setIsExpanded(false)}
@@ -1169,7 +1188,10 @@ export default function MiniPlayer({
                 양쪽을 같은 높이로 맞춰주고(stretch) 이 칸은 그 안에서 세로 중앙 정렬만 하기 때문에,
                 오른쪽이 아무리 길어도 앨범아트가 화면 밖으로 밀려나지 않음. */}
             <div className="flex min-h-0 flex-col items-center justify-center gap-6 py-4 lg:overflow-y-auto">
-              <div className="flex h-72 w-72 items-center justify-center overflow-hidden rounded-xl bg-white/5 shadow-2xl sm:h-80 sm:w-80">
+              <div
+                className="flex h-72 w-72 items-center justify-center overflow-hidden rounded-xl bg-white/5 shadow-2xl sm:h-80 sm:w-80"
+                {...swipeDownHandlers}
+              >
                 {track.image ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={track.image} alt={track.name} className="h-full w-full object-cover" />
@@ -1177,7 +1199,7 @@ export default function MiniPlayer({
                   <span className="text-6xl text-white/25">♪</span>
                 )}
               </div>
-              <div className="text-center">
+              <div className="text-center" {...swipeDownHandlers}>
                 <p className="text-xl font-semibold">{track.name}</p>
                 <p className="mt-1 text-white/50">{track.artist}</p>
               </div>

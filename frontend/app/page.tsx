@@ -738,7 +738,7 @@ export default function Home() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function handleSearch(query: string) {
+  async function handleSearch(query: string, artist?: string) {
     setError(null);
     setSearchingQuery(query);
     setIsSearching(true);
@@ -746,7 +746,7 @@ export default function Home() {
     setSelectedMood(null);
     setTracks([]);
     try {
-      const data = await search(query);
+      const data = await search(query, artist);
       setArtists(data.artists);
       setSearchTracks(data.tracks);
       setTagSearchTracks(data.tagTracks);

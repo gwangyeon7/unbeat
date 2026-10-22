@@ -805,8 +805,72 @@ def search_suggest(q: str):
     return {**result, "cached": False}
 
 
+def _search_exact_pick(q: str, artist: str, x_session_id: Optional[str]):
+    """자동완성에서 "곡 + 아티스트" 후보를 직접 골랐을 때의 검색 — 곡명만으로 /search를 돌리면
+    같은 제목의 다른 곡(예: "Meteor" 수십 개)과 이름이 비슷한 엉뚱한 아티스트가 훨씬 많이 떠서,
+    사용자가 고른 바로 그 곡이 묻혔음(2026-10-22 피드백). 아티스트까지 넘겨서 그 곡을 맨 앞에,
+    아티스트 카드는 그 아티스트 하나를 맨 앞에 둠."""
+    cache_key = f"search-pick:v1:{artist.lower().strip()}:{q.lower().strip()}"
+    cached = get_cached(cache_key)
+    if cached is not None:
+        if x_session_id:
+            log_event(x_session_id, "search", q, result_count=len(cached["artists"]) + len(cached["tracks"]))
+            push_search_history(x_session_id, q, image=_first_search_thumbnail(cached["artists"], cached["tracks"]))
+        return {**cached, "cached": True}
+
+    executor = ThreadPoolExecutor(max_workers=1)
+    artist_future = executor.submit(lastfm_get, {"method": "artist.search", "artist": artist, "limit": 5})
+    executor.shutdown(wait=False)
+    track_data = lastfm_get({"method": "track.search", "track": q, "artist": artist, "limit": 10})
+    tracks = _build_track_results(track_data.get("results", {}).get("trackmatches", {}).get("track", []))
+
+    def _norm(s: str) -> str:
+        return re.sub(r"[^0-9a-z가-힣]", "", (s or "").lower())
+
+    want_artist = _norm(artist)
+    want_name = _norm(q)
+
+    def _is_exact(t: dict) -> bool:
+        # 한글 보완이 붙으면 "한글 (원제)"로 바뀌므로 원제/보완 둘 다 포함 여부로 판단
+        same_artist = want_artist and (want_artist in _norm(t.get("artist", "")) or _norm(t.get("artist", "")) in want_artist)
+        same_name = want_name and want_name in _norm(t.get("name", ""))
+        return bool(same_artist and same_name)
+
+    exact = [t for t in tracks if _is_exact(t)]
+    rest = [t for t in tracks if not _is_exact(t) and want_artist and want_artist in _norm(t.get("artist", ""))]
+    tracks = exact + rest or tracks  # 하나도 안 맞으면 원래 결과 그대로
+
+    try:
+        artist_matches = artist_future.result().get("results", {}).get("artistmatches", {}).get("artist", [])
+    except HTTPException:
+        artist_matches = []
+    artists = _build_artist_results(artist_matches)
+    artists.sort(key=lambda a: 0 if _norm(a["name"]) == want_artist else 1)
+    artists = artists[:1] if artists and _norm(artists[0]["name"]) == want_artist else artists
+
+    result = {
+        "artists": artists,
+        "tracks": tracks,
+        "tagTracks": [],
+        "correctedArtistName": None,
+        "aiGuessedQuery": None,
+        "youtubeFallbackUsed": False,
+    }
+    set_cached(cache_key, result)
+    if x_session_id:
+        log_event(x_session_id, "search", q, result_count=len(artists) + len(tracks))
+        push_search_history(x_session_id, q, image=_first_search_thumbnail(artists, tracks))
+    return {**result, "cached": False}
+
+
 @app.get("/search")
-def search(q: str, x_session_id: Optional[str] = Header(default=None)):
+def search(q: str, artist: Optional[str] = None, x_session_id: Optional[str] = Header(default=None)):
+    if artist and artist.strip():
+        return _search_exact_pick(q.strip(), artist.strip(), x_session_id)
+    return _search_by_query(q, x_session_id)
+
+
+def _search_by_query(q: str, x_session_id: Optional[str] = None):
     """
     통합 검색: 아티스트 이름뿐 아니라 곡 제목으로도 찾을 수 있게 artist.search와
     track.search를 같이 호출해서 합쳐 반환. 기존 /search-artist는 아티스트 전용이라

@@ -60,7 +60,8 @@ export function searchArtist(artistName: string): Promise<{ artists: Artist[] }>
 // 그 추측 검색어. "댓댓"처럼 검색어와 실제 결과가 안 닮아서 사용자가 의아할 수 있어 이유를 보여주기 위함.
 // youtubeFallbackUsed: Last.fm+AI 추측까지 다 실패해서(§59) 유튜브 자체 검색으로 찾은 경우 true —
 // 이땐 tracks 맨 앞 항목이 Last.fm 정식 매칭이 아니라 청취자 수 등 메타데이터 없는 "비검증" 결과임.
-export function search(query: string): Promise<{
+// artist: 자동완성에서 "곡 + 아티스트" 후보를 골랐을 때만 넘김 — 그 곡을 정확히 맨 앞에 보여주려는 용도
+export function search(query: string, artist?: string): Promise<{
   artists: Artist[];
   tracks: Track[];
   tagTracks: Track[];
@@ -69,7 +70,8 @@ export function search(query: string): Promise<{
   youtubeFallbackUsed: boolean;
 }> {
   const q = encodeURIComponent(query);
-  return fetchJson(`/search?q=${q}`);
+  const artistParam = artist ? `&artist=${encodeURIComponent(artist)}` : "";
+  return fetchJson(`/search?q=${q}${artistParam}`);
 }
 
 // 검색창 자동완성용 — "numb"만 쳐도 "Numb Little Bug" 같은 후보가 뜨게 해달라는 요청으로 추가.

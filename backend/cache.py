@@ -61,6 +61,19 @@ RECENT_SEARCH_LIMIT = 10
 RECENT_SEARCH_TTL_SECONDS = 60 * 60 * 24 * 30  # 30일
 
 
+def _entry_query(raw: str):
+    """최근 검색 항목에서 검색어만 뽑음. 저장 형식이 plain string -> JSON으로 바뀌기 전에 쌓인 옛
+    항목(JSON이 아님)이 리스트에 남아있으면 json.loads가 터져서 /search 자체가 500으로 실패했음
+    (검색 시 push_search_history가 예외를 안 잡아서) — 파싱 안 되면 그 문자열을 검색어로 취급."""
+    try:
+        parsed = json.loads(raw)
+    except (json.JSONDecodeError, TypeError):
+        return raw
+    if isinstance(parsed, dict):
+        return parsed.get("query")
+    return str(parsed)
+
+
 def push_search_history(session_id: str, query: str, image: Optional[str] = None):
     """
     검색창 드롭다운에 쓸 '최근 검색' 목록. 분석용 이벤트 로그(MariaDB events 테이블)와는
@@ -80,7 +93,7 @@ def push_search_history(session_id: str, query: str, image: Optional[str] = None
         # 저장 형식이 JSON으로 바뀌어서 lrem(key, 0, query)로 직접 매치가 안 되니, 기존 목록을
         # 읽어와 query가 같은 항목만 걸러내고 다시 쓰는 방식으로 변경.
         raw_list = _client.lrange(key, 0, -1)
-        remaining = [r for r in raw_list if json.loads(r).get("query") != query]
+        remaining = [r for r in raw_list if _entry_query(r) != query]
         if len(remaining) != len(raw_list):
             _client.delete(key)
             if remaining:
@@ -119,7 +132,7 @@ def remove_search_history(session_id: str, query: str):
     key = f"recent-searches:{session_id}"
     try:
         raw_list = _client.lrange(key, 0, -1)
-        remaining = [r for r in raw_list if json.loads(r).get("query") != query]
+        remaining = [r for r in raw_list if _entry_query(r) != query]
         if len(remaining) != len(raw_list):
             _client.delete(key)
             if remaining:

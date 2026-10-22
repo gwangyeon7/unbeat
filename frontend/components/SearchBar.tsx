@@ -19,6 +19,8 @@ type SearchBarProps = {
 
 export type SearchBarHandle = {
   openMobileSearch: () => void;
+  // 검색 결과에서 뒤로 나왔을 때 입력창에 남아있는 이전 검색어를 비움 (피드백 #5)
+  clear: () => void;
 };
 
 const SearchBar = forwardRef<SearchBarHandle, SearchBarProps>(function SearchBar(
@@ -73,6 +75,10 @@ const SearchBar = forwardRef<SearchBarHandle, SearchBarProps>(function SearchBar
   // 건드릴 이유가 없음) — "열어라"는 명령 하나만 받으면 충분함.
   useImperativeHandle(ref, () => ({
     openMobileSearch: () => setIsMobileOpen(true),
+    clear: () => {
+      setValue("");
+      setSuggestions({ tracks: [], artists: [] });
+    },
   }));
 
   function handleSubmit(e: React.FormEvent) {

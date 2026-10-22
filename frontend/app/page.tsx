@@ -103,6 +103,8 @@ export default function Home() {
   const [isSearching, setIsSearching] = useState(false);
   const [searchingQuery, setSearchingQuery] = useState("");
   const swipeBackRef = useRef<{ x: number; y: number } | null>(null);
+  // 공개 전환하려다 로그인이 필요해서 로그인 팝업을 띄운 재생목록 — 로그인 성공 후 이어서 공개 전환
+  const resumePublishRef = useRef<Playlist | null>(null);
   const [isRecommending, setIsRecommending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [favorites, setFavorites] = useState<Favorite[]>([]);
@@ -412,6 +414,15 @@ export default function Home() {
       }
       return;
     }
+    // (버그 수정, 2026-10-22, 피드백 #2) 비로그인이면 카테고리부터 고르게 한 뒤 마지막에 403으로
+    // 로그인 팝업이 뜨고, 로그인해도 공개가 이어지지 않아서 처음부터 다시 눌러야 했음(그때 또
+    // 같은 팝업이 반복). 로그인이 필요하다는 걸 맨 앞에서 먼저 확인해서 로그인부터 시키고, 로그인에
+    // 성공하면 원래 하려던 공개 전환(카테고리 선택)을 자동으로 이어서 띄움.
+    if (supabase && !userEmail) {
+      resumePublishRef.current = playlist;
+      setIsAuthModalOpen(true);
+      return;
+    }
     // 비공개 -> 공개: 카테고리를 먼저 고르게 함 (닉네임과 같은 "그 순간에만 물어보기" 패턴).
     setPendingVisibilityPlaylist(playlist);
     setSelectedCategory(null);
@@ -441,8 +452,9 @@ export default function Home() {
         setNicknameError(null);
         setIsNicknameModalOpen(true);
       } else if (status === 403) {
+        // 세션이 만료됐거나 로그인이 풀린 경우 — 로그인 후 공개 전환을 이어서 하도록 기억해둠
         setIsCategoryModalOpen(false);
-        setError("재생목록을 공개하려면 먼저 로그인해주세요.");
+        resumePublishRef.current = playlist;
         setIsAuthModalOpen(true);
       } else {
         setError("재생목록 공개 설정을 바꾸지 못했어요.");
@@ -700,6 +712,7 @@ export default function Home() {
   // state를 전부 비워서 홈 화면으로 돌아가게 함 — handleSearch의 에러 처리 분기와 같은 목록을
   // 비우지만, 에러 메시지는 안 지움(사용자가 직접 누른 거라 에러가 아니므로).
   function clearSearchResults() {
+    searchBarRef.current?.clear();
     setArtists([]);
     setSearchTracks([]);
     setTagSearchTracks([]);
@@ -2122,13 +2135,24 @@ export default function Home() {
 
     {isAuthModalOpen && (
       <AuthModal
-        onClose={() => setIsAuthModalOpen(false)}
+        onClose={() => {
+          setIsAuthModalOpen(false);
+          resumePublishRef.current = null;
+        }}
         onAuthSuccess={() => {
           // userEmail은 onAuthStateChange 구독이 곧 알아서 채워주지만, 로그인 직후
           // 버튼 텍스트가 바뀌는 게 한 박자 늦어 보이지 않도록 여기서도 즉시 갱신 시도.
           supabase?.auth.getSession().then(({ data }) => {
             setUserEmail(data.session?.user.email ?? null);
           });
+          // 공개 전환하다가 로그인하러 온 거면, 로그인 성공 직후 카테고리 선택부터 이어서 진행
+          const resume = resumePublishRef.current;
+          resumePublishRef.current = null;
+          if (resume) {
+            setPendingVisibilityPlaylist(resume);
+            setSelectedCategory(null);
+            setIsCategoryModalOpen(true);
+          }
         }}
       />
     )}

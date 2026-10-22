@@ -1641,19 +1641,25 @@ export default function Home() {
           } sm:static sm:z-auto sm:max-h-none sm:w-full sm:max-w-xl sm:rounded-none sm:border-0 sm:bg-transparent sm:shadow-none`}
         >
           <div
-            className="shrink-0 px-4 pb-2 pt-2 sm:hidden"
-            onTouchStart={(e) => {
-              const t = e.touches[0];
-              moodSheetSwipeRef.current = { x: t.clientX, y: t.clientY };
+            // 터치와 마우스(Mac 반응형 미리보기 테스트용) 모두 받도록 포인터 이벤트 사용.
+            // 헤더 안 버튼(믹스 재생/새로고침/✕)을 누르는 건 드래그로 취급하지 않음.
+            className="shrink-0 touch-none select-none px-4 pb-2 pt-2 sm:hidden"
+            onPointerDown={(e) => {
+              if ((e.target as HTMLElement).closest("button")) return;
+              moodSheetSwipeRef.current = { x: e.clientX, y: e.clientY };
+              e.currentTarget.setPointerCapture(e.pointerId);
             }}
-            onTouchEnd={(e) => {
+            onPointerUp={(e) => {
               const start = moodSheetSwipeRef.current;
               moodSheetSwipeRef.current = null;
               if (!start) return;
-              const t = e.changedTouches[0];
-              if (t.clientY - start.y > 60 && t.clientY - start.y > Math.abs(t.clientX - start.x) * 1.5) {
+              const dy = e.clientY - start.y;
+              if (dy > 50 && dy > Math.abs(e.clientX - start.x) * 1.5) {
                 handleCloseMoodSheet();
               }
+            }}
+            onPointerCancel={() => {
+              moodSheetSwipeRef.current = null;
             }}
           >
             <div className="mx-auto mb-2 h-1 w-10 rounded-full bg-white/20" />

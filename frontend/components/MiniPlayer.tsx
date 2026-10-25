@@ -665,6 +665,10 @@ export default function MiniPlayer({
       previewTimeoutRef.current = null;
     }
     setIsPreviewing(mixRequest.highlight);
+    // (B단계 3-4, 2026-10-25) 하단 탭 "하이라이트"/"모두 재생"은 화면을 바꾸지 않고 바로 재생만
+    // 시작해서, 눌러도 뭔가 일어났는지 잘 안 보인다는 피드백 — 믹스를 시작하면 확장 플레이어를
+    // 바로 펼쳐서 어떤 곡이 재생되는지 보여줌(이후 곡이 자동으로 넘어갈 땐 펼치지 않음).
+    setIsExpanded(true);
   }, [mixRequest]);
 
   // 진행바용 재생 위치 폴링 (유튜브 API는 재생 위치 변경 이벤트가 따로 없어서 주기적으로 조회해야 함)

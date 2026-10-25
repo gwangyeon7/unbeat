@@ -165,7 +165,7 @@ const SearchBar = forwardRef<SearchBarHandle, SearchBarProps>(function SearchBar
     return (
       <>
         <p className="px-4 pt-2 text-[10px] uppercase tracking-wide text-white/30">최근 검색</p>
-        <ul className="flex gap-3 overflow-x-auto px-4 py-3">
+        <ul className="scrollbar-none flex gap-3 overflow-x-auto px-4 py-3">
           {recentSearches.map(({ query, image }) => (
             <li key={query} className="w-24 shrink-0">
               <div className="relative">

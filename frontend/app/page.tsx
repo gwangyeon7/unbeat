@@ -2005,7 +2005,7 @@ export default function Home() {
       {!searchContextArtist && topArtists.length > 0 && (
         <div className="w-full max-w-xl">
           <p className="mb-2 text-xl font-bold text-white">인기 아티스트</p>
-          <div className="flex snap-x snap-mandatory gap-3 overflow-x-auto pb-2">
+          <div className="scrollbar-none flex snap-x snap-mandatory gap-3 overflow-x-auto pb-2">
             {topArtists.map((artist) => (
               <div key={artist.name} className="w-64 shrink-0 snap-start snap-always">
                 <ArtistCard

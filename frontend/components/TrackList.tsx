@@ -25,7 +25,7 @@ export default function TrackList({
   }
 
   return (
-    <div className="flex w-full max-w-xl snap-x snap-mandatory gap-3 overflow-x-auto pb-2">
+    <div className="scrollbar-none flex w-full max-w-xl snap-x snap-mandatory gap-3 overflow-x-auto pb-2">
       {tracks.map((track, idx) => (
         // 버튼(★) 안에 또 버튼을 넣을 수 없어서(HTML 명세상 버튼 중첩 불가) 카드 자체는
         // div + role="button"으로 만들고, 안쪽 즐겨찾기 버튼만 진짜 <button>으로 둠.

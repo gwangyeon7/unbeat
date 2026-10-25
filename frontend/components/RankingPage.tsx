@@ -278,7 +278,7 @@ export default function RankingPage({
           <>
             {/* (랭킹 카테고리 필터, 2026-10-10 추가) 무드 칩(MoodChips)과 완전히 같은 스타일을
                 재사용 — "전체"가 기본/초기화 옵션. 가로로 넘치면 스크롤되게 함. */}
-            <div className="mb-4 flex gap-2 overflow-x-auto pb-1">
+            <div className="scrollbar-none mb-4 flex gap-2 overflow-x-auto pb-1">
               <button
                 type="button"
                 onClick={() => setSelectedFilterCategory(null)}

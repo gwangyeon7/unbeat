@@ -38,7 +38,7 @@ type AuthModalProps = {
 // OAuth를 재논의해서 승인받음). 로그인은 선택 기능이라(비로그인도 기존처럼 전부 동작) 이
 // 모달을 안 열면 아무 영향 없음 — AddToPlaylistModal과 같은 패턴(화면 중앙 모달, z-50)으로 통일.
 export default function AuthModal({ onClose, onAuthSuccess }: AuthModalProps) {
-  const [mode, setMode] = useState<"signin" | "signup">("signin");
+  const [mode, setMode] = useState<"signin" | "signup" | "reset">("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -181,7 +181,8 @@ export default function AuthModal({ onClose, onAuthSuccess }: AuthModalProps) {
       redirectTo: `${window.location.origin}/reset-password`,
     });
     if (resetError) {
-      setError("재설정 메일을 보내지 못했어요. 잠시 후 다시 시도해주세요.");
+      console.warn("resetPasswordForEmail failed:", resetError);
+      setError(`재설정 메일을 보내지 못했어요. (${resetError.message})`);
       return;
     }
     setResetSent(true);
@@ -195,6 +196,12 @@ export default function AuthModal({ onClose, onAuthSuccess }: AuthModalProps) {
     }
     setIsSubmitting(true);
     setError(null);
+
+    if (mode === "reset") {
+      await handleForgotPassword();
+      setIsSubmitting(false);
+      return;
+    }
 
     if (mode === "signin") {
       const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
@@ -244,7 +251,7 @@ export default function AuthModal({ onClose, onAuthSuccess }: AuthModalProps) {
       >
         <div className="mb-4 flex items-start justify-between gap-2">
           <h2 className="text-base font-semibold">
-            {mode === "signin" ? "로그인" : "회원가입"}
+            {mode === "signin" ? "로그인" : mode === "signup" ? "회원가입" : "비밀번호 재설정"}
           </h2>
           <button
             type="button"
@@ -271,7 +278,7 @@ export default function AuthModal({ onClose, onAuthSuccess }: AuthModalProps) {
           </div>
         ) : (
           <div className="flex flex-col gap-3">
-            {isInstalledApp && GOOGLE_CLIENT_ID && (
+            {isInstalledApp && GOOGLE_CLIENT_ID && mode !== "reset" && (
               <button
                 type="button"
                 disabled={!gisReady}
@@ -288,14 +295,17 @@ export default function AuthModal({ onClose, onAuthSuccess }: AuthModalProps) {
               </button>
             )}
             {GOOGLE_CLIENT_ID && !isInstalledApp && (
-              <div ref={googleButtonRef} className="flex min-h-[40px] justify-center" />
+              <div
+                ref={googleButtonRef}
+                className={`flex min-h-[40px] justify-center ${mode === "reset" ? "hidden" : ""}`}
+              />
             )}
             <button
               type="button"
               disabled={isGoogleLoading}
               onClick={handleGoogleSignIn}
               className={`flex items-center justify-center gap-2 rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm font-medium hover:bg-white/10 disabled:opacity-50 ${
-                isInstalledApp || (GOOGLE_CLIENT_ID && gisReady) ? "hidden" : ""
+                isInstalledApp || (GOOGLE_CLIENT_ID && gisReady) || mode === "reset" ? "hidden" : ""
               }`}
             >
               <svg viewBox="0 0 48 48" className="h-4 w-4" aria-hidden="true">
@@ -306,11 +316,17 @@ export default function AuthModal({ onClose, onAuthSuccess }: AuthModalProps) {
               </svg>
               {isGoogleLoading ? "이동 중..." : "구글로 계속하기"}
             </button>
-            <div className="flex items-center gap-2 text-[11px] text-white/30">
-              <div className="h-px flex-1 bg-white/10" />
-              또는
-              <div className="h-px flex-1 bg-white/10" />
-            </div>
+            {mode === "reset" ? (
+              <p className="text-xs text-white/60">
+                가입한 이메일을 적으면 비밀번호를 새로 정할 수 있는 링크를 보내드려요.
+              </p>
+            ) : (
+              <div className="flex items-center gap-2 text-[11px] text-white/30">
+                <div className="h-px flex-1 bg-white/10" />
+                또는
+                <div className="h-px flex-1 bg-white/10" />
+              </div>
+            )}
           <form onSubmit={handleSubmit} className="flex flex-col gap-3">
             <input
               type="email"
@@ -321,27 +337,39 @@ export default function AuthModal({ onClose, onAuthSuccess }: AuthModalProps) {
               placeholder="이메일"
               className="rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm outline-none focus:border-accent"
             />
-            <input
-              type="password"
-              required
-              minLength={6}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="비밀번호 (6자 이상)"
-              className="rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm outline-none focus:border-accent"
-            />
+            {mode !== "reset" && (
+              <input
+                type="password"
+                required
+                minLength={6}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="비밀번호 (6자 이상)"
+                className="rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm outline-none focus:border-accent"
+              />
+            )}
             {error && <p className="text-xs text-red-400">{error}</p>}
             <button
               type="submit"
               disabled={isSubmitting}
               className="rounded-md bg-accent px-3 py-2 text-sm font-medium text-black disabled:opacity-50"
             >
-              {isSubmitting ? "처리 중..." : mode === "signin" ? "로그인" : "회원가입"}
+              {isSubmitting
+                ? "처리 중..."
+                : mode === "signin"
+                  ? "로그인"
+                  : mode === "signup"
+                    ? "회원가입"
+                    : "재설정 메일 보내기"}
             </button>
             {mode === "signin" && (
               <button
                 type="button"
-                onClick={handleForgotPassword}
+                onClick={() => {
+                  setMode("reset");
+                  setError(null);
+                  setResetSent(false);
+                }}
                 className="text-xs text-white/50 hover:text-white/80"
               >
                 비밀번호를 잊으셨나요?
@@ -357,10 +385,15 @@ export default function AuthModal({ onClose, onAuthSuccess }: AuthModalProps) {
               onClick={() => {
                 setMode(mode === "signin" ? "signup" : "signin");
                 setError(null);
+                setResetSent(false);
               }}
               className="text-xs text-white/50 hover:text-white/80"
             >
-              {mode === "signin" ? "계정이 없으신가요? 회원가입" : "이미 계정이 있으신가요? 로그인"}
+              {mode === "signin"
+                ? "계정이 없으신가요? 회원가입"
+                : mode === "signup"
+                  ? "이미 계정이 있으신가요? 로그인"
+                  : "로그인으로 돌아가기"}
             </button>
           </form>
           </div>

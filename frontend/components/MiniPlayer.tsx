@@ -406,6 +406,22 @@ export default function MiniPlayer({
   // 유튜브 뮤직의 확장 재생 화면(앨범아트 크게 + 다음 트랙/관련 항목/가사 탭)을 참고해서 추가.
   // 미니 플레이어 하단 바의 앨범아트나 곡 정보를 누르면 이 전체화면 오버레이가 열림.
   const [isExpanded, setIsExpanded] = useState(false);
+  // 확장 재생 화면에서 아래로 쓸어내리면 크롬의 "당겨서 새로고침"이 먼저 발동해 페이지가 새로고침되던
+  // 문제(2026-10-25 폰 확인) — 확장 화면이 열려 있는 동안만 문서 전체의 overscroll을 막아서 새로고침 대신
+  // 우리 "쓸어내려 닫기"만 동작하게 함(닫으면 원래대로 복구해서 홈에서는 당겨서 새로고침 가능).
+  useEffect(() => {
+    if (!isExpanded) return;
+    const html = document.documentElement;
+    const body = document.body;
+    const prevHtml = html.style.overscrollBehaviorY;
+    const prevBody = body.style.overscrollBehaviorY;
+    html.style.overscrollBehaviorY = "contain";
+    body.style.overscrollBehaviorY = "contain";
+    return () => {
+      html.style.overscrollBehaviorY = prevHtml;
+      body.style.overscrollBehaviorY = prevBody;
+    };
+  }, [isExpanded]);
   // 확장 재생 화면: 위쪽(헤더/앨범아트/곡 정보)을 아래로 쓸어내리면 닫힘 (스포티파이/유튜브 뮤직처럼).
   // 아래 큐/가사 목록은 스크롤해야 하니 이 핸들러를 안 붙이고, 세로로 80px 이상 + 가로보다 확실히
   // 길게 움직였을 때만 인정해서 슬라이더 조작/탭과 안 겹치게 함.

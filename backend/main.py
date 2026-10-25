@@ -1985,16 +1985,28 @@ def similar_tracks(artist: str, track: str, x_session_id: Optional[str] = Header
                     "limit": 6,
                 })
             related_artists = similar_artists_data.get("similarartists", {}).get("artist", [])
-            for related in related_artists:
-                if len(tracks) >= SIMILAR_TRACKS_RAW_CAP:
-                    break
-                top_tracks = lastfm_get({
-                    "method": "artist.getTopTracks",
-                    "artist": related["name"],
-                    "limit": 4,
-                })
-                for item in top_tracks.get("toptracks", {}).get("track", []):
-                    add_track(item)
+
+            # (2026-10-25, "다음 트랙이 채워지는 게 느리다" 피드백) 유사 아티스트별 인기곡 조회를 한 명씩
+            # 순서대로 하던 걸(최대 6번 연속 호출) 동시에 부르도록 바꿈. 순서는 원래 유사도 순을 그대로 유지.
+            def _fetch_top_tracks(related_name: str):
+                try:
+                    return lastfm_get({
+                        "method": "artist.getTopTracks",
+                        "artist": related_name,
+                        "limit": 4,
+                    })
+                except HTTPException:
+                    return {}
+
+            related_names = [r["name"] for r in related_artists]
+            if related_names:
+                with ThreadPoolExecutor(max_workers=min(len(related_names), 6)) as executor:
+                    top_tracks_list = list(executor.map(_fetch_top_tracks, related_names))
+                for top_tracks in top_tracks_list:
+                    if len(tracks) >= SIMILAR_TRACKS_RAW_CAP:
+                        break
+                    for item in top_tracks.get("toptracks", {}).get("track", []):
+                        add_track(item)
         except HTTPException as e:
             print(f"[similar-tracks] '{expand_artist_name}' artist.getSimilar 실패(빈 결과로 처리): {e.detail}")
 
@@ -2060,9 +2072,15 @@ def similar_tracks(artist: str, track: str, x_session_id: Optional[str] = Header
         # 트랙도 _resolve_curated_tracks가 이미 이미지를 채워서 반환하므로("_lastfm_images" 키
         # 자체가 없음) 다시 조회하지 않고 건너뜀 — 안 그러면 이미 받아온 이미지를 버리고 불필요한
         # iTunes 재조회가 한 번 더 나감.
-        for t in tracks:
-            if "_lastfm_images" in t:
-                t["image"] = resolve_track_image(t["artist"], t["name"], t.pop("_lastfm_images", []))
+        # (2026-10-25) 이미지 조회(iTunes)도 25곡을 한 곡씩 순서대로 하던 걸 동시에 부르게 함.
+        pending = [t for t in tracks if "_lastfm_images" in t]
+
+        def _fill_image(t):
+            t["image"] = resolve_track_image(t["artist"], t["name"], t.pop("_lastfm_images", []))
+
+        if pending:
+            with ThreadPoolExecutor(max_workers=min(len(pending), 10)) as executor:
+                list(executor.map(_fill_image, pending))
 
     # (버그 수정, 2026-10-14) 다른 트랙 목록 엔드포인트(top_chart, artist_top_tracks,
     # _build_track_results, discover_by_mood, recommend_by_artist)에는 이미 한글 제목/아티스트명

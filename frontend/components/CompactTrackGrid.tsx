@@ -10,6 +10,8 @@ type CompactTrackGridProps = {
   onToggleFavorite: (track: Track) => void;
   onPlay?: (track: Track) => void;
   onAddToPlaylist?: (track: Track) => void;
+  // 있으면 곡 ⋮ 메뉴에 "이 아티스트 곡 보기"가 생김
+  onViewArtist?: (track: Track) => void;
   // true면 페이지네이션 버튼 대신 3행 고정 + 가로 드래그 스크롤로 표시 (다시 듣기/빠른 선곡용).
   // 기본 false는 기존 무드 탐색/검색 결과 그리드 동작을 그대로 유지.
   scrollable?: boolean;
@@ -31,6 +33,7 @@ export default function CompactTrackGrid({
   onToggleFavorite,
   onPlay,
   onAddToPlaylist,
+  onViewArtist,
   scrollable = false,
 }: CompactTrackGridProps) {
   const [page, setPage] = useState(0);
@@ -50,6 +53,7 @@ export default function CompactTrackGrid({
         onPlay={() => onPlay?.(track)}
         onToggleFavorite={() => onToggleFavorite(track)}
         onAddToPlaylist={onAddToPlaylist ? () => onAddToPlaylist(track) : undefined}
+        onViewArtist={onViewArtist ? () => onViewArtist(track) : undefined}
       />
     );
   }

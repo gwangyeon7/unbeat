@@ -714,6 +714,11 @@ export default function Home() {
   // 검색을 그만두려면 새로고침밖에 방법이 없었음. 아래 "뒤로" 버튼이 이 함수로 검색 관련
   // state를 전부 비워서 홈 화면으로 돌아가게 함 — handleSearch의 에러 처리 분기와 같은 목록을
   // 비우지만, 에러 메시지는 안 지움(사용자가 직접 누른 거라 에러가 아니므로).
+  // 곡 ⋮ 메뉴의 "이 아티스트 곡 보기" — 그 아티스트 이름으로 검색해서 검색 결과 화면으로 감.
+  function handleViewArtist(track: Track) {
+    handleSearch(track.artist);
+  }
+
   function clearSearchResults() {
     searchBarRef.current?.clear();
     setArtists([]);
@@ -1607,7 +1612,7 @@ export default function Home() {
                 type="button"
                 onClick={() => handleStartMix(false)}
                 aria-label="모두 재생"
-                className="rounded-full border border-white/30 px-4 py-1.5 text-sm font-medium text-white hover:bg-white/10"
+                className="rounded-full border border-white/30 px-3 py-1 text-xs font-medium text-white hover:bg-white/10"
                 title={
                   selectedMood
                     ? `"${selectedMoodLabel}" 무드 안에서만 전곡 재생`
@@ -1619,6 +1624,7 @@ export default function Home() {
             </div>
           </div>
           <CompactTrackGrid
+            onViewArtist={handleViewArtist}
             tracks={quickPickTracks}
             isFavorite={isTrackFavorite}
             onToggleFavorite={handleToggleFavoriteTrack}
@@ -1719,6 +1725,7 @@ export default function Home() {
                 <div className="mb-6">
                   <p className="mb-2 text-xs text-white/40">"{selectedMoodLabel}" 국내 인기곡</p>
                   <CompactTrackGrid
+                    onViewArtist={handleViewArtist}
                     tracks={domesticMoodTracks}
                     isFavorite={isTrackFavorite}
                     onToggleFavorite={handleToggleFavoriteTrack}
@@ -1732,6 +1739,7 @@ export default function Home() {
                 <div>
                   <p className="mb-2 text-xs text-white/40">"{selectedMoodLabel}" 해외 인기곡</p>
                   <CompactTrackGrid
+                    onViewArtist={handleViewArtist}
                     tracks={internationalMoodTracks}
                     isFavorite={isTrackFavorite}
                     onToggleFavorite={handleToggleFavoriteTrack}
@@ -1816,6 +1824,7 @@ export default function Home() {
         <div className="w-full max-w-xl">
           <p className="mb-2 text-xs text-white/40">관련 곡 (장르/연대)</p>
           <CompactTrackGrid
+            onViewArtist={handleViewArtist}
             tracks={tagSearchTracks}
             isFavorite={isTrackFavorite}
             onToggleFavorite={handleToggleFavoriteTrack}
@@ -1916,6 +1925,7 @@ export default function Home() {
           {contextMood.domesticTracks.length > 0 && (
             <div className="mb-6">
               <CompactTrackGrid
+                onViewArtist={handleViewArtist}
                 tracks={contextMood.domesticTracks}
                 isFavorite={isTrackFavorite}
                 onToggleFavorite={handleToggleFavoriteTrack}
@@ -1927,6 +1937,7 @@ export default function Home() {
           )}
           {contextMood.internationalTracks.length > 0 && (
             <CompactTrackGrid
+              onViewArtist={handleViewArtist}
               tracks={contextMood.internationalTracks}
               isFavorite={isTrackFavorite}
               onToggleFavorite={handleToggleFavoriteTrack}
@@ -1947,6 +1958,7 @@ export default function Home() {
         <div className="w-full max-w-xl">
           <p className="mb-2 text-xs text-white/40">다시 듣기</p>
           <CompactTrackGrid
+            onViewArtist={handleViewArtist}
             tracks={recentPlaysAsTrack}
             isFavorite={isTrackFavorite}
             onToggleFavorite={handleToggleFavoriteTrack}
@@ -2301,6 +2313,7 @@ export default function Home() {
               {diaryResult.domesticTracks.length > 0 && (
                 <div className="mb-2">
                   <CompactTrackGrid
+                    onViewArtist={handleViewArtist}
                     tracks={diaryResult.domesticTracks}
                     isFavorite={isTrackFavorite}
                     onToggleFavorite={handleToggleFavoriteTrack}
@@ -2312,6 +2325,7 @@ export default function Home() {
               )}
               {diaryResult.internationalTracks.length > 0 && (
                 <CompactTrackGrid
+                  onViewArtist={handleViewArtist}
                   tracks={diaryResult.internationalTracks}
                   isFavorite={isTrackFavorite}
                   onToggleFavorite={handleToggleFavoriteTrack}

@@ -1608,22 +1608,24 @@ export default function Home() {
               <button
                 type="button"
                 onClick={() => setQuickPickRefreshKey((k) => k + 1)}
-                className="rounded-full border border-white/10 px-2.5 py-1 text-[11px] text-white/60 hover:border-white/30 hover:text-white"
+                aria-label="새로고침"
+                className="flex h-7 w-7 items-center justify-center rounded-full border border-white/10 text-sm text-white/60 hover:border-white/30 hover:text-white"
                 title="추천 곡 새로 받기"
               >
-                ↻ 새로고침
+                ↻
               </button>
               <button
                 type="button"
                 onClick={() => handleStartMix(false)}
-                className="rounded-full border border-white/10 px-2.5 py-1 text-[11px] text-white/60 hover:border-white/30 hover:text-white"
+                aria-label="모두 재생"
+                className="flex h-7 w-7 items-center justify-center rounded-full bg-white text-[11px] text-black hover:bg-white/80"
                 title={
                   selectedMood
                     ? `"${selectedMoodLabel}" 무드 안에서만 전곡 재생`
-                    : "즐겨찾기 기반 추천 곡으로 전곡 재생 시작"
+                    : "모두 재생"
                 }
               >
-                ▶ 모두 재생
+                ▶
               </button>
             </div>
           </div>

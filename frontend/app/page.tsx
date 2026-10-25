@@ -158,10 +158,18 @@ export default function Home() {
   const [isDiaryOpen, setIsDiaryOpen] = useState(false);
   const [diaryText, setDiaryText] = useState("");
   const [diaryResult, setDiaryResult] = useState<DiaryReflectionResult | null>(null);
+  useEffect(() => {
+    if (!diaryResult?.message) return;
+    (document.activeElement as HTMLElement | null)?.blur?.();
+    setTimeout(() => diaryResultRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 100);
+  }, [diaryResult?.message]);
   const [isDiaryLoading, setIsDiaryLoading] = useState(false);
   const [diaryError, setDiaryError] = useState<string | null>(null);
   const [diaryHistory, setDiaryHistory] = useState<DiaryHistoryEntry[]>([]);
   const [isDiaryHistoryOpen, setIsDiaryHistoryOpen] = useState(false);
+  // (B단계 4) 결과(공감 글)가 입력창 아래라 키보드에 가려져 안 보이던 문제 — 결과가 오면 키보드를
+  // 내리고 결과 위치로 스크롤해서 공감 글이 처음부터 끝까지 보이게 함.
+  const diaryResultRef = useRef<HTMLDivElement | null>(null);
   const DIARY_TEXT_MAX_LENGTH = 500;
 
   // 검색/무드 선택 전에도 중앙이 비어 보이지 않게, 홈 화면 기본으로 깔아둘 인기곡 차트.
@@ -2286,7 +2294,7 @@ export default function Home() {
         onClick={() => setIsDiaryOpen(false)}
       >
         <div
-          className="max-h-[85vh] w-full max-w-lg overflow-y-auto rounded-lg border border-white/10 bg-neutral-900 p-5"
+          className="max-h-[85dvh] w-full max-w-lg overflow-y-auto rounded-lg border border-white/10 bg-neutral-900 p-5"
           onClick={(e) => e.stopPropagation()}
         >
           <div className="mb-3 flex items-center justify-between">
@@ -2328,8 +2336,10 @@ export default function Home() {
           {diaryError && <p className="mt-2 text-xs text-red-400">{diaryError}</p>}
 
           {diaryResult && (
-            <div className="mt-4 border-t border-white/10 pt-4">
-              <p className="text-sm leading-relaxed text-white/90">{diaryResult.message}</p>
+            <div ref={diaryResultRef} className="mt-4 scroll-mt-2 border-t border-white/10 pt-4">
+              <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-white/90">
+                {diaryResult.message}
+              </p>
               <p className="mb-2 mt-3 text-xs text-white/40">
                 &quot;{diaryResult.moodLabel}&quot; 어울리는 곡
               </p>

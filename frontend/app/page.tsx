@@ -1060,6 +1060,17 @@ export default function Home() {
     setMixRequest({ id: mixRequestIdRef.current, highlight });
   }
 
+  // (B단계 3-5, 2026-10-25) 빠른 선곡/다시 듣기의 "모두 재생" — 화면에 보이는 목록을 순서대로 재생하고,
+  // 하단 플레이어의 "다음 트랙" 패널에도 그 목록의 나머지 곡이 그대로 나오게 함(재생목록 이어재생과
+  // 같은 manualNext 방식). 별도의 "전체보기" 화면은 만들지 않기로 함.
+  function handlePlayAll(list: Track[]) {
+    if (list.length === 0) return;
+    const [first, ...rest] = list;
+    handlePlay(first, { manualNext: rest });
+    mixRequestIdRef.current += 1;
+    setMixRequest({ id: mixRequestIdRef.current, highlight: false });
+  }
+
   // (§47, §48) append=false(기본값)면 예전처럼 큐를 완전히 새로 채움 — 검색/차트/즐겨찾기 등
   // 큐 바깥에서 새 곡을 골랐을 때. append=true는 "같은 라디오 세션이 이어지는 중"일 때만
   // (자동 이어재생, 또는 큐 안의 곡을 직접 클릭) 쓰여서, 기존 큐에서 방금 재생 시작한 곡만
@@ -1610,14 +1621,10 @@ export default function Home() {
             <div className="flex items-center gap-1.5">
               <button
                 type="button"
-                onClick={() => handleStartMix(false)}
+                onClick={() => handlePlayAll(quickPickTracks)}
                 aria-label="모두 재생"
                 className="rounded-full border border-white/30 px-3 py-1 text-xs font-medium text-white hover:bg-white/10"
-                title={
-                  selectedMood
-                    ? `"${selectedMoodLabel}" 무드 안에서만 전곡 재생`
-                    : "모두 재생"
-                }
+                title="빠른 선곡 모두 재생"
               >
                 모두 재생
               </button>
@@ -1948,7 +1955,17 @@ export default function Home() {
           다른 기준의 서로 다른 목록이라 중복이 아님. */}
       {recentPlaysAsTrack.length > 0 && (
         <div className="w-full max-w-xl">
-          <p className="mb-2 text-xl font-bold text-white">다시 듣기</p>
+          <div className="mb-2 flex items-center justify-between">
+            <p className="text-xl font-bold text-white">다시 듣기</p>
+            <button
+              type="button"
+              onClick={() => handlePlayAll(recentPlaysAsTrack)}
+              aria-label="모두 재생"
+              className="rounded-full border border-white/30 px-3 py-1 text-xs font-medium text-white hover:bg-white/10"
+            >
+              모두 재생
+            </button>
+          </div>
           <CompactTrackGrid
             onViewArtist={handleViewArtist}
             tracks={recentPlaysAsTrack}

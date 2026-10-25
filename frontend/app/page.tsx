@@ -1595,7 +1595,7 @@ export default function Home() {
       {quickPickTracks.length > 0 && (
         <div className="w-full max-w-xl">
           <div className="mb-2 flex items-center justify-between">
-            <p className="text-xs text-white/40">빠른 선곡</p>
+            <p className="text-sm font-semibold text-white/70">빠른 선곡</p>
             {/* (Task #44-3) "믹스" 버튼 2개 — 특정 곡을 고르지 않고 눌러서 바로 무작위 재생을
                 시작하는 전용 진입점. MiniPlayer 안의 번개 토글(지금 재생 중인 곡 하나에 대해
                 하이라이트 모드를 켜고 끔)과는 다른, "처음부터 하이라이트/전곡 중 하나를 골라
@@ -1607,14 +1607,14 @@ export default function Home() {
                 type="button"
                 onClick={() => handleStartMix(false)}
                 aria-label="모두 재생"
-                className="flex h-7 w-7 items-center justify-center rounded-full bg-white text-[11px] text-black hover:bg-white/80"
+                className="text-sm text-white/60 hover:text-white"
                 title={
                   selectedMood
                     ? `"${selectedMoodLabel}" 무드 안에서만 전곡 재생`
                     : "모두 재생"
                 }
               >
-                ▶
+                모두 재생
               </button>
             </div>
           </div>

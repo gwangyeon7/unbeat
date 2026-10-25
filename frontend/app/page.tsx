@@ -495,6 +495,20 @@ export default function Home() {
     }
   }
 
+  // 하단 "홈" 탭 — 검색 결과/보관함/랭킹/기록 등 어떤 화면에 있든 열려 있는 걸 모두 닫고 홈 맨 위로.
+  function handleGoHome() {
+    clearSearchResults();
+    setIsLibraryOpen(false);
+    setIsPublicFeedOpen(false);
+    setViewingPublicPlaylistId(null);
+    setPublicPlaylistTracks(null);
+    setViewingProfileNickname(null);
+    setProfilePlaylists(null);
+    setIsDiaryOpen(false);
+    setIsProfileSheetOpen(false);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
   function handleOpenPublicFeed() {
     setIsPublicFeedOpen(true);
     setViewingPublicPlaylistId(null);
@@ -2060,7 +2074,7 @@ export default function Home() {
     >
       <button
         type="button"
-        onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+        onClick={handleGoHome}
         className="flex flex-1 flex-col items-center justify-center gap-1 text-[11px]"
         style={{ color: "#ff3b5c" }}
       >

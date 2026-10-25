@@ -181,8 +181,6 @@ export default function Home() {
   // 후보를 얻고(진짜 AI 추천은 ROADMAP에서 처음부터 범위 밖으로 뺐음), 그 후보를 새로고침마다
   // 무작위로 섞어서 보여주는 절충안 — 아래 useEffect에서 favoriteTracks/chartTracks가 준비되면 계산.
   const [quickPickTracks, setQuickPickTracks] = useState<Track[]>([]);
-  // "새로고침" 버튼이 올리면 아래 빠른 선곡 effect가 다시 돌아 추천을 새로 받음.
-  const [quickPickRefreshKey, setQuickPickRefreshKey] = useState(0);
 
   // 하단 미니 플레이어 — 트랙 카드를 누르면 Last.fm 자체 페이지로 나가는 대신
   // 유튜브에서 이 곡을 찾아 사이트 안에서 바로 재생함 (우리는 자체 오디오 스트리밍 라이선스가 없어서
@@ -709,7 +707,7 @@ export default function Home() {
       .catch(fallbackToArtistBased);
     // favoriteTracks/chartTracks가 나중에 채워지면(비동기 로딩) 그때 다시 계산되게 의존성에 둠 —
     // 매 렌더마다 다시 섞이면 스크롤/재생 중에도 계속 바뀌어 버리니, 두 값이 실제로 바뀔 때만.
-  }, [favoriteTracks, chartTracks, quickPickRefreshKey]);
+  }, [favoriteTracks, chartTracks]);
 
   // (UI 재구조화, 2026-10-14) "검색창(전체화면)을 벗어나도 메인 화면에 검색 결과가 그대로
   // 섞여서 나온다"는 피드백 — 지금까지는 검색 결과가 홈 화면 스크롤 중간에 그냥 끼워져서,
@@ -1605,15 +1603,6 @@ export default function Home() {
             {/* (B단계 3-3, 2026-10-25) 하이라이트 믹스는 하단 탭의 "하이라이트"와 똑같은 동작이라
                 중복이어서 뺌 — 대신 "새로고침"(추천 다시 받기)과 "모두 재생"(구 전체 믹스)만 둠. */}
             <div className="flex items-center gap-1.5">
-              <button
-                type="button"
-                onClick={() => setQuickPickRefreshKey((k) => k + 1)}
-                aria-label="새로고침"
-                className="flex h-7 w-7 items-center justify-center rounded-full border border-white/10 text-sm text-white/60 hover:border-white/30 hover:text-white"
-                title="추천 곡 새로 받기"
-              >
-                ↻
-              </button>
               <button
                 type="button"
                 onClick={() => handleStartMix(false)}

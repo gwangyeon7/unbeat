@@ -150,7 +150,9 @@ export default function AuthModal({ onClose, onAuthSuccess }: AuthModalProps) {
     setError(null);
     const { error: oauthError } = await supabase.auth.signInWithOAuth({
       provider: "google",
-      options: { redirectTo: window.location.origin },
+      // prompt=select_account: 안드로이드에서 "기기에 계정 추가" 흐름(이미 기기에 있는 계정이라며 안 넘어감)으로
+      // 빠지는 걸 피하고 계정 목록 화면부터 보이게 함.
+      options: { redirectTo: window.location.origin, queryParams: { prompt: "select_account" } },
     });
     if (oauthError) {
       setIsGoogleLoading(false);

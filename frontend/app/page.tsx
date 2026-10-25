@@ -5,6 +5,7 @@ import SearchBar, { type SearchBarHandle, type RecentSearchEntry } from "@/compo
 import ArtistCard from "@/components/ArtistCard";
 import TrackList from "@/components/TrackList";
 import CompactTrackGrid from "@/components/CompactTrackGrid";
+import CompactTrackRow from "@/components/CompactTrackRow";
 import MoodChips, { MOODS } from "@/components/MoodChips";
 import MiniPlayer, { type NowPlayingTrack } from "@/components/MiniPlayer";
 import FavoriteTrackRow from "@/components/FavoriteTrackRow";
@@ -181,6 +182,9 @@ export default function Home() {
   // 후보를 얻고(진짜 AI 추천은 ROADMAP에서 처음부터 범위 밖으로 뺐음), 그 후보를 새로고침마다
   // 무작위로 섞어서 보여주는 절충안 — 아래 useEffect에서 favoriteTracks/chartTracks가 준비되면 계산.
   const [quickPickTracks, setQuickPickTracks] = useState<Track[]>([]);
+  // (B단계 3-5) "전체보기" — 가로로 넘겨 보던 목록(빠른 선곡/다시 듣기)을 세로 전체 목록 화면으로.
+  const [fullListView, setFullListView] = useState<{ title: string; tracks: Track[] } | null>(null);
+  const fullListPushedRef = useRef(false);
 
   // 하단 미니 플레이어 — 트랙 카드를 누르면 Last.fm 자체 페이지로 나가는 대신
   // 유튜브에서 이 곡을 찾아 사이트 안에서 바로 재생함 (우리는 자체 오디오 스트리밍 라이선스가 없어서
@@ -747,8 +751,24 @@ export default function Home() {
       if (window.history.state?.unbeatSearch) window.history.back();
     }
   }, [hasSearchResults]);
+  // 전체보기 화면도 같은 방식으로 갤럭시 뒤로가기/제스처로 닫힘.
+  const isFullListOpen = fullListView !== null;
+  useEffect(() => {
+    if (isFullListOpen && !fullListPushedRef.current) {
+      window.history.pushState({ unbeatFullList: true }, "");
+      fullListPushedRef.current = true;
+    } else if (!isFullListOpen && fullListPushedRef.current) {
+      fullListPushedRef.current = false;
+      if (window.history.state?.unbeatFullList) window.history.back();
+    }
+  }, [isFullListOpen]);
   useEffect(() => {
     function onPopState() {
+      if (fullListPushedRef.current) {
+        fullListPushedRef.current = false;
+        setFullListView(null);
+        return;
+      }
       if (searchHistoryPushedRef.current) {
         searchHistoryPushedRef.current = false;
         clearSearchResults();
@@ -1610,6 +1630,13 @@ export default function Home() {
             <div className="flex items-center gap-1.5">
               <button
                 type="button"
+                onClick={() => setFullListView({ title: "빠른 선곡", tracks: quickPickTracks })}
+                className="rounded-full border border-white/30 px-3 py-1 text-xs font-medium text-white hover:bg-white/10"
+              >
+                전체보기
+              </button>
+              <button
+                type="button"
                 onClick={() => handleStartMix(false)}
                 aria-label="모두 재생"
                 className="rounded-full border border-white/30 px-3 py-1 text-xs font-medium text-white hover:bg-white/10"
@@ -1763,6 +1790,42 @@ export default function Home() {
           목적. 데스크톱(sm 이상)은 원래처럼 인라인으로 그대로 둠(화면이 넓어서 안 섞여 보였고,
           피드백도 모바일 한정이었음). 검색 결과가 하나도 없으면 이 래퍼 자체가 아예 없는 셈이라
           평소 홈 화면엔 전혀 영향 없음. */}
+      {/* (B단계 3-5, 2026-10-25) "전체보기" — 빠른 선곡/다시 듣기의 모든 곡을 세로 목록으로 보는 전체화면.
+          뒤로가기(화면 내 ‹, 갤럭시 뒤로가기/제스처)로 닫힘. */}
+      {fullListView && (
+        <div className="fixed inset-0 z-[22] flex flex-col overflow-y-auto bg-black pb-44">
+          <div className="sticky top-0 z-10 flex items-center gap-2 bg-black/95 px-3 py-3">
+            <button
+              type="button"
+              onClick={() => setFullListView(null)}
+              aria-label="뒤로"
+              className="rounded-full p-2 text-xl text-white/80 hover:bg-white/10"
+            >
+              ‹
+            </button>
+            <p className="text-xl font-bold text-white">{fullListView.title}</p>
+          </div>
+          <div className="mx-auto w-full max-w-xl px-4">
+            {fullListView.tracks.map((track, idx) => (
+              <CompactTrackRow
+                key={`${track.artist}-${track.name}-${idx}`}
+                title={track.name}
+                subtitle={track.artist}
+                image={track.image}
+                isFavorite={isTrackFavorite(track)}
+                onPlay={() => handlePlay(track)}
+                onToggleFavorite={() => handleToggleFavoriteTrack(track)}
+                onAddToPlaylist={() => handleOpenAddToPlaylist(track)}
+                onViewArtist={() => {
+                  setFullListView(null);
+                  handleViewArtist(track);
+                }}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
       {(searchTracks.length > 0 || tagSearchTracks.length > 0 || artists.length > 0) && (
         <div
           className="fixed inset-0 z-20 flex flex-col gap-6 overflow-y-auto bg-black p-4 pb-44 sm:static sm:z-auto sm:flex sm:flex-col sm:gap-6 sm:overflow-visible sm:bg-transparent sm:p-0"
@@ -1948,7 +2011,16 @@ export default function Home() {
           다른 기준의 서로 다른 목록이라 중복이 아님. */}
       {recentPlaysAsTrack.length > 0 && (
         <div className="w-full max-w-xl">
-          <p className="mb-2 text-xl font-bold text-white">다시 듣기</p>
+          <div className="mb-2 flex items-center justify-between">
+            <p className="text-xl font-bold text-white">다시 듣기</p>
+            <button
+              type="button"
+              onClick={() => setFullListView({ title: "다시 듣기", tracks: recentPlaysAsTrack })}
+              className="rounded-full border border-white/30 px-3 py-1 text-xs font-medium text-white hover:bg-white/10"
+            >
+              전체보기
+            </button>
+          </div>
           <CompactTrackGrid
             onViewArtist={handleViewArtist}
             tracks={recentPlaysAsTrack}

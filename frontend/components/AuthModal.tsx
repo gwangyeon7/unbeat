@@ -127,7 +127,10 @@ export default function AuthModal({ onClose, onAuthSuccess }: AuthModalProps) {
     setError(null);
     google.accounts.id.prompt((n: any) => {
       if (n.isNotDisplayed?.() || n.isSkippedMoment?.()) {
-        setError("이 앱에서는 구글 계정 선택창을 못 띄웠어요. 이메일로 로그인하거나 브라우저(unbeat.org)에서 구글로 로그인해주세요.");
+        // 계정 선택창이 안 뜨면(FedCM 차단/쿨다운 등) 리다이렉트 방식으로 넘어감 — 크롬으로 진짜
+        // 설치된 앱(WebAPK)에선 구글 화면이 앱 위 오버레이로 뜨고 끝나면 앱으로 돌아올 수 있음.
+        console.warn("GIS prompt not shown:", n.getNotDisplayedReason?.() ?? n.getSkippedReason?.());
+        handleGoogleSignIn();
       }
     });
   }

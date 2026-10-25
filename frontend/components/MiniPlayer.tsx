@@ -164,8 +164,31 @@ function findChorusWindow(syncedLyrics: string): ChorusWindow | null {
     // 가능성이 높으니 이 반복도 건너뛰고 계속 탐색.
     if (blockLen < 2) continue;
 
-    const endIndex = prevIndex + blockLen;
-    const endTime = endIndex < lines.length ? lines[endIndex].time : null;
+    // (단락 끝까지 재생, 2026-10-25) "후렴 블록 다음 줄 시작"에서 끊으면 단락 중간에서 잘리거나
+    // 다음 단락으로 넘어가버림 → 줄 간격이 평소보다 크게 벌어지는 지점(=가사 단락 구분)까지
+    // 확장해서, 그 단락의 마지막 줄이 끝날 즈음을 종료 시점으로 씀.
+    const gaps: number[] = [];
+    for (let k = 1; k < lines.length; k++) {
+      const g = lines[k].time - lines[k - 1].time;
+      if (g > 0) gaps.push(g);
+    }
+    gaps.sort((a, b) => a - b);
+    const medianGap = gaps.length ? gaps[Math.floor(gaps.length / 2)] : 4;
+    const breakThreshold = Math.max(medianGap * 1.6, medianGap + 2);
+
+    let lastIdx = prevIndex + blockLen - 1;
+    while (lastIdx + 1 < lines.length) {
+      const next = lines[lastIdx + 1];
+      const gapToNext = next.time - lines[lastIdx].time;
+      if (!next.text.trim() || gapToNext > breakThreshold) break;
+      lastIdx++;
+    }
+    let endTime: number | null = null;
+    if (lastIdx + 1 < lines.length) {
+      const gapToNext = lines[lastIdx + 1].time - lines[lastIdx].time;
+      // 단락 마지막 줄을 부르는 시간 ≈ 평소 줄 길이(중앙값). 간주가 길면 거기까지만, 짧으면 다음 줄 직전.
+      endTime = lines[lastIdx].time + Math.min(gapToNext - 0.3, medianGap * 1.1);
+    }
     return { chorusTime, leadInTime, endTime };
   }
   return null;
@@ -182,7 +205,8 @@ const HIGHLIGHT_WINDOW_MS = 60_000;
 // 보장 길이를 15초 → 30초로 올림 — 탐지된 자연 종료 지점이 30초보다 짧으면 그 지점을 살짝 넘어
 // 다음 가사 줄까지 재생되지만(완전히 다음 소절로 들어갈 수 있음), 거의 즉시 끊기는 것보다는
 // 들을 만하다는 쪽으로 절충.
-const HIGHLIGHT_MIN_WINDOW_MS = 30_000;
+// (2026-10-25) 단락 끝에서 끊는 방식으로 바뀌어서 최소 길이는 탐지 오류 방지용으로만 낮게 유지.
+const HIGHLIGHT_MIN_WINDOW_MS = 12_000;
 const HIGHLIGHT_MAX_WINDOW_MS = 90_000;
 // 가사가 없어 35% 규칙으로 폴백할 때만 쓰는 고정 리드인(간주 구간을 알 방법이 없어서 그냥 고정값).
 const HIGHLIGHT_LEAD_IN_SECONDS = 4;

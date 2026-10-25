@@ -1730,7 +1730,7 @@ SIMILAR_TRACKS_RAW_CAP = 40  # 가사 필터로 걸러질 걸 감안해서, 후�
 # 덕분에 첫 호출부터 큐가 훨씬 꽉 차 보이고, 최대치(프론트 MAX_QUEUE_SIZE=40)까지도 이어붙이기
 # 한두 번이면 도달함. 너무 크게 올리지 않은 이유는 아래 이미지 리졸브 비용과 직결되기 때문.
 SIMILAR_TRACKS_FINAL_COUNT = 25  # 가사 있는 곡만 걸러낸 뒤 큐에 실제로 담을 개수
-SIMILAR_TRACKS_CACHE_VERSION = "v13"  # similar_tracks()와 next-tracks override 등록/삭제 엔드포인트가 같이 참조함. v10: 한글 제목/아티스트명 보완(_apply_korean_titles) 추가로 버전업
+SIMILAR_TRACKS_CACHE_VERSION = "v14"  # similar_tracks()와 next-tracks override 등록/삭제 엔드포인트가 같이 참조함. v10: 한글 제목/아티스트명 보완(_apply_korean_titles) 추가로 버전업
 
 # (§84) Last.fm 유사곡/유사 아티스트 결과가 이보다 적으면 AI 폴백을 추가로 돌림. "도요한"처럼
 # artist.getSimilar가 결과 1개만 던지는 경우가 실사용 중 발견돼서 추가 — 그 1개 결과도 그대로
@@ -1888,6 +1888,70 @@ def _ai_free_next_track_fallback(artist: str, track: str, exclude: set) -> list[
         picked_pairs.append((picked_artist, picked_track))
 
     return _resolve_curated_tracks(picked_pairs)
+
+
+# (2026-10-25) 장르 게이트 — Last.fm 유사 아티스트가 장르가 전혀 다른 아티스트를 섞어주는 문제(래퍼
+# 곡 다음에 아이유 등)를 곡/사용자 수와 상관없이 자동으로 걸러내기 위한 검증. 시드 아티스트와 후보
+# 아티스트의 Last.fm 상위 태그를 단어 단위로 비교해서, 양쪽 다 태그가 있는데 겹치는 단어가 하나도
+# 없으면 탈락시킴(태그가 없으면 판단 불가라 통과). "korean", "seen live" 같은 범용 태그는 비교에서 뺌.
+_GENERIC_TAG_TOKENS = {
+    "korean", "korea", "south", "k", "seen", "live", "favorites", "favourites", "favorite", "male",
+    "female", "vocalists", "vocalist", "singer", "songwriter", "00s", "10s", "20s", "90s", "80s",
+    "70s", "60s", "good", "best", "awesome", "love", "loved", "beautiful", "music", "artist", "my",
+    "all", "kpop", "pop", "asian", "j", "japanese", "american", "british", "english", "usa", "uk",
+}
+# 서로 같은 계열로 취급할 단어들(한쪽이 "hip-hop", 다른 쪽이 "rap"만 달아도 겹친다고 봄).
+_TAG_TOKEN_ALIASES = {
+    "hip": "hiphop", "hop": "hiphop", "hiphop": "hiphop", "rap": "hiphop", "trap": "hiphop",
+    "rnb": "rnb", "r&b": "rnb", "soul": "rnb", "ballad": "ballad", "ballads": "ballad",
+    "indie": "indie", "folk": "indie", "acoustic": "indie", "rock": "rock", "punk": "rock",
+    "metal": "rock", "alternative": "rock", "electronic": "electronic", "edm": "electronic",
+    "dance": "electronic", "house": "electronic", "jazz": "jazz",
+}
+
+
+def _artist_genre_tokens(artist_name: str) -> set:
+    cache_key = f"artist-genre-tokens:v1:{artist_name.lower().strip()}"
+    cached = get_cached(cache_key)
+    if cached is not None:
+        return set(cached)
+    tokens: set = set()
+    try:
+        data = lastfm_get({"method": "artist.getTopTags", "artist": artist_name})
+        tags = data.get("toptags", {}).get("tag", [])[:6]
+        for t in tags:
+            try:
+                if int(t.get("count") or 0) < 15:
+                    continue
+            except (TypeError, ValueError):
+                continue
+            for word in re.split(r"[^0-9a-zA-Z&가-힣]+", (t.get("name") or "").lower()):
+                if not word or word in _GENERIC_TAG_TOKENS:
+                    continue
+                tokens.add(_TAG_TOKEN_ALIASES.get(word, word))
+    except Exception:
+        pass  # 태그 조회 실패 — 빈 집합(판단 불가 → 통과)
+    set_cached(cache_key, sorted(tokens), ttl=60 * 60 * 24 * 7)
+    return tokens
+
+
+def _filter_by_genre_gate(seed_artist: str, tracks: list) -> list:
+    seed_tokens = _artist_genre_tokens(seed_artist)
+    if not seed_tokens:
+        return tracks
+    names = sorted({t["artist"] for t in tracks if t.get("artist")})
+    if not names:
+        return tracks
+    with ThreadPoolExecutor(max_workers=min(len(names), 8)) as executor:
+        token_map = dict(zip(names, executor.map(_artist_genre_tokens, names)))
+    kept = []
+    for t in tracks:
+        cand = token_map.get(t.get("artist"), set())
+        if not cand or (cand & seed_tokens):
+            kept.append(t)
+        else:
+            print(f"[similar-tracks] 장르 불일치로 제외: {t.get('artist')} - {t.get('name')} (시드 {seed_artist} {sorted(seed_tokens)} vs {sorted(cand)})")
+    return kept
 
 
 @app.get("/similar-tracks")
@@ -2074,7 +2138,9 @@ def similar_tracks(artist: str, track: str, x_session_id: Optional[str] = Header
 
     # "다음 트랙 큐도 가사 있는 곡만 나왔으면 좋겠다"는 요청으로, 위에서 넉넉히 모아둔 후보
     # (최대 40개) 중 가사가 실제로 있는 곡만 걸러서 최종 개수(25개)까지 자름.
-    tracks = _filter_tracks_with_lyrics(tracks[:SIMILAR_TRACKS_RAW_CAP], SIMILAR_TRACKS_FINAL_COUNT)
+    # (2026-10-25) 장르 게이트 — 가사 필터(LRCLIB 조회라 무거움) 전에 먼저 걸러서 낭비도 줄임.
+    tracks = _filter_by_genre_gate(artist, tracks[:SIMILAR_TRACKS_RAW_CAP])
+    tracks = _filter_tracks_with_lyrics(tracks, SIMILAR_TRACKS_FINAL_COUNT)
 
     # (§84) 여기까지 모은 게 너무 적으면("도요한"처럼 artist.getSimilar가 결과 1개만 주는 경우
     # 등) Claude Haiku 폴백으로 보충 — 바로 아래 유튜브 "이 아티스트의 다른 곡" 폴백보다 먼저

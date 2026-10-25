@@ -3353,6 +3353,41 @@ def _parse_youtube_duration_seconds(iso8601: str) -> Optional[int]:
     return hours * 3600 + minutes * 60 + seconds
 
 
+_YT_BAD_TITLE_KEYWORDS = (
+    "live", "라이브", "축제", "직캠", "fancam", "cover", "커버", "무대", "콘서트", "concert", "공연",
+    "reaction", "리액션", "playlist", "플레이리스트", "모음", "1시간", "inst.", "instrumental", "mr ",
+    "karaoke", "노래방", "teaser", "티저", "shorts", "#shorts", "교차편집", "응원법", "대학", "festival",
+    "sped up", "slowed", "nightcore", "8d", "리믹스", "remix",
+)
+_YT_GOOD_TITLE_KEYWORDS = (
+    "official audio", "official video", "official music video", "official mv", "m/v", "mv", "audio",
+    "lyrics", "lyric video", "가사", "공식", "official",
+)
+
+
+def _score_youtube_candidate(artist: str, track: str, video_title: str, channel_title: str) -> int:
+    """유튜브 검색 후보 점수 — 높을수록 '원곡 음원/공식 뮤비'일 가능성이 큼."""
+    title = (video_title or "").lower()
+    channel = (channel_title or "").lower()
+    want_artist = (artist or "").lower().strip()
+    want_track = (track or "").lower().strip()
+    score = 0
+    if channel.endswith("- topic") or channel.endswith(" topic"):
+        score += 5  # 유튜브가 음반사 음원으로 자동 생성하는 채널 — 원곡일 확률이 가장 높음
+    if "vevo" in channel or "official" in channel or "records" in channel or "entertainment" in channel:
+        score += 3
+    if want_artist and (want_artist in channel or want_artist in title):
+        score += 2
+    if want_track and want_track in title:
+        score += 2
+    if any(k in title for k in _YT_GOOD_TITLE_KEYWORDS):
+        score += 2
+    # 사용자가 곡 제목에 live/remix 등을 직접 넣었다면(요청 자체가 그 버전) 감점 키워드에서 제외
+    bad_hits = [k for k in _YT_BAD_TITLE_KEYWORDS if k in title and k not in want_track]
+    score -= 4 * len(bad_hits)
+    return score
+
+
 @app.get("/youtube-search")
 def youtube_search(artist: str, track: str, x_session_id: Optional[str] = Header(default=None)):
     """
@@ -3370,7 +3405,9 @@ def youtube_search(artist: str, track: str, x_session_id: Optional[str] = Header
     if not YOUTUBE_API_KEY:
         raise HTTPException(status_code=503, detail="YOUTUBE_API_KEY가 설정 안 돼있어요.")
 
-    cache_key = f"youtube-search:v2:{artist.lower().strip()}:{track.lower().strip()}"
+    # v3: (2026-10-25) 라이브/축제 직캠/커버 영상이 걸려서 가사 타이밍이 어긋나던 문제로 후보 점수화를 추가해
+    # 예전에 저장된 잘못된 선택이 안 남게 버전업.
+    cache_key = f"youtube-search:v3:{artist.lower().strip()}:{track.lower().strip()}"
     cached = get_cached(cache_key)
     if cached is not None:
         if x_session_id:
@@ -3380,7 +3417,7 @@ def youtube_search(artist: str, track: str, x_session_id: Optional[str] = Header
     res = requests.get(YOUTUBE_SEARCH_URL, params={
         "part": "snippet",
         "type": "video",
-        "maxResults": 5,
+        "maxResults": 8,
         "q": f"{artist} {track}",
         "key": YOUTUBE_API_KEY,
     })
@@ -3397,22 +3434,31 @@ def youtube_search(artist: str, track: str, x_session_id: Optional[str] = Header
     if len(candidate_ids) > 1:
         try:
             duration_res = requests.get(YOUTUBE_VIDEOS_URL, params={
-                "part": "contentDetails",
+                "part": "contentDetails,snippet",
                 "id": ",".join(candidate_ids),
                 "key": YOUTUBE_API_KEY,
             }, timeout=5)
             if duration_res.status_code == 200:
-                durations = {
-                    item["id"]: _parse_youtube_duration_seconds(item.get("contentDetails", {}).get("duration", ""))
-                    for item in duration_res.json().get("items", [])
-                }
-                # candidate_ids 순서(검색 관련도 순)를 그대로 유지하면서, 그중 "노래 길이"로
-                # 보이는 첫 번째를 고름 — 관련도 1등이 길어도 2~5등 중에 정상 길이가 있으면 그걸 씀
+                detail_by_id = {item["id"]: item for item in duration_res.json().get("items", [])}
+                # (2026-10-25) 관련도 1등이 학교 축제/라이브 직캠/커버 영상인 경우가 있어서(예: 잔나비 곡이
+                # 인하대 축제 영상으로 재생되고 가사 타이밍도 어긋남), 길이만 보던 걸 제목/채널 점수로 확장:
+                # 공식 음원/뮤비/Topic 채널은 가산, 라이브/직캠/커버/모음 등은 감점. 동점이면 검색 관련도
+                # 순서(candidate_ids 순서)를 그대로 따름. 노래 길이(10분 이하) 아니면 후보에서 제외.
+                best_score = None
                 for cid in candidate_ids:
-                    d = durations.get(cid)
-                    if d is not None and d <= YOUTUBE_MAX_SONG_DURATION_SECONDS:
+                    detail = detail_by_id.get(cid)
+                    if not detail:
+                        continue
+                    d = _parse_youtube_duration_seconds(detail.get("contentDetails", {}).get("duration", ""))
+                    if d is None or d > YOUTUBE_MAX_SONG_DURATION_SECONDS:
+                        continue
+                    snippet = detail.get("snippet", {})
+                    score = _score_youtube_candidate(
+                        artist, track, snippet.get("title", ""), snippet.get("channelTitle", "")
+                    )
+                    if best_score is None or score > best_score:
+                        best_score = score
                         video_id = cid
-                        break
         except requests.RequestException as e:
             # 길이 확인이 실패해도 재생 자체는 막으면 안 되니, 기존처럼 1등 후보로 조용히 진행
             print(f"[youtube-search] 영상 길이 확인 실패(1등 후보로 진행): {e}")

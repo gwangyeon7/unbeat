@@ -1923,30 +1923,21 @@ export default function Home() {
             &quot;{contextMood.moodLabel}&quot; 추천
           </p>
           <p className="mb-2 text-xs text-white/40">{contextMood.description}</p>
-          {contextMood.domesticTracks.length > 0 && (
-            <div className="mb-6">
-              <CompactTrackGrid
-                onViewArtist={handleViewArtist}
-                tracks={contextMood.domesticTracks}
-                isFavorite={isTrackFavorite}
-                onToggleFavorite={handleToggleFavoriteTrack}
-                onPlay={handlePlay}
-                onAddToPlaylist={handleOpenAddToPlaylist}
-                scrollable
-              />
-            </div>
-          )}
-          {contextMood.internationalTracks.length > 0 && (
-            <CompactTrackGrid
-              onViewArtist={handleViewArtist}
-              tracks={contextMood.internationalTracks}
-              isFavorite={isTrackFavorite}
-              onToggleFavorite={handleToggleFavoriteTrack}
-              onPlay={handlePlay}
-              onAddToPlaylist={handleOpenAddToPlaylist}
-              scrollable
-            />
-          )}
+          {/* (2026-10-25) 한국 서비스라 날씨 추천에는 국내곡만 보여줌 — 해외곡은 국내곡이 하나도
+              없을 때만 대신 보여줘서 이 섹션이 비어 보이지 않게 함. */}
+          <CompactTrackGrid
+            onViewArtist={handleViewArtist}
+            tracks={
+              contextMood.domesticTracks.length > 0
+                ? contextMood.domesticTracks
+                : contextMood.internationalTracks
+            }
+            isFavorite={isTrackFavorite}
+            onToggleFavorite={handleToggleFavoriteTrack}
+            onPlay={handlePlay}
+            onAddToPlaylist={handleOpenAddToPlaylist}
+            scrollable
+          />
         </div>
       )}
 

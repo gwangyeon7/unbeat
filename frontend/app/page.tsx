@@ -1723,7 +1723,7 @@ export default function Home() {
             <>
               {domesticMoodTracks.length > 0 && (
                 <div className="mb-6">
-                  <p className="mb-2 text-xs text-white/40">"{selectedMoodLabel}" 국내 인기곡</p>
+                  <p className="mb-2 text-xl font-bold text-white">"{selectedMoodLabel}" 국내 인기곡</p>
                   <CompactTrackGrid
                     onViewArtist={handleViewArtist}
                     tracks={domesticMoodTracks}
@@ -1737,7 +1737,7 @@ export default function Home() {
               )}
               {internationalMoodTracks.length > 0 && (
                 <div>
-                  <p className="mb-2 text-xs text-white/40">"{selectedMoodLabel}" 해외 인기곡</p>
+                  <p className="mb-2 text-xl font-bold text-white">"{selectedMoodLabel}" 해외 인기곡</p>
                   <CompactTrackGrid
                     onViewArtist={handleViewArtist}
                     tracks={internationalMoodTracks}
@@ -1794,15 +1794,15 @@ export default function Home() {
           </button>
       {searchTracks.length > 0 && (
         <div className="w-full max-w-xl">
-          <p className="mb-2 text-xs text-white/40">
+          <p className="mb-2 text-xl font-bold text-white">
             검색된 곡
             {aiGuessedQuery && (
-              <span className="ml-1 text-white/30">
+              <span className="ml-1 text-xs font-normal text-white/30">
                 (AI 추측: <span className="text-white/50">{aiGuessedQuery}</span>로 검색됨)
               </span>
             )}
             {youtubeFallbackUsed && (
-              <span className="ml-1 text-white/30">
+              <span className="ml-1 text-xs font-normal text-white/30">
                 (Last.fm에 없어서 유튜브에서 찾았어요 · 첫 곡은 청취자 수 등 정보 없음)
               </span>
             )}
@@ -1822,7 +1822,7 @@ export default function Home() {
           제목으로 구분해서 보여줌. 카드보다 촘촘한 줄 스타일(CompactTrackGrid, 무드 탐색과 동일)로 표시. */}
       {tagSearchTracks.length > 0 && (
         <div className="w-full max-w-xl">
-          <p className="mb-2 text-xs text-white/40">관련 곡 (장르/연대)</p>
+          <p className="mb-2 text-xl font-bold text-white">관련 곡 (장르/연대)</p>
           <CompactTrackGrid
             onViewArtist={handleViewArtist}
             tracks={tagSearchTracks}
@@ -1836,15 +1836,15 @@ export default function Home() {
 
       {artists.length > 0 && (
         <div className="w-full max-w-xl">
-          <p className="mb-2 text-xs text-white/40">
+          <p className="mb-2 text-xl font-bold text-white">
             검색된 아티스트
             {correctedArtistName && (
-              <span className="ml-1 text-white/30">
+              <span className="ml-1 text-xs font-normal text-white/30">
                 (오타 교정: <span className="text-white/50">{correctedArtistName}</span>로 검색됨)
               </span>
             )}
             {!correctedArtistName && aiGuessedQuery && (
-              <span className="ml-1 text-white/30">
+              <span className="ml-1 text-xs font-normal text-white/30">
                 (AI 추측: <span className="text-white/50">{aiGuessedQuery}</span>로 검색됨)
               </span>
             )}
@@ -1868,7 +1868,7 @@ export default function Home() {
 
       {tracks.length > 0 && (
         <div className="w-full max-w-xl">
-          <p className="mb-2 text-xs text-white/40">"{selectedArtist}"와 비슷한 아티스트의 곡</p>
+          <p className="mb-2 text-xl font-bold text-white">"{selectedArtist}"와 비슷한 아티스트의 곡</p>
           <TrackList
             tracks={tracks}
             isFavorite={isTrackFavorite}
@@ -1884,7 +1884,7 @@ export default function Home() {
           좋겠다"는 요청 반영. /recommend(비슷한 아티스트)와 달리 이 아티스트 "본인"의 곡만 씀. */}
       {searchContextArtist && searchArtistTracks.length > 0 && (
         <div className="w-full max-w-xl">
-          <p className="mb-2 text-xs text-white/40">"{searchContextArtist}"의 다른 곡</p>
+          <p className="mb-2 text-xl font-bold text-white">"{searchContextArtist}"의 다른 곡</p>
           <TrackList
             tracks={searchArtistTracks}
             isFavorite={isTrackFavorite}
@@ -1903,7 +1903,7 @@ export default function Home() {
           (§61) 검색 중(searchContextArtist가 있을 때)엔 위 섹션으로 대체되므로 숨김. */}
       {!searchContextArtist && chartTracks.length > 0 && (
         <div className="w-full max-w-xl">
-          <p className="mb-2 text-xs text-white/40">지금 인기 있는 곡 (글로벌)</p>
+          <p className="mb-2 text-xl font-bold text-white">지금 인기 있는 곡 (글로벌)</p>
           <TrackList
             tracks={chartTracks}
             isFavorite={isTrackFavorite}
@@ -1919,9 +1919,10 @@ export default function Home() {
           뜨면 헷갈림). "스크롤 내리면 나오는 부분" 요청으로 글로벌 차트 밑, 다시 듣기 위에 배치. */}
       {!searchContextArtist && !selectedMood && contextMood && (
         <div className="w-full max-w-xl">
-          <p className="mb-2 text-xs text-white/40">
-            {contextMood.description} · &quot;{contextMood.moodLabel}&quot; 추천
+          <p className="text-xl font-bold text-white">
+            &quot;{contextMood.moodLabel}&quot; 추천
           </p>
+          <p className="mb-2 text-xs text-white/40">{contextMood.description}</p>
           {contextMood.domesticTracks.length > 0 && (
             <div className="mb-6">
               <CompactTrackGrid
@@ -1956,7 +1957,7 @@ export default function Home() {
           다른 기준의 서로 다른 목록이라 중복이 아님. */}
       {recentPlaysAsTrack.length > 0 && (
         <div className="w-full max-w-xl">
-          <p className="mb-2 text-xs text-white/40">다시 듣기</p>
+          <p className="mb-2 text-xl font-bold text-white">다시 듣기</p>
           <CompactTrackGrid
             onViewArtist={handleViewArtist}
             tracks={recentPlaysAsTrack}
@@ -1975,7 +1976,7 @@ export default function Home() {
           섹션도 같은 API를 US 리전으로 호출해서 새로 추가함. */}
       {krChartTracks.length > 0 && (
         <div className="w-full max-w-xl">
-          <p className="mb-2 text-xs text-white/40">국내 인기 급상승</p>
+          <p className="mb-2 text-xl font-bold text-white">국내 인기 급상승</p>
           <TrackList
             tracks={krChartTracks}
             isFavorite={isTrackFavorite}
@@ -1988,7 +1989,7 @@ export default function Home() {
 
       {usTrendingTracks.length > 0 && (
         <div className="w-full max-w-xl">
-          <p className="mb-2 text-xs text-white/40">해외 인기 급상승</p>
+          <p className="mb-2 text-xl font-bold text-white">해외 인기 급상승</p>
           <TrackList
             tracks={usTrendingTracks}
             isFavorite={isTrackFavorite}
@@ -2003,7 +2004,7 @@ export default function Home() {
           아티스트 랭킹을 계속 보여주면 "검색해도 다 똑같다"는 원래 지적이 그대로 남기 때문. */}
       {!searchContextArtist && topArtists.length > 0 && (
         <div className="w-full max-w-xl">
-          <p className="mb-2 text-xs text-white/40">인기 아티스트</p>
+          <p className="mb-2 text-xl font-bold text-white">인기 아티스트</p>
           <div className="flex snap-x snap-mandatory gap-3 overflow-x-auto pb-2">
             {topArtists.map((artist) => (
               <div key={artist.name} className="w-64 shrink-0 snap-start snap-always">

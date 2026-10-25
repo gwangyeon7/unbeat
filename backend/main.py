@@ -1730,7 +1730,7 @@ SIMILAR_TRACKS_RAW_CAP = 40  # 가사 필터로 걸러질 걸 감안해서, 후�
 # 덕분에 첫 호출부터 큐가 훨씬 꽉 차 보이고, 최대치(프론트 MAX_QUEUE_SIZE=40)까지도 이어붙이기
 # 한두 번이면 도달함. 너무 크게 올리지 않은 이유는 아래 이미지 리졸브 비용과 직결되기 때문.
 SIMILAR_TRACKS_FINAL_COUNT = 25  # 가사 있는 곡만 걸러낸 뒤 큐에 실제로 담을 개수
-SIMILAR_TRACKS_CACHE_VERSION = "v12"  # similar_tracks()와 next-tracks override 등록/삭제 엔드포인트가 같이 참조함. v10: 한글 제목/아티스트명 보완(_apply_korean_titles) 추가로 버전업
+SIMILAR_TRACKS_CACHE_VERSION = "v13"  # similar_tracks()와 next-tracks override 등록/삭제 엔드포인트가 같이 참조함. v10: 한글 제목/아티스트명 보완(_apply_korean_titles) 추가로 버전업
 
 # (§84) Last.fm 유사곡/유사 아티스트 결과가 이보다 적으면 AI 폴백을 추가로 돌림. "도요한"처럼
 # artist.getSimilar가 결과 1개만 던지는 경우가 실사용 중 발견돼서 추가 — 그 1개 결과도 그대로
@@ -1824,6 +1824,68 @@ def _ai_next_track_fallback(artist: str, track: str, exclude: set) -> list[dict]
             continue
         exclude.add(key)
         picked_pairs.append(pool_lookup[key])
+
+    return _resolve_curated_tracks(picked_pairs)
+
+
+AI_FREE_NEXT_TRACK_COUNT = 14
+
+
+def _ai_free_next_track_fallback(artist: str, track: str, exclude: set) -> list[dict]:
+    """
+    (2026-10-25) 권오선처럼 Last.fm 데이터가 거의 없는 래퍼/발라드 곡에서, 위 §84 폴백이 "검증된 큐레이션
+    목록(힙합 아티스트가 거의 없음) 안에서만" 고르다 보니 아이유/Crush 같은 엉뚱한 곡이 다음 트랙으로 나오던
+    문제 — 이번엔 모델이 목록 제약 없이 "같은 장르/씬의 실제 곡"을 직접 추천하게 하고, 환각을 막기 위해
+    추천된 곡을 전부 Last.fm track.search로 다시 검증(_resolve_curated_tracks)해서 실존하는 곡만 통과시킴.
+    """
+    if not ANTHROPIC_API_KEY:
+        return []
+
+    prompt = f"""지금 "{artist} - {track}"를 재생 중이야.
+
+이 곡과 장르와 분위기가 같은 곡을 "다음 트랙"으로 이어 틀려고 해. 같은 씬(예: 한국 힙합 래퍼의 곡이면 다른 한국
+래퍼들의 곡, 한국 발라드면 비슷한 한국 발라드, 해외 곡이면 비슷한 해외 곡)에서 실제로 존재하는 곡을
+{AI_FREE_NEXT_TRACK_COUNT}개 추천해줘. 장르가 다르거나 인기만 많은 아무 곡이나 넣지 마. 같은 아티스트는 최대 2곡까지만
+넣고, 지금 재생 중인 곡 자체는 제외해줘. 곡 제목과 아티스트명은 정확한 공식 표기로 적어줘.
+다른 설명 없이 JSON 배열로만 답해줘. 형식: [{{"artist": "아티스트명", "track": "곡명"}}, ...]"""
+
+    try:
+        client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+        message = client.messages.create(
+            model=ANTHROPIC_MODEL,
+            max_tokens=1024,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        raw_text = message.content[0].text.strip()
+    except Exception as e:
+        print(f"[anthropic] 다음 트랙 자유 추천 요청 실패: {e}")
+        return []
+
+    if raw_text.startswith("```"):
+        raw_text = raw_text.strip("`")
+        if raw_text.startswith("json"):
+            raw_text = raw_text[4:]
+        raw_text = raw_text.strip()
+
+    try:
+        suggestions = json.loads(raw_text)
+    except json.JSONDecodeError as e:
+        print(f"[anthropic] 다음 트랙 자유 추천 JSON 파싱 실패: {e} / 원문: {raw_text[:300]}")
+        return []
+
+    picked_pairs = []
+    for item in suggestions:
+        if not isinstance(item, dict):
+            continue
+        picked_artist = str(item.get("artist", "")).strip()
+        picked_track = str(item.get("track", "")).strip()
+        if not picked_artist or not picked_track:
+            continue
+        key = (picked_artist.lower(), picked_track.lower())
+        if key in exclude:
+            continue
+        exclude.add(key)
+        picked_pairs.append((picked_artist, picked_track))
 
     return _resolve_curated_tracks(picked_pairs)
 
@@ -2020,8 +2082,12 @@ def similar_tracks(artist: str, track: str, x_session_id: Optional[str] = Header
     # 다음 트랙으로는 더 낫다고 판단해서 순서를 이렇게 둠. 수작업 override(§83)가 이미 있는
     # 곡이면 이 함수 자체가 호출 안 됨(맨 위에서 override를 찾으면 바로 return하므로).
     if len(tracks) < AI_NEXT_TRACK_FALLBACK_MIN_COUNT:
-        ai_tracks = _ai_next_track_fallback(artist, track, seen)
+        # (2026-10-25) 1순위: 장르/씬이 같은 곡을 자유롭게 추천받고 Last.fm으로 검증. 그래도 모자라면(검증에서 많이
+        # 탈락하는 경우 등) 기존 큐레이션 목록 기반 폴백으로 보충.
+        ai_tracks = _ai_free_next_track_fallback(artist, track, seen)
         tracks.extend(ai_tracks)
+        if len(tracks) < AI_NEXT_TRACK_FALLBACK_MIN_COUNT:
+            tracks.extend(_ai_next_track_fallback(artist, track, seen))
 
     # (§60) Last.fm 유사곡/유사 아티스트 확장 + 위 AI 폴백까지 다 돌려도 후보가 하나도 없으면 — 이 아티스트가
     # Last.fm 카탈로그 자체에 없는 경우일 가능성이 높음(§59의 유튜브 검색 폴백으로 재생된 곡에서

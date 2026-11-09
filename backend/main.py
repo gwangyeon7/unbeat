@@ -3278,8 +3278,13 @@ def discover_by_mood(tag: str, x_session_id: Optional[str] = Header(default=None
 
     domestic_pool = pool["domesticPool"]
     international_pool = pool["internationalPool"]
-    domestic_tracks = random.sample(domestic_pool, min(RESULT_SIZE, len(domestic_pool)))
-    international_tracks = random.sample(international_pool, min(RESULT_SIZE, len(international_pool)))
+    # (2026-10-29) 국내:해외 = 7:3 — "한국인 중심 서비스인데 팝송이 더 많이 나온다"는 피드백.
+    # 예전엔 국내/해외를 각각 RESULT_SIZE(10)곡씩 뽑아서 화면에 같은 비중으로 보였음. 국내 풀이
+    # 모자라면(큐레이션이 짧은 무드) 모자란 만큼 해외로 채워서 총 10곡은 유지함.
+    domestic_n = min(7, len(domestic_pool))
+    international_n = min(RESULT_SIZE - domestic_n, len(international_pool))
+    domestic_tracks = random.sample(domestic_pool, domestic_n)
+    international_tracks = random.sample(international_pool, international_n)
     # (버그 수정, 2026-10-14) 무드 추천(감성 카드 diary_reflection/context_mood도 이 함수를
     # 그대로 재사용함)에 한글 아티스트명 보완이 빠져있었음 — 제목은 국내 발라드/인디 가수는
     # Last.fm에 이미 한글로 등록된 경우가 많아 멀쩡해 보였는데, 아티스트명은 (인지도 낮은

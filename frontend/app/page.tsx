@@ -58,12 +58,17 @@ import {
   getProfile,
   likePlaylist,
   unlikePlaylist,
+  followUser,
+  unfollowUser,
+  getMyNickname,
+  setBio,
   PlaylistApiError,
   type Favorite,
   type FavoriteTrack,
   type Playlist,
   type PlaylistTrack,
   type PublicPlaylist,
+  type UserProfilePage,
 } from "@/lib/playlistApi";
 import { MUSIC_CATEGORIES } from "@/lib/categories";
 
@@ -254,6 +259,9 @@ export default function Home() {
   // 그 사람이 공개한 재생목록 모음(프로필 페이지)으로 들어감.
   const [viewingProfileNickname, setViewingProfileNickname] = useState<string | null>(null);
   const [profilePlaylists, setProfilePlaylists] = useState<PublicPlaylist[] | null>(null);
+  // (프로필 화면/팔로우, 2026-10-29) 프로필 카드에 쓰는 자동 계산 값(팔로워 수, 배지 등)과,
+  // 내가 팔로우 중인 닉네임 목록(랭킹 "팔로우" 탭용).
+  const [profileInfo, setProfileInfo] = useState<UserProfilePage | null>(null);
   // 재생목록을 처음 공개로 전환하려는데 아직 닉네임이 없으면(백엔드 428) 닉네임 설정 모달을
   // 띄움 — 어느 재생목록을 공개하려던 시도였는지 기억해뒀다가, 닉네임 저장에 성공하면 그
   // 재생목록 공개 전환을 자동으로 다시 시도함(사용자가 "공개" 버튼을 두 번 누르지 않게).
@@ -523,11 +531,29 @@ export default function Home() {
     setPublicPlaylistTracks(null);
     setViewingProfileNickname(null);
     setProfilePlaylists(null);
+    setProfileInfo(null);
     setIsLoadingPublicFeed(true);
     getPublicPlaylists()
       .then(setPublicPlaylists)
       .catch(() => setError("공개 재생목록을 불러오지 못했어요."))
       .finally(() => setIsLoadingPublicFeed(false));
+  }
+
+  // 헤더 사람 아이콘 시트의 "내 프로필" — 내 닉네임으로 프로필 화면을 바로 엽니다. 닉네임은
+  // 재생목록을 처음 공개할 때 정하므로, 아직 없으면 안내만 함.
+  async function handleOpenMyProfile() {
+    setIsProfileSheetOpen(false);
+    try {
+      const { nickname } = await getMyNickname();
+      if (!nickname) {
+        setError("아직 닉네임이 없어요. 재생목록을 공개하면 닉네임을 정할 수 있어요.");
+        return;
+      }
+      handleOpenPublicFeed();
+      handleViewProfile(nickname);
+    } catch {
+      setError("내 프로필을 불러오지 못했어요.");
+    }
   }
 
   function handleViewPublicPlaylist(playlistId: number) {
@@ -542,9 +568,52 @@ export default function Home() {
   function handleViewProfile(nickname: string) {
     setViewingProfileNickname(nickname);
     setProfilePlaylists(null);
+    setProfileInfo(null);
     getProfile(nickname)
-      .then((res) => setProfilePlaylists(res.playlists))
+      .then((res) => {
+        setProfilePlaylists(res.playlists);
+        setProfileInfo(res);
+      })
       .catch(() => setError("프로필을 불러오지 못했어요."));
+  }
+
+  // 팔로우/언팔로우 — 낙관적으로 먼저 화면에 반영하고 서버 값으로 덮어씀, 실패하면 되돌림.
+  // 비로그인(403)이면 로그인 모달(좋아요/공개 전환과 같은 패턴).
+  async function handleToggleFollow() {
+    if (!profileInfo) return;
+    const prev = profileInfo;
+    const nextFollowed = !prev.followedByMe;
+    setProfileInfo({
+      ...prev,
+      followedByMe: nextFollowed,
+      followerCount: Math.max(0, prev.followerCount + (nextFollowed ? 1 : -1)),
+    });
+    try {
+      const result = nextFollowed ? await followUser(prev.nickname) : await unfollowUser(prev.nickname);
+      setProfileInfo((cur) =>
+        cur && cur.nickname === prev.nickname
+          ? { ...cur, followedByMe: result.followedByMe, followerCount: result.followerCount }
+          : cur
+      );
+    } catch (err) {
+      setProfileInfo((cur) => (cur && cur.nickname === prev.nickname ? prev : cur));
+      if (err instanceof PlaylistApiError && err.status === 403) {
+        setError("팔로우하려면 먼저 로그인해주세요.");
+        setIsAuthModalOpen(true);
+      } else {
+        setError("팔로우 처리에 실패했어요.");
+      }
+    }
+  }
+
+  // 한 줄 소개 저장(내 프로필에서만 호출됨)
+  async function handleSaveBio(bio: string) {
+    try {
+      const r = await setBio(bio);
+      setProfileInfo((cur) => (cur ? { ...cur, bio: r.bio || null } : cur));
+    } catch {
+      setError("한 줄 소개를 저장하지 못했어요.");
+    }
   }
 
   // 랭킹 페이지 안 "뒤로" — 곡 목록 화면이면 그걸 닫고(프로필 화면이었으면 프로필로, 아니었으면
@@ -556,6 +625,7 @@ export default function Home() {
     } else if (viewingProfileNickname !== null) {
       setViewingProfileNickname(null);
       setProfilePlaylists(null);
+      setProfileInfo(null);
     }
   }
 
@@ -573,6 +643,7 @@ export default function Home() {
       ...p,
       likedByMe: nextLiked,
       likeCount: p.likeCount + (nextLiked ? 1 : -1),
+      weeklyLikeCount: Math.max(0, p.weeklyLikeCount + (nextLiked ? 1 : -1)),
     }));
     setPublicPlaylists(optimistic);
     setProfilePlaylists((prev) => (prev ? optimistic(prev) : prev));
@@ -580,6 +651,7 @@ export default function Home() {
     try {
       const result = nextLiked ? await likePlaylist(playlist.id) : await unlikePlaylist(playlist.id);
       const applyServer = applyTo((p) => ({ ...p, likeCount: result.likeCount, likedByMe: result.likedByMe }));
+      // weeklyLikeCount는 서버 응답에 없어서 낙관적 값을 그대로 둠(피드를 다시 열면 정확한 값)
       setPublicPlaylists(applyServer);
       setProfilePlaylists((prev) => (prev ? applyServer(prev) : prev));
     } catch (err) {
@@ -2149,6 +2221,13 @@ export default function Home() {
           <p className="mb-4 truncate text-sm font-medium">{userEmail}</p>
           <button
             type="button"
+            onClick={handleOpenMyProfile}
+            className="mb-2 w-full rounded-md bg-white/10 px-3 py-2.5 text-sm font-medium hover:bg-white/15"
+          >
+            내 프로필
+          </button>
+          <button
+            type="button"
             onClick={async () => {
               await supabase?.auth.signOut();
               setIsProfileSheetOpen(false);
@@ -2431,6 +2510,9 @@ export default function Home() {
           setIsPublicFeedOpen(false);
         }}
         onToggleLike={handleToggleLike}
+        profileInfo={profileInfo}
+        onToggleFollow={handleToggleFollow}
+        onSaveBio={handleSaveBio}
       />
     )}
 

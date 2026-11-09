@@ -66,6 +66,8 @@ data class PublicPlaylistResponse(
     val ownerNickname: String?,
     val coverImageUrl: String?,
     val likeCount: Int,
+    // 최근 7일 안에 받은 좋아요 수 — 랭킹 "이번 주" 탭의 정렬/표시 기준
+    val weeklyLikeCount: Int,
     val likedByMe: Boolean,
     val category: String?
 )

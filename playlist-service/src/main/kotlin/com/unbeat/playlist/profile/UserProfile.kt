@@ -29,6 +29,10 @@ class UserProfile(
     @Column(name = "nickname", nullable = false, unique = true, length = 30)
     var nickname: String,
 
+    // 한 줄 소개(2026-10-29) — 선택 사항, 비어 있으면 프로필에서 숨김. ddl-auto=update로 컬럼 자동 추가.
+    @Column(name = "bio", length = 60)
+    var bio: String? = null,
+
     @Column(name = "created_at", nullable = false)
     val createdAt: LocalDateTime = LocalDateTime.now()
 ) {

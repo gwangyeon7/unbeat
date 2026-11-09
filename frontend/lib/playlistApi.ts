@@ -134,6 +134,8 @@ export type PublicPlaylist = {
   // (게이미피케이션 3단계) 등수 배지(금/은/동)는 "짜치다"는 반응으로 빼고 좋아요 숫자만 남김 —
   // 피드 자체가 likeCount 내림차순으로 정렬돼 내려오므로, 카드가 나열된 순서가 곧 랭킹.
   likeCount: number;
+  // 최근 7일 안에 받은 좋아요 수 — 랭킹 "이번 주" 탭 기준
+  weeklyLikeCount: number;
   likedByMe: boolean;
   // (랭킹 카테고리 필터, 2026-10-10 추가) lib/categories.ts의 value 중 하나 — 카테고리 도입
   // 이전에 이미 공개됐던 재생목록은 null일 수 있음.
@@ -141,9 +143,20 @@ export type PublicPlaylist = {
 };
 
 // (게이미피케이션 2.5단계) 공개 피드에서 닉네임을 누르면 들어가는 "그 사람 페이지".
+export type ProfileBadge = { key: string; label: string };
+
 export type UserProfilePage = {
   nickname: string;
   playlists: PublicPlaylist[];
+  // (프로필 화면, 2026-10-29) 대부분 서버가 자동 계산 — 사용자가 입력하는 건 bio뿐(선택)
+  bio: string | null;
+  followerCount: number;
+  followingCount: number;
+  followedByMe: boolean;
+  isMe: boolean;
+  totalLikes: number;
+  topCategories: string[];
+  badges: ProfileBadge[];
 };
 
 export type PlaylistTrack = {
@@ -232,6 +245,35 @@ export function setNickname(nickname: string): Promise<{ nickname: string }> {
 // 무관하게 누구나 조회 가능.
 export function getProfile(nickname: string): Promise<UserProfilePage> {
   return playlistFetch<UserProfilePage>(`/profile/${encodeURIComponent(nickname)}`);
+}
+
+// 팔로우/언팔로우 — 로그인 필수(비로그인이면 403 PlaylistApiError → 호출하는 쪽이 로그인 모달).
+export function followUser(nickname: string): Promise<{ followerCount: number; followedByMe: boolean }> {
+  return playlistFetch(`/profile/${encodeURIComponent(nickname)}/follow`, { method: "POST" });
+}
+
+export function unfollowUser(nickname: string): Promise<{ followerCount: number; followedByMe: boolean }> {
+  return playlistFetch(`/profile/${encodeURIComponent(nickname)}/follow`, { method: "DELETE" });
+}
+
+// 팔로워/팔로잉 목록(프로필 카드의 숫자를 눌렀을 때). followedByMe/isMe는 요청자 기준.
+export type FollowUser = { nickname: string; followedByMe: boolean; isMe: boolean };
+
+export function getFollowList(nickname: string, type: "followers" | "following"): Promise<{ users: FollowUser[] }> {
+  return playlistFetch<{ users: FollowUser[] }>(`/profile/${encodeURIComponent(nickname)}/${type}`);
+}
+
+// 내 닉네임(없으면 null) — "내 프로필"로 들어갈 때 씀
+export function getMyNickname(): Promise<{ nickname: string | null }> {
+  return playlistFetch<{ nickname: string | null }>("/profile/me");
+}
+
+// 한 줄 소개(선택, 60자). 닉네임이 없으면 428.
+export function setBio(bio: string): Promise<{ bio: string }> {
+  return playlistFetch<{ bio: string }>("/profile/bio", {
+    method: "POST",
+    body: JSON.stringify({ bio }),
+  });
 }
 
 // (게이미피케이션 3단계) 좋아요 — 로그인 필수. 비로그인 상태로 호출하면 403(PlaylistApiError,

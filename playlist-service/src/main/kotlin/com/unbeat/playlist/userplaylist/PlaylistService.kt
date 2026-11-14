@@ -162,6 +162,8 @@ class PlaylistService(
         coverImageUrl = playlistTrackRepository.findFirstByPlaylistIdAndImageUrlIsNotNullOrderByAddedAtDesc(id!!)
             ?.imageUrl,
         likeCount = playlistLikeRepository.countByPlaylistId(id!!).toInt(),
+        weeklyLikeCount = playlistLikeRepository
+            .countByPlaylistIdAndCreatedAtAfter(id!!, java.time.LocalDateTime.now().minusDays(7)).toInt(),
         likedByMe = viewerId != null && playlistLikeRepository.existsByPlaylistIdAndUserId(id!!, viewerId),
         category = category
     )

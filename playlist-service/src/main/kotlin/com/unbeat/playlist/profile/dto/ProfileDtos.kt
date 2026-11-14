@@ -21,7 +21,45 @@ data class NicknameResponse(
     val nickname: String
 )
 
+data class BadgeResponse(
+    val key: String,
+    val label: String
+)
+
+// 프로필 화면용 — 자동 계산되는 값(좋아요 합계/배지/장르)과 선택 입력값(bio)을 한 번에 내려줌.
+// isMe/followedByMe는 요청자가 로그인했을 때만 의미 있음(비로그인이면 둘 다 false).
 data class UserProfilePageResponse(
     val nickname: String,
-    val playlists: List<PublicPlaylistResponse>
+    val playlists: List<PublicPlaylistResponse>,
+    val bio: String?,
+    val followerCount: Int,
+    val followingCount: Int,
+    val followedByMe: Boolean,
+    @get:JsonProperty("isMe")
+    val isMe: Boolean,
+    val totalLikes: Int,
+    val topCategories: List<String>,
+    val badges: List<BadgeResponse>
+)
+
+data class FollowResponse(
+    val followerCount: Int,
+    val followedByMe: Boolean
+)
+
+data class FollowUserResponse(
+    val nickname: String,
+    val followedByMe: Boolean,
+    @get:JsonProperty("isMe")
+    val isMe: Boolean
+)
+
+data class FollowListResponse(
+    val users: List<FollowUserResponse>
+)
+
+data class SetBioRequest(
+    @get:JsonProperty("bio")
+    @param:JsonProperty("bio")
+    val bio: String
 )

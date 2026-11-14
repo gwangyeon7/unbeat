@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 from pydantic import BaseModel
 from typing import Optional
 from rapidfuzz import process as fuzzy_process, fuzz
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, wait
 from datetime import date
 from urllib.parse import quote
 import anthropic
@@ -113,6 +113,32 @@ KNOWN_KOREAN_ARTIST_NAMES_LATIN = {
 }
 
 
+# (2026-10-22) "HYUKOH"/"CHANGMO"처럼 한국에서는 한글 이름(혁오/창모)이 훨씬 익숙한데 화면엔 로마자로
+# 나온다는 피드백 — Claude에게 매번 물으면 "영문이 익숙하면 null" 규칙 때문에 보수적으로 null을
+# 주고(그 null이 180일 캐싱까지 됨), 호출 지연도 생김. 자주 나오는 아티스트는 확정된 한글 표기를
+# 직접 매핑해서 LLM 호출 없이 바로 적용함. 목록에 없는 아티스트만 아래 LLM 경로로 감.
+KOREAN_ARTIST_NAME_OVERRIDES = {
+    "hyukoh": "혁오", "changmo": "창모", "jannabi": "잔나비", "akmu": "악뮤",
+    "day6": "데이식스", "mamamoo": "마마무", "zico": "지코", "epik high": "에픽하이",
+    "winner": "위너", "ikon": "아이콘", "bigbang": "빅뱅", "big bang": "빅뱅", "shinee": "샤이니",
+    "exo": "엑소", "bts": "방탄소년단", "blackpink": "블랙핑크", "newjeans": "뉴진스",
+    "ive": "아이브", "aespa": "에스파", "twice": "트와이스", "stray kids": "스트레이 키즈",
+    "seventeen": "세븐틴", "itzy": "있지", "red velvet": "레드벨벳", "(g)i-dle": "(여자)아이들",
+    "g-idle": "(여자)아이들", "gidle": "(여자)아이들", "le sserafim": "르세라핌", "nmixx": "엔믹스",
+    "enhypen": "엔하이픈", "txt": "투모로우바이투게더", "tomorrow x together": "투모로우바이투게더",
+    "riize": "라이즈", "zerobaseone": "제로베이스원", "zb1": "제로베이스원", "ateez": "에이티즈",
+    "got7": "갓세븐", "monsta x": "몬스타엑스", "super junior": "슈퍼주니어",
+    "girls' generation": "소녀시대", "girls generation": "소녀시대", "snsd": "소녀시대",
+    "apink": "에이핑크", "2ne1": "투애니원", "sistar": "씨스타", "wonder girls": "원더걸스",
+    "gfriend": "여자친구", "oh my girl": "오마이걸", "stayc": "스테이씨", "kara": "카라",
+    "psy": "싸이", "iu": "아이유", "dean": "딘", "heize": "헤이즈", "sunmi": "선미",
+    "taeyeon": "태연", "sokodomo": "소코도모", "paul kim": "폴킴", "10cm": "10cm",
+    "lee hi": "이하이", "baekhyun": "백현", "younha": "윤하", "bol4": "볼빨간사춘기",
+    "melomance": "멜로망스", "car, the garden": "카더가든", "silica gel": "실리카겔",
+    "se so neon": "세소년", "ahn ye-eun": "안예은", "sik-k": "식케이", "keem hyo eun": "김효은",
+}
+
+
 def _is_domestic_artist(artist_name: str) -> bool:
     if HANGUL_PATTERN.search(artist_name):
         return True
@@ -216,8 +242,13 @@ def _first_search_thumbnail(artists: list, tracks: list) -> Optional[str]:
 
 
 def _build_track_results(track_matches: list) -> list:
-    tracks = [
-        {
+    # (속도 개선, 2026-10-22) 검색이 너무 느리다는 피드백(5-1) — 원래는 곡마다 iTunes 이미지 조회
+    # (resolve_track_image, 건당 최대 3초)를 리스트 컴프리헨션 안에서 "순서대로" 불러서 최대 8곡
+    # 분량의 대기가 그대로 누적됐음(캐시가 죽어있으면 매 검색마다 반복). 스레드풀로 동시에 조회.
+    items = [item for item in track_matches if not _is_junk_track_match(item)]
+
+    def build(item):
+        return {
             "name": item["name"],
             # track.search만 예외적으로 artist가 dict가 아니라 문자열로 옴
             "artist": _clean_artist_name(item.get("artist", "")),
@@ -227,10 +258,14 @@ def _build_track_results(track_matches: list) -> list:
                 _clean_artist_name(item.get("artist", "")), item["name"], item.get("image", [])
             ),
         }
-        for item in track_matches
-        if not _is_junk_track_match(item)
-    ]
-    return _apply_korean_titles(tracks)
+
+    if not items:
+        return []
+    with ThreadPoolExecutor(max_workers=min(len(items), 10)) as executor:
+        tracks = list(executor.map(build, items))
+    # 한글 제목/아티스트 보완(Claude 호출)은 최대 3초만 기다림 — 못 끝낸 곡은 원본 이름으로 먼저
+    # 내려주고, 백그라운드에서 계속 돌아 캐시에 채워져서 다음 검색부터 한글로 나옴.
+    return _apply_korean_titles(tracks, deadline=3.0)
 
 
 # "2010년대 kpop"처럼 아티스트/곡 이름이 아니라 장르·연대 키워드로 검색하는 경우를 위해 추가.
@@ -412,7 +447,8 @@ def resolve_korean_title(artist: str, track_name: str, assume_domestic: bool = F
 
 
 def _korean_artist_cache_key(artist: str) -> str:
-    return f"ko-artist:v3:{artist.strip().lower()}"
+    # v4: (2026-10-22) 보수적으로 null이 캐싱된 결과("CHANGMO" 등)를 무효화 — 프롬프트도 완화함
+    return f"ko-artist:v4:{artist.strip().lower()}"
 
 
 # (버그 수정, 2026-10-14) 제목만 한글로 보완했더니 "뚜두뚜두 (DDU-DU DDU-DU) / BLACKPINK"처럼
@@ -431,6 +467,10 @@ def resolve_korean_artist_name(artist: str, assume_domestic: bool = False) -> Op
         return None
     if HANGUL_PATTERN.search(artist):
         return None  # 이미 한글이면 보완 불필요
+
+    override = KOREAN_ARTIST_NAME_OVERRIDES.get(artist.strip().lower())
+    if override:
+        return override if override.lower() != artist.strip().lower() else None
 
     cache_key = _korean_artist_cache_key(artist)
     cached = get_cached(cache_key)
@@ -454,7 +494,8 @@ def resolve_korean_artist_name(artist: str, assume_domestic: bool = False) -> Op
                     '- 한국에서 한글 표기가 통용되는 아티스트면 그 한글 이름을 답해. '
                     '예: "BLACKPINK" → {"korean_name": "블랙핑크"}, "IU" → {"korean_name": "아이유"}, '
                     '"Zion.T" → {"korean_name": "자이언티"}\n'
-                    '- 한국 아티스트지만 영문 표기가 더 익숙하게 쓰이면 null (한글로 바꾸지 마). '
+                    '- 한국 아티스트는 한글 표기가 실제로 널리 쓰이면(예: HYUKOH → 혁오, CHANGMO → 창모, '
+                    'JANNABI → 잔나비) 반드시 한글로 답해. 한글 표기가 거의 안 쓰이고 영문이 훨씬 익숙할 때만 null. '
                     '예: "Crush" → {"korean_name": null}, "Jay Park" → {"korean_name": null}\n'
                     '- 영어 이름을 소리 나는 대로 한글로 옮긴 음차(예: Zion.T → "지온티")는 절대 만들지 마. '
                     '실제로 한국에서 쓰이는 한글 표기를 아는 경우에만 답하고, 모르면 null.\n'
@@ -481,7 +522,7 @@ def resolve_korean_artist_name(artist: str, assume_domestic: bool = False) -> Op
     return name
 
 
-def _apply_korean_titles(tracks: list, assume_domestic: bool = False) -> list:
+def _apply_korean_titles(tracks: list, assume_domestic: bool = False, deadline: Optional[float] = None) -> list:
     """여러 트랙에 한글 제목+아티스트명을 병렬로 보완. 순차 호출하면 Claude 응답 지연이 곡
     수만큼 누적되니(아티스트 이미지 보완 때와 같은 이유로) 스레드풀로 동시에 처리함. 제목은
     "한글 제목 (기존 제목)" 형태로 합치고, 아티스트명은 한글로 교체함(바로 위 주석 참고) —
@@ -509,8 +550,23 @@ def _apply_korean_titles(tracks: list, assume_domestic: bool = False) -> list:
             updated["artist"] = ko_artist
         return updated
 
-    with ThreadPoolExecutor(max_workers=10) as executor:
-        return list(executor.map(resolve, tracks))
+    if deadline is None:
+        with ThreadPoolExecutor(max_workers=10) as executor:
+            return list(executor.map(resolve, tracks))
+
+    # deadline(초)이 있으면: 그 안에 끝난 곡만 한글로 바꾸고, 못 끝낸 곡은 원본 그대로 반환.
+    # 스레드는 끝까지 돌아서(shutdown(wait=False)) Claude 결과가 Redis에 캐싱됨 → 다음엔 즉시 적용.
+    executor = ThreadPoolExecutor(max_workers=10)
+    futures = [executor.submit(resolve, t) for t in tracks]
+    wait(futures, timeout=deadline)
+    executor.shutdown(wait=False)
+    results = []
+    for track, future in zip(tracks, futures):
+        try:
+            results.append(future.result(timeout=0) if future.done() else track)
+        except Exception:
+            results.append(track)
+    return results
 
 
 def lastfm_get(params: dict):
@@ -695,6 +751,13 @@ def root():
     return {"message": "Unbeat API 실행 중 (Last.fm 기반)"}
 
 
+# 헬스체크/업타임 모니터링 전용. DB·Redis·외부 API를 전혀 건드리지 않고 프로세스가 살아있으면
+# 즉시 200을 반환 — playlist-service의 /healthz(HealthController)와 같은 취지.
+@app.api_route("/health", methods=["GET", "HEAD"])
+def health():
+    return {"status": "ok"}
+
+
 @app.get("/auth/me")
 def auth_me(authorization: Optional[str] = Header(default=None)):
     """
@@ -709,9 +772,41 @@ def auth_me(authorization: Optional[str] = Header(default=None)):
     return {"logged_in": True, **user}
 
 
+def fetch_youtube_channel_thumb(artist_name: str) -> Optional[str]:
+    """
+    Last.fm엔 아티스트 사진이 거의 없어서, 유튜브 공식 채널의 프로필 이미지를 대신 씀.
+    search.list는 호출당 쿼터 100이라 결과(없음 포함)를 길게 캐싱함 — 같은 아티스트는 한 번만 조회.
+    """
+    if not YOUTUBE_API_KEY:
+        return None
+    cache_key = f"yt-channel-thumb:{artist_name.lower().strip()}"
+    cached = get_cached(cache_key)
+    if cached is not None:
+        return cached.get("url")
+    try:
+        res = requests.get(YOUTUBE_SEARCH_URL, params={
+            "part": "snippet",
+            "type": "channel",
+            "maxResults": 1,
+            "q": artist_name,
+            "key": YOUTUBE_API_KEY,
+        }, timeout=4)
+        if res.status_code != 200:
+            print(f"[yt-channel-thumb] {artist_name}: 상태코드 {res.status_code}")
+            return None
+        items = res.json().get("items", [])
+        thumbs = items[0]["snippet"]["thumbnails"] if items else {}
+        url = (thumbs.get("high") or thumbs.get("medium") or thumbs.get("default") or {}).get("url")
+    except Exception as e:
+        print(f"[yt-channel-thumb] {artist_name}: 예외 - {e}")
+        return None
+    set_cached(cache_key, {"url": url}, ttl=60 * 60 * 24 * 30)
+    return url
+
+
 @app.get("/search-artist")
 def search_artist(artist_name: str, x_session_id: Optional[str] = Header(default=None)):
-    cache_key = f"search-artist:{artist_name.lower().strip()}"
+    cache_key = f"search-artist:v2:{artist_name.lower().strip()}"
     cached = get_cached(cache_key)
     if cached is not None:
         if x_session_id:
@@ -733,6 +828,15 @@ def search_artist(artist_name: str, x_session_id: Optional[str] = Header(default
         }
         for item in matches
     ]
+
+    # 사진이 없는 상위 3명만 유튜브 채널 프로필 이미지로 채움(쿼터 절약)
+    targets = [a for a in artists[:3] if not a["image"]]
+    if targets:
+        with ThreadPoolExecutor(max_workers=3) as executor:
+            thumbs = list(executor.map(lambda a: fetch_youtube_channel_thumb(a["name"]), targets))
+        for a, t in zip(targets, thumbs):
+            if t:
+                a["image"] = t
 
     result = {"artists": artists}
     set_cached(cache_key, result)
@@ -781,8 +885,72 @@ def search_suggest(q: str):
     return {**result, "cached": False}
 
 
+def _search_exact_pick(q: str, artist: str, x_session_id: Optional[str]):
+    """자동완성에서 "곡 + 아티스트" 후보를 직접 골랐을 때의 검색 — 곡명만으로 /search를 돌리면
+    같은 제목의 다른 곡(예: "Meteor" 수십 개)과 이름이 비슷한 엉뚱한 아티스트가 훨씬 많이 떠서,
+    사용자가 고른 바로 그 곡이 묻혔음(2026-10-22 피드백). 아티스트까지 넘겨서 그 곡을 맨 앞에,
+    아티스트 카드는 그 아티스트 하나를 맨 앞에 둠."""
+    cache_key = f"search-pick:v2:{artist.lower().strip()}:{q.lower().strip()}"
+    cached = get_cached(cache_key)
+    if cached is not None:
+        if x_session_id:
+            log_event(x_session_id, "search", q, result_count=len(cached["artists"]) + len(cached["tracks"]))
+            push_search_history(x_session_id, q, image=_first_search_thumbnail(cached["artists"], cached["tracks"]))
+        return {**cached, "cached": True}
+
+    executor = ThreadPoolExecutor(max_workers=1)
+    artist_future = executor.submit(lastfm_get, {"method": "artist.search", "artist": artist, "limit": 5})
+    executor.shutdown(wait=False)
+    track_data = lastfm_get({"method": "track.search", "track": q, "artist": artist, "limit": 10})
+    tracks = _build_track_results(track_data.get("results", {}).get("trackmatches", {}).get("track", []))
+
+    def _norm(s: str) -> str:
+        return re.sub(r"[^0-9a-z가-힣]", "", (s or "").lower())
+
+    want_artist = _norm(artist)
+    want_name = _norm(q)
+
+    def _is_exact(t: dict) -> bool:
+        # 한글 보완이 붙으면 "한글 (원제)"로 바뀌므로 원제/보완 둘 다 포함 여부로 판단
+        same_artist = want_artist and (want_artist in _norm(t.get("artist", "")) or _norm(t.get("artist", "")) in want_artist)
+        same_name = want_name and want_name in _norm(t.get("name", ""))
+        return bool(same_artist and same_name)
+
+    exact = [t for t in tracks if _is_exact(t)]
+    rest = [t for t in tracks if not _is_exact(t) and want_artist and want_artist in _norm(t.get("artist", ""))]
+    tracks = exact + rest or tracks  # 하나도 안 맞으면 원래 결과 그대로
+
+    try:
+        artist_matches = artist_future.result().get("results", {}).get("artistmatches", {}).get("artist", [])
+    except HTTPException:
+        artist_matches = []
+    artists = _build_artist_results(artist_matches)
+    artists.sort(key=lambda a: 0 if _norm(a["name"]) == want_artist else 1)
+    artists = artists[:1] if artists and _norm(artists[0]["name"]) == want_artist else artists
+
+    result = {
+        "artists": artists,
+        "tracks": tracks,
+        "tagTracks": [],
+        "correctedArtistName": None,
+        "aiGuessedQuery": None,
+        "youtubeFallbackUsed": False,
+    }
+    set_cached(cache_key, result)
+    if x_session_id:
+        log_event(x_session_id, "search", q, result_count=len(artists) + len(tracks))
+        push_search_history(x_session_id, q, image=_first_search_thumbnail(artists, tracks))
+    return {**result, "cached": False}
+
+
 @app.get("/search")
-def search(q: str, x_session_id: Optional[str] = Header(default=None)):
+def search(q: str, artist: Optional[str] = None, x_session_id: Optional[str] = Header(default=None)):
+    if artist and artist.strip():
+        return _search_exact_pick(q.strip(), artist.strip(), x_session_id)
+    return _search_by_query(q, x_session_id)
+
+
+def _search_by_query(q: str, x_session_id: Optional[str] = None):
     """
     통합 검색: 아티스트 이름뿐 아니라 곡 제목으로도 찾을 수 있게 artist.search와
     track.search를 같이 호출해서 합쳐 반환. 기존 /search-artist는 아티스트 전용이라
@@ -862,7 +1030,7 @@ def search(q: str, x_session_id: Optional[str] = Header(default=None)):
     # 등)로 남는 버그 발견 — _apply_korean_titles에 아티스트명 보완(resolve_korean_artist_name)
     # 추가했으니 과거 캐시 무효화를 위해 버전업(v23/v24 버전 번호는 실제로 안 쓰였음 — 직전
     # 중간 수정 때 혼선으로 건너뜀, 동작엔 영향 없음).
-    cache_key = f"search:v27:{q.lower().strip()}"
+    cache_key = f"search:v28:{q.lower().strip()}"
     cached = get_cached(cache_key)
     if cached is not None:
         if x_session_id:
@@ -897,6 +1065,14 @@ def search(q: str, x_session_id: Optional[str] = Header(default=None)):
             effective_artist_query = match[0]
             corrected_artist_name = match[0]
 
+    # (속도 개선, 2026-10-22) track.search는 artist.search 결과와 무관(검색어 q만 사용)하므로
+    # 미리 백그라운드로 던져놓고 아티스트 쪽과 동시에 기다림 — Last.fm 왕복 1회분 단축.
+    _search_executor = ThreadPoolExecutor(max_workers=1)
+    track_future = _search_executor.submit(
+        lastfm_get, {"method": "track.search", "track": q, "limit": 8}
+    )
+    _search_executor.shutdown(wait=False)
+
     artist_data = lastfm_get({"method": "artist.search", "artist": effective_artist_query, "limit": 5})
     artist_matches = artist_data.get("results", {}).get("artistmatches", {}).get("artist", [])
 
@@ -918,7 +1094,7 @@ def search(q: str, x_session_id: Optional[str] = Header(default=None)):
 
     artists = _build_artist_results(artist_matches)
 
-    track_data = lastfm_get({"method": "track.search", "track": q, "limit": 8})
+    track_data = track_future.result()
     track_matches = track_data.get("results", {}).get("trackmatches", {}).get("track", [])
     tracks = _build_track_results(track_matches)
 
@@ -1245,8 +1421,46 @@ def recommend_by_artist(artist_name: str, x_session_id: Optional[str] = Header(d
     return {**result, "cached": False}
 
 
+_JUNK_TRACK_RE = re.compile(
+    r"[@|]|\(4K\)|\bMV\b|M/V|official|fancam|직캠|인기가요|inkigayo|뮤직뱅크|음악중심|엠카운트다운|"
+    r"live clip|performance video|teaser|reaction|\bshorts\b",
+    re.IGNORECASE,
+)
+
+
+def _fetch_artist_top_raw(artist_name: str, limit: int) -> list:
+    """Last.fm artist.getTopTracks 원본 목록. 아티스트를 못 찾으면(에러) 빈 목록."""
+    try:
+        data = lastfm_get({"method": "artist.getTopTracks", "artist": artist_name, "limit": limit})
+        return data.get("toptracks", {}).get("track", [])
+    except HTTPException as e:
+        print(f"[artist-top-tracks] '{artist_name}' artist.getTopTracks 실패(빈 결과로 처리): {e.detail}")
+        return []
+
+
+def _clean_top_tracks(tracks: list) -> list:
+    """유튜브 영상 제목 같은 가짜 곡(\"@인기가요\", \"(4K)\" 등)과 제목만 다른 중복을 걸러냄."""
+    seen = set()
+    out = []
+    for t in tracks:
+        name = t.get("name", "")
+        if _JUNK_TRACK_RE.search(name):
+            continue
+        key = re.sub(r"[^0-9a-z가-힣]", "", name.lower())
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        out.append(t)
+    return out
+
+
 @app.get("/artist-top-tracks")
-def artist_top_tracks(artist_name: str, x_session_id: Optional[str] = Header(default=None)):
+def artist_top_tracks(
+    artist_name: str,
+    limit: int = 15,
+    lyrics_only: bool = True,
+    x_session_id: Optional[str] = Header(default=None),
+):
     """
     (§61) "검색해도 검색된 곡 말고는 다 똑같다, 유튜브 뮤직처럼 검색한 것과 관련된 곡이 홈에도
     떴으면 좋겠다"는 요청으로 추가. 검색 시 홈 화면의 "지금 인기 있는 곡"/"인기 아티스트"처럼
@@ -1260,7 +1474,9 @@ def artist_top_tracks(artist_name: str, x_session_id: Optional[str] = Header(def
     """
     # v3: 한글 제목 보완 파싱 버그 수정(ko-title v2)으로 같이 버전업 — 안 올리면 버그로
     # title=None이었던 예전 캐시가 그대로 재사용됨
-    cache_key = f"artist-top-tracks:v8:{artist_name.lower().strip()}"
+    # 아티스트 상세 화면은 곡을 더 많이(limit), 가사 필터 없이(lyrics_only=false) 달라고 요청함
+    limit = max(5, min(limit, 40))
+    cache_key = f"artist-top-tracks:v9:{artist_name.lower().strip()}:{limit}:{int(lyrics_only)}"
     cached = get_cached(cache_key)
     if cached is not None:
         return {**cached, "cached": True}
@@ -1271,16 +1487,24 @@ def artist_top_tracks(artist_name: str, x_session_id: Optional[str] = Header(def
     # "Artist not found" 에러가 나면 lastfm_get()이 HTTPException을 던져 그대로 500급으로 죽고
     # 있었음(§60에서 겪은 것과 같은 패턴). 실패해도 빈 목록으로 취급하고 로그를 남겨서, 다음에
     # 이 로그로 정확한 원인(진짜 아티스트 자체가 없는 건지, 표기 문제인지)을 확인할 수 있게 함.
-    try:
-        data = lastfm_get({
-            "method": "artist.getTopTracks",
-            "artist": artist_name,
-            "limit": 30,  # 가사 필터로 걸러질 걸 감안해서 넉넉히 모아둠(§44와 동일 원칙)
-        })
-        raw_tracks = data.get("toptracks", {}).get("track", [])
-    except HTTPException as e:
-        print(f"[artist-top-tracks] '{artist_name}' artist.getTopTracks 실패(빈 결과로 처리): {e.detail}")
-        raw_tracks = []
+    raw_tracks = _fetch_artist_top_raw(artist_name, max(30, limit + 10))
+    if not raw_tracks:
+        # "빅뱅"처럼 한글 표기가 Last.fm에선 "BIGBANG" 같은 다른 이름으로 등록된 경우가 많아서,
+        # 아티스트 검색 결과의 다른 표기로 최대 3번 더 시도함(첫 번째로 곡이 나오는 이름을 씀)
+        try:
+            cand = lastfm_get({"method": "artist.search", "artist": artist_name, "limit": 5})
+            names = [
+                m["name"]
+                for m in cand.get("results", {}).get("artistmatches", {}).get("artist", [])
+                if m.get("name") and m["name"].lower() != artist_name.lower()
+            ]
+        except HTTPException:
+            names = []
+        for alt in names[:3]:
+            raw_tracks = _fetch_artist_top_raw(alt, max(30, limit + 10))
+            if raw_tracks:
+                print(f"[artist-top-tracks] '{artist_name}' -> 대체 표기 '{alt}'로 조회")
+                break
 
     print(f"[artist-top-tracks] '{artist_name}' -> Last.fm 원본 {len(raw_tracks)}곡")
 
@@ -1295,7 +1519,11 @@ def artist_top_tracks(artist_name: str, x_session_id: Optional[str] = Header(def
         })
 
     # "둘러보기" 목적의 목록이라 가사 있는 곡만 걸러서 내려줌(§44와 동일 원칙, 검색 자체와는 별개 취급)
-    tracks = _filter_tracks_with_lyrics(tracks, 15)
+    tracks = _clean_top_tracks(tracks)
+    if lyrics_only:
+        tracks = _filter_tracks_with_lyrics(tracks, limit)
+    else:
+        tracks = tracks[:limit]
     tracks = _apply_korean_titles(tracks)
     print(f"[artist-top-tracks] '{artist_name}' -> 가사 필터 통과 {len(tracks)}곡")
 
@@ -1602,7 +1830,7 @@ SIMILAR_TRACKS_RAW_CAP = 40  # 가사 필터로 걸러질 걸 감안해서, 후�
 # 덕분에 첫 호출부터 큐가 훨씬 꽉 차 보이고, 최대치(프론트 MAX_QUEUE_SIZE=40)까지도 이어붙이기
 # 한두 번이면 도달함. 너무 크게 올리지 않은 이유는 아래 이미지 리졸브 비용과 직결되기 때문.
 SIMILAR_TRACKS_FINAL_COUNT = 25  # 가사 있는 곡만 걸러낸 뒤 큐에 실제로 담을 개수
-SIMILAR_TRACKS_CACHE_VERSION = "v12"  # similar_tracks()와 next-tracks override 등록/삭제 엔드포인트가 같이 참조함. v10: 한글 제목/아티스트명 보완(_apply_korean_titles) 추가로 버전업
+SIMILAR_TRACKS_CACHE_VERSION = "v14"  # similar_tracks()와 next-tracks override 등록/삭제 엔드포인트가 같이 참조함. v10: 한글 제목/아티스트명 보완(_apply_korean_titles) 추가로 버전업
 
 # (§84) Last.fm 유사곡/유사 아티스트 결과가 이보다 적으면 AI 폴백을 추가로 돌림. "도요한"처럼
 # artist.getSimilar가 결과 1개만 던지는 경우가 실사용 중 발견돼서 추가 — 그 1개 결과도 그대로
@@ -1698,6 +1926,132 @@ def _ai_next_track_fallback(artist: str, track: str, exclude: set) -> list[dict]
         picked_pairs.append(pool_lookup[key])
 
     return _resolve_curated_tracks(picked_pairs)
+
+
+AI_FREE_NEXT_TRACK_COUNT = 14
+
+
+def _ai_free_next_track_fallback(artist: str, track: str, exclude: set) -> list[dict]:
+    """
+    (2026-10-25) 권오선처럼 Last.fm 데이터가 거의 없는 래퍼/발라드 곡에서, 위 §84 폴백이 "검증된 큐레이션
+    목록(힙합 아티스트가 거의 없음) 안에서만" 고르다 보니 아이유/Crush 같은 엉뚱한 곡이 다음 트랙으로 나오던
+    문제 — 이번엔 모델이 목록 제약 없이 "같은 장르/씬의 실제 곡"을 직접 추천하게 하고, 환각을 막기 위해
+    추천된 곡을 전부 Last.fm track.search로 다시 검증(_resolve_curated_tracks)해서 실존하는 곡만 통과시킴.
+    """
+    if not ANTHROPIC_API_KEY:
+        return []
+
+    prompt = f"""지금 "{artist} - {track}"를 재생 중이야.
+
+이 곡과 장르와 분위기가 같은 곡을 "다음 트랙"으로 이어 틀려고 해. 같은 씬(예: 한국 힙합 래퍼의 곡이면 다른 한국
+래퍼들의 곡, 한국 발라드면 비슷한 한국 발라드, 해외 곡이면 비슷한 해외 곡)에서 실제로 존재하는 곡을
+{AI_FREE_NEXT_TRACK_COUNT}개 추천해줘. 장르가 다르거나 인기만 많은 아무 곡이나 넣지 마. 같은 아티스트는 최대 2곡까지만
+넣고, 지금 재생 중인 곡 자체는 제외해줘. 곡 제목과 아티스트명은 정확한 공식 표기로 적어줘.
+다른 설명 없이 JSON 배열로만 답해줘. 형식: [{{"artist": "아티스트명", "track": "곡명"}}, ...]"""
+
+    try:
+        client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+        message = client.messages.create(
+            model=ANTHROPIC_MODEL,
+            max_tokens=1024,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        raw_text = message.content[0].text.strip()
+    except Exception as e:
+        print(f"[anthropic] 다음 트랙 자유 추천 요청 실패: {e}")
+        return []
+
+    if raw_text.startswith("```"):
+        raw_text = raw_text.strip("`")
+        if raw_text.startswith("json"):
+            raw_text = raw_text[4:]
+        raw_text = raw_text.strip()
+
+    try:
+        suggestions = json.loads(raw_text)
+    except json.JSONDecodeError as e:
+        print(f"[anthropic] 다음 트랙 자유 추천 JSON 파싱 실패: {e} / 원문: {raw_text[:300]}")
+        return []
+
+    picked_pairs = []
+    for item in suggestions:
+        if not isinstance(item, dict):
+            continue
+        picked_artist = str(item.get("artist", "")).strip()
+        picked_track = str(item.get("track", "")).strip()
+        if not picked_artist or not picked_track:
+            continue
+        key = (picked_artist.lower(), picked_track.lower())
+        if key in exclude:
+            continue
+        exclude.add(key)
+        picked_pairs.append((picked_artist, picked_track))
+
+    return _resolve_curated_tracks(picked_pairs)
+
+
+# (2026-10-25) 장르 게이트 — Last.fm 유사 아티스트가 장르가 전혀 다른 아티스트를 섞어주는 문제(래퍼
+# 곡 다음에 아이유 등)를 곡/사용자 수와 상관없이 자동으로 걸러내기 위한 검증. 시드 아티스트와 후보
+# 아티스트의 Last.fm 상위 태그를 단어 단위로 비교해서, 양쪽 다 태그가 있는데 겹치는 단어가 하나도
+# 없으면 탈락시킴(태그가 없으면 판단 불가라 통과). "korean", "seen live" 같은 범용 태그는 비교에서 뺌.
+_GENERIC_TAG_TOKENS = {
+    "korean", "korea", "south", "k", "seen", "live", "favorites", "favourites", "favorite", "male",
+    "female", "vocalists", "vocalist", "singer", "songwriter", "00s", "10s", "20s", "90s", "80s",
+    "70s", "60s", "good", "best", "awesome", "love", "loved", "beautiful", "music", "artist", "my",
+    "all", "kpop", "pop", "asian", "j", "japanese", "american", "british", "english", "usa", "uk",
+}
+# 서로 같은 계열로 취급할 단어들(한쪽이 "hip-hop", 다른 쪽이 "rap"만 달아도 겹친다고 봄).
+_TAG_TOKEN_ALIASES = {
+    "hip": "hiphop", "hop": "hiphop", "hiphop": "hiphop", "rap": "hiphop", "trap": "hiphop",
+    "rnb": "rnb", "r&b": "rnb", "soul": "rnb", "ballad": "ballad", "ballads": "ballad",
+    "indie": "indie", "folk": "indie", "acoustic": "indie", "rock": "rock", "punk": "rock",
+    "metal": "rock", "alternative": "rock", "electronic": "electronic", "edm": "electronic",
+    "dance": "electronic", "house": "electronic", "jazz": "jazz",
+}
+
+
+def _artist_genre_tokens(artist_name: str) -> set:
+    cache_key = f"artist-genre-tokens:v1:{artist_name.lower().strip()}"
+    cached = get_cached(cache_key)
+    if cached is not None:
+        return set(cached)
+    tokens: set = set()
+    try:
+        data = lastfm_get({"method": "artist.getTopTags", "artist": artist_name})
+        tags = data.get("toptags", {}).get("tag", [])[:6]
+        for t in tags:
+            try:
+                if int(t.get("count") or 0) < 15:
+                    continue
+            except (TypeError, ValueError):
+                continue
+            for word in re.split(r"[^0-9a-zA-Z&가-힣]+", (t.get("name") or "").lower()):
+                if not word or word in _GENERIC_TAG_TOKENS:
+                    continue
+                tokens.add(_TAG_TOKEN_ALIASES.get(word, word))
+    except Exception:
+        pass  # 태그 조회 실패 — 빈 집합(판단 불가 → 통과)
+    set_cached(cache_key, sorted(tokens), ttl=60 * 60 * 24 * 7)
+    return tokens
+
+
+def _filter_by_genre_gate(seed_artist: str, tracks: list) -> list:
+    seed_tokens = _artist_genre_tokens(seed_artist)
+    if not seed_tokens:
+        return tracks
+    names = sorted({t["artist"] for t in tracks if t.get("artist")})
+    if not names:
+        return tracks
+    with ThreadPoolExecutor(max_workers=min(len(names), 8)) as executor:
+        token_map = dict(zip(names, executor.map(_artist_genre_tokens, names)))
+    kept = []
+    for t in tracks:
+        cand = token_map.get(t.get("artist"), set())
+        if not cand or (cand & seed_tokens):
+            kept.append(t)
+        else:
+            print(f"[similar-tracks] 장르 불일치로 제외: {t.get('artist')} - {t.get('name')} (시드 {seed_artist} {sorted(seed_tokens)} vs {sorted(cand)})")
+    return kept
 
 
 @app.get("/similar-tracks")
@@ -1857,22 +2211,36 @@ def similar_tracks(artist: str, track: str, x_session_id: Optional[str] = Header
                     "limit": 6,
                 })
             related_artists = similar_artists_data.get("similarartists", {}).get("artist", [])
-            for related in related_artists:
-                if len(tracks) >= SIMILAR_TRACKS_RAW_CAP:
-                    break
-                top_tracks = lastfm_get({
-                    "method": "artist.getTopTracks",
-                    "artist": related["name"],
-                    "limit": 4,
-                })
-                for item in top_tracks.get("toptracks", {}).get("track", []):
-                    add_track(item)
+
+            # (2026-10-25, "다음 트랙이 채워지는 게 느리다" 피드백) 유사 아티스트별 인기곡 조회를 한 명씩
+            # 순서대로 하던 걸(최대 6번 연속 호출) 동시에 부르도록 바꿈. 순서는 원래 유사도 순을 그대로 유지.
+            def _fetch_top_tracks(related_name: str):
+                try:
+                    return lastfm_get({
+                        "method": "artist.getTopTracks",
+                        "artist": related_name,
+                        "limit": 4,
+                    })
+                except HTTPException:
+                    return {}
+
+            related_names = [r["name"] for r in related_artists]
+            if related_names:
+                with ThreadPoolExecutor(max_workers=min(len(related_names), 6)) as executor:
+                    top_tracks_list = list(executor.map(_fetch_top_tracks, related_names))
+                for top_tracks in top_tracks_list:
+                    if len(tracks) >= SIMILAR_TRACKS_RAW_CAP:
+                        break
+                    for item in top_tracks.get("toptracks", {}).get("track", []):
+                        add_track(item)
         except HTTPException as e:
             print(f"[similar-tracks] '{expand_artist_name}' artist.getSimilar 실패(빈 결과로 처리): {e.detail}")
 
     # "다음 트랙 큐도 가사 있는 곡만 나왔으면 좋겠다"는 요청으로, 위에서 넉넉히 모아둔 후보
     # (최대 40개) 중 가사가 실제로 있는 곡만 걸러서 최종 개수(25개)까지 자름.
-    tracks = _filter_tracks_with_lyrics(tracks[:SIMILAR_TRACKS_RAW_CAP], SIMILAR_TRACKS_FINAL_COUNT)
+    # (2026-10-25) 장르 게이트 — 가사 필터(LRCLIB 조회라 무거움) 전에 먼저 걸러서 낭비도 줄임.
+    tracks = _filter_by_genre_gate(artist, tracks[:SIMILAR_TRACKS_RAW_CAP])
+    tracks = _filter_tracks_with_lyrics(tracks, SIMILAR_TRACKS_FINAL_COUNT)
 
     # (§84) 여기까지 모은 게 너무 적으면("도요한"처럼 artist.getSimilar가 결과 1개만 주는 경우
     # 등) Claude Haiku 폴백으로 보충 — 바로 아래 유튜브 "이 아티스트의 다른 곡" 폴백보다 먼저
@@ -1880,8 +2248,12 @@ def similar_tracks(artist: str, track: str, x_session_id: Optional[str] = Header
     # 다음 트랙으로는 더 낫다고 판단해서 순서를 이렇게 둠. 수작업 override(§83)가 이미 있는
     # 곡이면 이 함수 자체가 호출 안 됨(맨 위에서 override를 찾으면 바로 return하므로).
     if len(tracks) < AI_NEXT_TRACK_FALLBACK_MIN_COUNT:
-        ai_tracks = _ai_next_track_fallback(artist, track, seen)
+        # (2026-10-25) 1순위: 장르/씬이 같은 곡을 자유롭게 추천받고 Last.fm으로 검증. 그래도 모자라면(검증에서 많이
+        # 탈락하는 경우 등) 기존 큐레이션 목록 기반 폴백으로 보충.
+        ai_tracks = _ai_free_next_track_fallback(artist, track, seen)
         tracks.extend(ai_tracks)
+        if len(tracks) < AI_NEXT_TRACK_FALLBACK_MIN_COUNT:
+            tracks.extend(_ai_next_track_fallback(artist, track, seen))
 
     # (§60) Last.fm 유사곡/유사 아티스트 확장 + 위 AI 폴백까지 다 돌려도 후보가 하나도 없으면 — 이 아티스트가
     # Last.fm 카탈로그 자체에 없는 경우일 가능성이 높음(§59의 유튜브 검색 폴백으로 재생된 곡에서
@@ -1932,9 +2304,15 @@ def similar_tracks(artist: str, track: str, x_session_id: Optional[str] = Header
         # 트랙도 _resolve_curated_tracks가 이미 이미지를 채워서 반환하므로("_lastfm_images" 키
         # 자체가 없음) 다시 조회하지 않고 건너뜀 — 안 그러면 이미 받아온 이미지를 버리고 불필요한
         # iTunes 재조회가 한 번 더 나감.
-        for t in tracks:
-            if "_lastfm_images" in t:
-                t["image"] = resolve_track_image(t["artist"], t["name"], t.pop("_lastfm_images", []))
+        # (2026-10-25) 이미지 조회(iTunes)도 25곡을 한 곡씩 순서대로 하던 걸 동시에 부르게 함.
+        pending = [t for t in tracks if "_lastfm_images" in t]
+
+        def _fill_image(t):
+            t["image"] = resolve_track_image(t["artist"], t["name"], t.pop("_lastfm_images", []))
+
+        if pending:
+            with ThreadPoolExecutor(max_workers=min(len(pending), 10)) as executor:
+                list(executor.map(_fill_image, pending))
 
     # (버그 수정, 2026-10-14) 다른 트랙 목록 엔드포인트(top_chart, artist_top_tracks,
     # _build_track_results, discover_by_mood, recommend_by_artist)에는 이미 한글 제목/아티스트명
@@ -2815,7 +3193,11 @@ DIARY_TEXT_MAX_LENGTH = 500  # 프롬프트 비용/남용 방지용 상한
 
 
 @app.post("/diary-reflection")
-def diary_reflection(payload: DiaryReflectionRequest, x_session_id: Optional[str] = Header(default=None)):
+def diary_reflection(
+    payload: DiaryReflectionRequest,
+    include_tracks: bool = True,
+    x_session_id: Optional[str] = Header(default=None),
+):
     """
     (Phase 5-3, 2026-10-08) "감정 다이어리" — 사용자가 오늘 하루/기분을 자유 텍스트로 적으면
     Claude Haiku가 읽고 (1) 짧은 공감/위로 메시지, (2) 그 감정에 어울리는 무드 태그를 돌려줌.
@@ -2882,7 +3264,14 @@ def diary_reflection(payload: DiaryReflectionRequest, x_session_id: Optional[str
     if mood_tag not in MOOD_LABELS_KO:
         mood_tag = "chill"  # 모델이 엉뚱한 태그를 주거나 빠뜨리면 무난한 기본값으로 폴백
 
-    mood_result = discover_by_mood(mood_tag, x_session_id=None)
+    # (체감 속도 개선, 2026-10-19) include_tracks=false면 추천곡 조회를 건너뛰고 공감 메시지와
+    # 무드 태그만 먼저 돌려줌 — 프론트가 메시지를 바로 보여주고, 곡 목록은 기존
+    # /discover-by-mood로 이어서 받아 채움(곡 조회가 느릴 때 "위로받기" 응답 전체가 같이
+    # 늦어지던 문제 완화). 기본값 true는 기존 호출과의 호환용.
+    if include_tracks:
+        mood_result = discover_by_mood(mood_tag, x_session_id=None)
+    else:
+        mood_result = {"domesticTracks": [], "internationalTracks": []}
 
     if x_session_id:
         log_event(x_session_id, "diary_reflection", mood_tag)
@@ -2934,7 +3323,7 @@ def discover_by_mood(tag: str, x_session_id: Optional[str] = Header(default=None
     # 버전 때 잘못 매칭된 채로 캐싱된 풀(curated-track:v1 캐시 기반)이 안 섞이도록 재버전업.
     # v9: "sad"에서 Gee/Supernova 같은 무관 k-pop이 섞이는 버그 발견 후 전체 무드 감사 — sad/love/
     # study/chill/party 큐레이션 목록을 실제 Last.fm 매칭 검증 거쳐 재구성(아래 딕셔너리 주석 참고).
-    cache_key = f"discover-by-mood:v9:{tag.lower().strip()}"
+    cache_key = f"discover-by-mood:v10:{tag.lower().strip()}"
     pool = get_cached(cache_key)
 
     if pool is None:
@@ -2989,8 +3378,13 @@ def discover_by_mood(tag: str, x_session_id: Optional[str] = Header(default=None
 
     domestic_pool = pool["domesticPool"]
     international_pool = pool["internationalPool"]
-    domestic_tracks = random.sample(domestic_pool, min(RESULT_SIZE, len(domestic_pool)))
-    international_tracks = random.sample(international_pool, min(RESULT_SIZE, len(international_pool)))
+    # (2026-10-29) 국내:해외 = 7:3 — "한국인 중심 서비스인데 팝송이 더 많이 나온다"는 피드백.
+    # 예전엔 국내/해외를 각각 RESULT_SIZE(10)곡씩 뽑아서 화면에 같은 비중으로 보였음. 국내 풀이
+    # 모자라면(큐레이션이 짧은 무드) 모자란 만큼 해외로 채워서 총 10곡은 유지함.
+    domestic_n = min(7, len(domestic_pool))
+    international_n = min(RESULT_SIZE - domestic_n, len(international_pool))
+    domestic_tracks = random.sample(domestic_pool, domestic_n)
+    international_tracks = random.sample(international_pool, international_n)
     # (버그 수정, 2026-10-14) 무드 추천(감성 카드 diary_reflection/context_mood도 이 함수를
     # 그대로 재사용함)에 한글 아티스트명 보완이 빠져있었음 — 제목은 국내 발라드/인디 가수는
     # Last.fm에 이미 한글로 등록된 경우가 많아 멀쩡해 보였는데, 아티스트명은 (인지도 낮은
@@ -3130,6 +3524,41 @@ def _parse_youtube_duration_seconds(iso8601: str) -> Optional[int]:
     return hours * 3600 + minutes * 60 + seconds
 
 
+_YT_BAD_TITLE_KEYWORDS = (
+    "live", "라이브", "축제", "직캠", "fancam", "cover", "커버", "무대", "콘서트", "concert", "공연",
+    "reaction", "리액션", "playlist", "플레이리스트", "모음", "1시간", "inst.", "instrumental", "mr ",
+    "karaoke", "노래방", "teaser", "티저", "shorts", "#shorts", "교차편집", "응원법", "대학", "festival",
+    "sped up", "slowed", "nightcore", "8d", "리믹스", "remix",
+)
+_YT_GOOD_TITLE_KEYWORDS = (
+    "official audio", "official video", "official music video", "official mv", "m/v", "mv", "audio",
+    "lyrics", "lyric video", "가사", "공식", "official",
+)
+
+
+def _score_youtube_candidate(artist: str, track: str, video_title: str, channel_title: str) -> int:
+    """유튜브 검색 후보 점수 — 높을수록 '원곡 음원/공식 뮤비'일 가능성이 큼."""
+    title = (video_title or "").lower()
+    channel = (channel_title or "").lower()
+    want_artist = (artist or "").lower().strip()
+    want_track = (track or "").lower().strip()
+    score = 0
+    if channel.endswith("- topic") or channel.endswith(" topic"):
+        score += 5  # 유튜브가 음반사 음원으로 자동 생성하는 채널 — 원곡일 확률이 가장 높음
+    if "vevo" in channel or "official" in channel or "records" in channel or "entertainment" in channel:
+        score += 3
+    if want_artist and (want_artist in channel or want_artist in title):
+        score += 2
+    if want_track and want_track in title:
+        score += 2
+    if any(k in title for k in _YT_GOOD_TITLE_KEYWORDS):
+        score += 2
+    # 사용자가 곡 제목에 live/remix 등을 직접 넣었다면(요청 자체가 그 버전) 감점 키워드에서 제외
+    bad_hits = [k for k in _YT_BAD_TITLE_KEYWORDS if k in title and k not in want_track]
+    score -= 4 * len(bad_hits)
+    return score
+
+
 @app.get("/youtube-search")
 def youtube_search(artist: str, track: str, x_session_id: Optional[str] = Header(default=None)):
     """
@@ -3147,7 +3576,9 @@ def youtube_search(artist: str, track: str, x_session_id: Optional[str] = Header
     if not YOUTUBE_API_KEY:
         raise HTTPException(status_code=503, detail="YOUTUBE_API_KEY가 설정 안 돼있어요.")
 
-    cache_key = f"youtube-search:v2:{artist.lower().strip()}:{track.lower().strip()}"
+    # v3: (2026-10-25) 라이브/축제 직캠/커버 영상이 걸려서 가사 타이밍이 어긋나던 문제로 후보 점수화를 추가해
+    # 예전에 저장된 잘못된 선택이 안 남게 버전업.
+    cache_key = f"youtube-search:v3:{artist.lower().strip()}:{track.lower().strip()}"
     cached = get_cached(cache_key)
     if cached is not None:
         if x_session_id:
@@ -3157,7 +3588,7 @@ def youtube_search(artist: str, track: str, x_session_id: Optional[str] = Header
     res = requests.get(YOUTUBE_SEARCH_URL, params={
         "part": "snippet",
         "type": "video",
-        "maxResults": 5,
+        "maxResults": 8,
         "q": f"{artist} {track}",
         "key": YOUTUBE_API_KEY,
     })
@@ -3174,22 +3605,31 @@ def youtube_search(artist: str, track: str, x_session_id: Optional[str] = Header
     if len(candidate_ids) > 1:
         try:
             duration_res = requests.get(YOUTUBE_VIDEOS_URL, params={
-                "part": "contentDetails",
+                "part": "contentDetails,snippet",
                 "id": ",".join(candidate_ids),
                 "key": YOUTUBE_API_KEY,
             }, timeout=5)
             if duration_res.status_code == 200:
-                durations = {
-                    item["id"]: _parse_youtube_duration_seconds(item.get("contentDetails", {}).get("duration", ""))
-                    for item in duration_res.json().get("items", [])
-                }
-                # candidate_ids 순서(검색 관련도 순)를 그대로 유지하면서, 그중 "노래 길이"로
-                # 보이는 첫 번째를 고름 — 관련도 1등이 길어도 2~5등 중에 정상 길이가 있으면 그걸 씀
+                detail_by_id = {item["id"]: item for item in duration_res.json().get("items", [])}
+                # (2026-10-25) 관련도 1등이 학교 축제/라이브 직캠/커버 영상인 경우가 있어서(예: 잔나비 곡이
+                # 인하대 축제 영상으로 재생되고 가사 타이밍도 어긋남), 길이만 보던 걸 제목/채널 점수로 확장:
+                # 공식 음원/뮤비/Topic 채널은 가산, 라이브/직캠/커버/모음 등은 감점. 동점이면 검색 관련도
+                # 순서(candidate_ids 순서)를 그대로 따름. 노래 길이(10분 이하) 아니면 후보에서 제외.
+                best_score = None
                 for cid in candidate_ids:
-                    d = durations.get(cid)
-                    if d is not None and d <= YOUTUBE_MAX_SONG_DURATION_SECONDS:
+                    detail = detail_by_id.get(cid)
+                    if not detail:
+                        continue
+                    d = _parse_youtube_duration_seconds(detail.get("contentDetails", {}).get("duration", ""))
+                    if d is None or d > YOUTUBE_MAX_SONG_DURATION_SECONDS:
+                        continue
+                    snippet = detail.get("snippet", {})
+                    score = _score_youtube_candidate(
+                        artist, track, snippet.get("title", ""), snippet.get("channelTitle", "")
+                    )
+                    if best_score is None or score > best_score:
+                        best_score = score
                         video_id = cid
-                        break
         except requests.RequestException as e:
             # 길이 확인이 실패해도 재생 자체는 막으면 안 되니, 기존처럼 1등 후보로 조용히 진행
             print(f"[youtube-search] 영상 길이 확인 실패(1등 후보로 진행): {e}")

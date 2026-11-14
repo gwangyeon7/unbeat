@@ -10,10 +10,59 @@ sealed class SetNicknameResult {
     object Invalid : SetNicknameResult()
 }
 
+// 팔로우 결과 — 로그인 필요/대상 없음/자기 자신 팔로우 금지/성공
+sealed class FollowResult {
+    data class Success(val followerCount: Int, val followedByMe: Boolean) : FollowResult()
+    object NotFound : FollowResult()
+    object Self : FollowResult()
+}
+
 @Service
 class UserProfileService(
-    private val userProfileRepository: UserProfileRepository
+    private val userProfileRepository: UserProfileRepository,
+    private val followRepository: FollowRepository
 ) {
+    fun followerCount(userId: String): Int = followRepository.countByFolloweeId(userId).toInt()
+    fun followingCount(userId: String): Int = followRepository.countByFollowerId(userId).toInt()
+    fun isFollowing(viewerId: String?, userId: String): Boolean =
+        viewerId != null && followRepository.existsByFollowerIdAndFolloweeId(viewerId, userId)
+
+    // 멱등 — 이미 팔로우 중이어도 중복 행이 안 쌓임
+    fun follow(viewerId: String, nickname: String): FollowResult {
+        val target = userProfileRepository.findByNickname(nickname) ?: return FollowResult.NotFound
+        if (target.userId == viewerId) return FollowResult.Self
+        if (!followRepository.existsByFollowerIdAndFolloweeId(viewerId, target.userId)) {
+            followRepository.save(Follow(followerId = viewerId, followeeId = target.userId))
+        }
+        return FollowResult.Success(followerCount(target.userId), followedByMe = true)
+    }
+
+    @org.springframework.transaction.annotation.Transactional
+    fun unfollow(viewerId: String, nickname: String): FollowResult {
+        val target = userProfileRepository.findByNickname(nickname) ?: return FollowResult.NotFound
+        followRepository.deleteByFollowerIdAndFolloweeId(viewerId, target.userId)
+        return FollowResult.Success(followerCount(target.userId), followedByMe = false)
+    }
+
+    // 팔로워/팔로잉 목록 — 프로필 카드의 숫자를 눌렀을 때. 최근에 팔로우한 순.
+    // (닉네임이 없는 사용자는 목록에 안 나옴 — 닉네임이 곧 공개 신원이라서)
+    fun followerProfiles(userId: String): List<UserProfile> =
+        followRepository.findByFolloweeId(userId).sortedByDescending { it.createdAt }
+            .mapNotNull { userProfileRepository.findByUserId(it.followerId) }
+
+    fun followingProfiles(userId: String): List<UserProfile> =
+        followRepository.findByFollowerId(userId).sortedByDescending { it.createdAt }
+            .mapNotNull { userProfileRepository.findByUserId(it.followeeId) }
+
+    // 한 줄 소개 — 60자 제한, 빈 문자열이면 지움. 닉네임(프로필)이 아직 없으면 null.
+    fun setBio(userId: String, rawBio: String): String? {
+        val profile = userProfileRepository.findByUserId(userId) ?: return null
+        val bio = rawBio.trim().take(60)
+        profile.bio = bio.ifEmpty { null }
+        userProfileRepository.save(profile)
+        return profile.bio ?: ""
+    }
+
     fun getNickname(userId: String): String? = userProfileRepository.findByUserId(userId)?.nickname
 
     fun findByNickname(nickname: String): UserProfile? = userProfileRepository.findByNickname(nickname)

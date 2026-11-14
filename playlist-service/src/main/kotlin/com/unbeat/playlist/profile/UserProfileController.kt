@@ -1,13 +1,19 @@
 package com.unbeat.playlist.profile
 
 import com.unbeat.playlist.auth.SupabaseAuth
+import com.unbeat.playlist.profile.dto.BadgeResponse
+import com.unbeat.playlist.profile.dto.FollowListResponse
+import com.unbeat.playlist.profile.dto.FollowResponse
+import com.unbeat.playlist.profile.dto.FollowUserResponse
 import com.unbeat.playlist.profile.dto.MyProfileResponse
 import com.unbeat.playlist.profile.dto.NicknameResponse
+import com.unbeat.playlist.profile.dto.SetBioRequest
 import com.unbeat.playlist.profile.dto.SetNicknameRequest
 import com.unbeat.playlist.profile.dto.UserProfilePageResponse
 import com.unbeat.playlist.userplaylist.PlaylistService
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
+import org.springframework.web.bind.annotation.DeleteMapping
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
@@ -62,7 +68,109 @@ class UserProfileController(
     ): ResponseEntity<Any> {
         val profile = userProfileService.findByNickname(nickname)
             ?: return ResponseEntity.status(HttpStatus.NOT_FOUND).build()
-        val playlists = playlistService.listPublicByUserId(profile.userId, viewerId = supabaseAuth.getUserId(authHeader))
-        return ResponseEntity.ok(UserProfilePageResponse(nickname = profile.nickname, playlists = playlists))
+        val viewerId = supabaseAuth.getUserId(authHeader)
+        val playlists = playlistService.listPublicByUserId(profile.userId, viewerId = viewerId)
+
+        // 프로필 화면에 자동으로 채워지는 값들 — 사용자가 따로 입력할 게 없도록 서버에서 계산
+        val totalLikes = playlists.sumOf { it.likeCount }
+        val followerCount = userProfileService.followerCount(profile.userId)
+        val topCategories = playlists.mapNotNull { it.category }
+            .groupingBy { it }.eachCount()
+            .entries.sortedByDescending { it.value }
+            .take(3).map { it.key }
+        val badges = buildList {
+            if (playlists.isNotEmpty()) add(BadgeResponse("first_public", "첫 공개"))
+            if (playlists.size >= 3) add(BadgeResponse("playlists_3", "재생목록 3개"))
+            if (totalLikes >= 10) add(BadgeResponse("likes_10", "좋아요 10개"))
+            if (followerCount >= 5) add(BadgeResponse("followers_5", "팔로워 5명"))
+        }
+
+        return ResponseEntity.ok(
+            UserProfilePageResponse(
+                nickname = profile.nickname,
+                playlists = playlists,
+                bio = profile.bio,
+                followerCount = followerCount,
+                followingCount = userProfileService.followingCount(profile.userId),
+                followedByMe = userProfileService.isFollowing(viewerId, profile.userId),
+                isMe = viewerId != null && viewerId == profile.userId,
+                totalLikes = totalLikes,
+                topCategories = topCategories,
+                badges = badges
+            )
+        )
+    }
+
+    // 팔로우/언팔로우 — 로그인 필수(401), 자기 자신은 400, 대상 닉네임이 없으면 404.
+    @PostMapping("/{nickname}/follow")
+    fun follow(
+        @RequestHeader(value = "Authorization", required = false) authHeader: String?,
+        @PathVariable nickname: String
+    ): ResponseEntity<Any> {
+        val userId = supabaseAuth.getUserId(authHeader)
+            ?: return ResponseEntity.status(HttpStatus.FORBIDDEN).body(mapOf("error" to "로그인이 필요해요."))
+        return followResponse(userProfileService.follow(userId, nickname))
+    }
+
+    @DeleteMapping("/{nickname}/follow")
+    fun unfollow(
+        @RequestHeader(value = "Authorization", required = false) authHeader: String?,
+        @PathVariable nickname: String
+    ): ResponseEntity<Any> {
+        val userId = supabaseAuth.getUserId(authHeader)
+            ?: return ResponseEntity.status(HttpStatus.FORBIDDEN).body(mapOf("error" to "로그인이 필요해요."))
+        return followResponse(userProfileService.unfollow(userId, nickname))
+    }
+
+    private fun followResponse(result: FollowResult): ResponseEntity<Any> = when (result) {
+        is FollowResult.Success -> ResponseEntity.ok(FollowResponse(result.followerCount, result.followedByMe))
+        is FollowResult.NotFound -> ResponseEntity.status(HttpStatus.NOT_FOUND).build()
+        is FollowResult.Self -> ResponseEntity.status(HttpStatus.BAD_REQUEST)
+            .body(mapOf("error" to "자기 자신은 팔로우할 수 없어요."))
+    }
+
+    // 팔로워/팔로잉 목록 — 누구나 조회 가능(공개 프로필과 같은 범위). followedByMe/isMe는 요청자
+    // 기준이라, 목록에서 바로 팔로우 버튼을 보여줄 수 있음.
+    @GetMapping("/{nickname}/followers")
+    fun followers(
+        @RequestHeader(value = "Authorization", required = false) authHeader: String?,
+        @PathVariable nickname: String
+    ): ResponseEntity<Any> = followList(authHeader, nickname) { userProfileService.followerProfiles(it) }
+
+    @GetMapping("/{nickname}/following")
+    fun following(
+        @RequestHeader(value = "Authorization", required = false) authHeader: String?,
+        @PathVariable nickname: String
+    ): ResponseEntity<Any> = followList(authHeader, nickname) { userProfileService.followingProfiles(it) }
+
+    private fun followList(
+        authHeader: String?,
+        nickname: String,
+        load: (String) -> List<UserProfile>
+    ): ResponseEntity<Any> {
+        val target = userProfileService.findByNickname(nickname)
+            ?: return ResponseEntity.status(HttpStatus.NOT_FOUND).build()
+        val viewerId = supabaseAuth.getUserId(authHeader)
+        val users = load(target.userId).map {
+            FollowUserResponse(
+                nickname = it.nickname,
+                followedByMe = userProfileService.isFollowing(viewerId, it.userId),
+                isMe = viewerId != null && viewerId == it.userId
+            )
+        }
+        return ResponseEntity.ok(FollowListResponse(users))
+    }
+
+    // 한 줄 소개(선택). 닉네임이 아직 없으면 428.
+    @PostMapping("/bio")
+    fun setBio(
+        @RequestHeader(value = "Authorization", required = false) authHeader: String?,
+        @RequestBody request: SetBioRequest
+    ): ResponseEntity<Any> {
+        val userId = supabaseAuth.getUserId(authHeader)
+            ?: return ResponseEntity.status(HttpStatus.FORBIDDEN).body(mapOf("error" to "로그인이 필요해요."))
+        val bio = userProfileService.setBio(userId, request.bio)
+            ?: return ResponseEntity.status(HttpStatus.PRECONDITION_REQUIRED).body(mapOf("error" to "닉네임을 먼저 정해주세요."))
+        return ResponseEntity.ok(mapOf("bio" to bio))
     }
 }

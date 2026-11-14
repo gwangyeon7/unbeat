@@ -60,7 +60,8 @@ export function searchArtist(artistName: string): Promise<{ artists: Artist[] }>
 // 그 추측 검색어. "댓댓"처럼 검색어와 실제 결과가 안 닮아서 사용자가 의아할 수 있어 이유를 보여주기 위함.
 // youtubeFallbackUsed: Last.fm+AI 추측까지 다 실패해서(§59) 유튜브 자체 검색으로 찾은 경우 true —
 // 이땐 tracks 맨 앞 항목이 Last.fm 정식 매칭이 아니라 청취자 수 등 메타데이터 없는 "비검증" 결과임.
-export function search(query: string): Promise<{
+// artist: 자동완성에서 "곡 + 아티스트" 후보를 골랐을 때만 넘김 — 그 곡을 정확히 맨 앞에 보여주려는 용도
+export function search(query: string, artist?: string): Promise<{
   artists: Artist[];
   tracks: Track[];
   tagTracks: Track[];
@@ -69,7 +70,8 @@ export function search(query: string): Promise<{
   youtubeFallbackUsed: boolean;
 }> {
   const q = encodeURIComponent(query);
-  return fetchJson(`/search?q=${q}`);
+  const artistParam = artist ? `&artist=${encodeURIComponent(artist)}` : "";
+  return fetchJson(`/search?q=${q}${artistParam}`);
 }
 
 // 검색창 자동완성용 — "numb"만 쳐도 "Numb Little Bug" 같은 후보가 뜨게 해달라는 요청으로 추가.
@@ -89,9 +91,15 @@ export function recommendByArtist(artistName: string): Promise<{ tracks: Track[]
 // (§61) 검색 중 홈 화면 "지금 인기 있는 곡"/"인기 아티스트"를 검색과 무관한 고정 콘텐츠로 두지 말고
 // 검색한 아티스트 본인의 다른 곡으로 채워달라는 요청으로 추가. recommendByArtist(/recommend)는
 // "비슷한 아티스트들"의 곡이라 의도가 달라서 재사용하지 않고 분리된 엔드포인트를 씀.
-export function getArtistTopTracks(artistName: string): Promise<{ tracks: Track[] }> {
+export function getArtistTopTracks(
+  artistName: string,
+  opts?: { limit?: number; lyricsOnly?: boolean }
+): Promise<{ tracks: Track[] }> {
   const query = encodeURIComponent(artistName);
-  return fetchJson(`/artist-top-tracks?artist_name=${query}`);
+  const extra =
+    (opts?.limit ? `&limit=${opts.limit}` : "") +
+    (opts?.lyricsOnly === false ? "&lyrics_only=false" : "");
+  return fetchJson(`/artist-top-tracks?artist_name=${query}${extra}`);
 }
 
 // 아티스트 검색 없이, 무드/상황 태그만으로 인기곡을 가져옴 (홈 화면 탐색용)
@@ -128,8 +136,12 @@ export type DiaryReflectionResult = {
   internationalTracks: Track[];
 };
 
-export function getDiaryReflection(text: string): Promise<DiaryReflectionResult> {
-  return fetchJson(`/diary-reflection`, {
+// includeTracks=false면 공감 메시지+무드 태그만 먼저 받음(추천곡은 discoverByMood로 이어서 조회).
+export function getDiaryReflection(
+  text: string,
+  includeTracks: boolean = true
+): Promise<DiaryReflectionResult> {
+  return fetchJson(`/diary-reflection?include_tracks=${includeTracks}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ text }),

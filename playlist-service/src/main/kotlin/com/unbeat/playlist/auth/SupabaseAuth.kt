@@ -5,6 +5,7 @@ import com.nimbusds.jose.jwk.source.JWKSource
 import com.nimbusds.jose.jwk.source.RemoteJWKSet
 import com.nimbusds.jose.proc.JWSVerificationKeySelector
 import com.nimbusds.jose.proc.SecurityContext
+import com.nimbusds.jose.util.DefaultResourceRetriever
 import com.nimbusds.jwt.JWTClaimsSet
 import com.nimbusds.jwt.proc.DefaultJWTClaimsVerifier
 import com.nimbusds.jwt.proc.DefaultJWTProcessor
@@ -42,7 +43,11 @@ class SupabaseAuth(
     private fun buildProcessor(): DefaultJWTProcessor<SecurityContext>? {
         if (supabaseUrl.isBlank()) return null
         val jwksUrl = URI("${supabaseUrl.trimEnd('/')}/auth/v1/.well-known/jwks.json").toURL()
-        val jwkSource: JWKSource<SecurityContext> = RemoteJWKSet(jwksUrl)
+        // (2026-10-25) RemoteJWKSet의 기본 연결/읽기 타임아웃이 0.25초라, Render 무료 인스턴스처럼 느린
+        // 환경에선 Supabase 공개키(JWKS)를 못 받아와서("Read timed out") 로그인한 요청도 전부 비로그인으로
+        // 처리됐음 — 공개 전환이 403이 되어 로그인 창이 반복되던 원인. 타임아웃을 5초로 늘림.
+        val retriever = DefaultResourceRetriever(5000, 5000, 51200)
+        val jwkSource: JWKSource<SecurityContext> = RemoteJWKSet(jwksUrl, retriever)
         // 코틀린의 자바 getter/setter -> 프로퍼티 자동 변환은 JWS/JWT처럼 약어가 섞인 이름에서
         // 대문자 처리가 꼬일 수 있어서(예: setJWSKeySelector가 프로퍼티로 잡힐 때 이름이
         // 예상과 다르게 생성됨), 혼동 없이 자바 세터 메서드를 명시적으로 그대로 호출함.

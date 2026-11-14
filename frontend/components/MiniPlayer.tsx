@@ -43,6 +43,11 @@ type MiniPlayerProps = {
   // MiniPlayer가 이미 떠 있는 상태(다른 곡 재생 중)에서 믹스를 눌러도 동작해야 해서, 마운트
   // 시점이 아니라 이 prop 변화를 감지하는 방식으로 구현.
   mixRequest?: { id: number; highlight: boolean } | null;
+  // 다음곡 / 이전곡 버튼 (친구 피드백 #1) — 재생바 버튼과 잠금화면/알림창 미디어 컨트롤이 같이 씀.
+  onNext?: () => void;
+  onPrevious?: () => void;
+  // 지금 재생 중인 곡을 재생목록에 담기 (친구 피드백 #1-2) — 확장 화면의 ＋ 버튼
+  onAddCurrentToPlaylist?: () => void;
 };
 
 // YouTube IFrame Player API는 <script> 태그로 전역에 한 번만 로드하면 됨.
@@ -159,8 +164,31 @@ function findChorusWindow(syncedLyrics: string): ChorusWindow | null {
     // 가능성이 높으니 이 반복도 건너뛰고 계속 탐색.
     if (blockLen < 2) continue;
 
-    const endIndex = prevIndex + blockLen;
-    const endTime = endIndex < lines.length ? lines[endIndex].time : null;
+    // (단락 끝까지 재생, 2026-10-25) "후렴 블록 다음 줄 시작"에서 끊으면 단락 중간에서 잘리거나
+    // 다음 단락으로 넘어가버림 → 줄 간격이 평소보다 크게 벌어지는 지점(=가사 단락 구분)까지
+    // 확장해서, 그 단락의 마지막 줄이 끝날 즈음을 종료 시점으로 씀.
+    const gaps: number[] = [];
+    for (let k = 1; k < lines.length; k++) {
+      const g = lines[k].time - lines[k - 1].time;
+      if (g > 0) gaps.push(g);
+    }
+    gaps.sort((a, b) => a - b);
+    const medianGap = gaps.length ? gaps[Math.floor(gaps.length / 2)] : 4;
+    const breakThreshold = Math.max(medianGap * 1.6, medianGap + 2);
+
+    let lastIdx = prevIndex + blockLen - 1;
+    while (lastIdx + 1 < lines.length) {
+      const next = lines[lastIdx + 1];
+      const gapToNext = next.time - lines[lastIdx].time;
+      if (!next.text.trim() || gapToNext > breakThreshold) break;
+      lastIdx++;
+    }
+    let endTime: number | null = null;
+    if (lastIdx + 1 < lines.length) {
+      const gapToNext = lines[lastIdx + 1].time - lines[lastIdx].time;
+      // 단락 마지막 줄을 부르는 시간 ≈ 평소 줄 길이(중앙값). 간주가 길면 거기까지만, 짧으면 다음 줄 직전.
+      endTime = lines[lastIdx].time + Math.min(gapToNext - 0.3, medianGap * 1.1);
+    }
     return { chorusTime, leadInTime, endTime };
   }
   return null;
@@ -177,7 +205,8 @@ const HIGHLIGHT_WINDOW_MS = 60_000;
 // 보장 길이를 15초 → 30초로 올림 — 탐지된 자연 종료 지점이 30초보다 짧으면 그 지점을 살짝 넘어
 // 다음 가사 줄까지 재생되지만(완전히 다음 소절로 들어갈 수 있음), 거의 즉시 끊기는 것보다는
 // 들을 만하다는 쪽으로 절충.
-const HIGHLIGHT_MIN_WINDOW_MS = 30_000;
+// (2026-10-25) 단락 끝에서 끊는 방식으로 바뀌어서 최소 길이는 탐지 오류 방지용으로만 낮게 유지.
+const HIGHLIGHT_MIN_WINDOW_MS = 12_000;
 const HIGHLIGHT_MAX_WINDOW_MS = 90_000;
 // 가사가 없어 35% 규칙으로 폴백할 때만 쓰는 고정 리드인(간주 구간을 알 방법이 없어서 그냥 고정값).
 const HIGHLIGHT_LEAD_IN_SECONDS = 4;
@@ -334,9 +363,18 @@ export default function MiniPlayer({
   onSaveQueueToPlaylist,
   onNativeAutoAdvance,
   mixRequest,
+  onNext,
+  onPrevious,
+  onAddCurrentToPlaylist,
 }: MiniPlayerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const playerRef = useRef<any>(null);
+  // mediaSession 핸들러는 한 번만 등록되니, 최신 콜백/재생시간을 ref로 들고 있다가 호출 시점에 읽음
+  const onNextRef = useRef(onNext);
+  const onPreviousRef = useRef(onPrevious);
+  const currentTimeRef = useRef(0);
+  onNextRef.current = onNext;
+  onPreviousRef.current = onPrevious;
   const hasFiredPlayingRef = useRef(false);
   // onEnded/onActuallyPlaying은 page.tsx에서 매 렌더 새로 만들어(인라인 화살표 함수) 넘기는데,
   // 아래 플레이어 생성 useEffect는 deps가 []라 최초 1회만 실행돼서 onStateChange 클로저가 마운트
@@ -366,6 +404,17 @@ export default function MiniPlayer({
   const nativeLookaheadRef = useRef<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
+  currentTimeRef.current = currentTime;
+
+  // 이전곡: 3초 넘게 들었으면 현재 곡 처음부터, 아니면 직전에 듣던 곡으로
+  function goPrevious() {
+    if (currentTimeRef.current > 3) {
+      playerRef.current?.seekTo?.(0, true);
+      setCurrentTime(0);
+      return;
+    }
+    onPreviousRef.current?.();
+  }
   const [duration, setDuration] = useState(0);
   const [volume, setVolume] = useState(70);
   const [isMuted, setIsMuted] = useState(false);
@@ -381,6 +430,53 @@ export default function MiniPlayer({
   // 유튜브 뮤직의 확장 재생 화면(앨범아트 크게 + 다음 트랙/관련 항목/가사 탭)을 참고해서 추가.
   // 미니 플레이어 하단 바의 앨범아트나 곡 정보를 누르면 이 전체화면 오버레이가 열림.
   const [isExpanded, setIsExpanded] = useState(false);
+  // 확장 재생 화면에서 아래로 쓸어내리면 크롬의 "당겨서 새로고침"이 먼저 발동해 페이지가 새로고침되던
+  // 문제(2026-10-25 폰 확인) — 확장 화면이 열려 있는 동안만 문서 전체의 overscroll을 막아서 새로고침 대신
+  // 우리 "쓸어내려 닫기"만 동작하게 함(닫으면 원래대로 복구해서 홈에서는 당겨서 새로고침 가능).
+  useEffect(() => {
+    if (!isExpanded) return;
+    const html = document.documentElement;
+    const body = document.body;
+    const prevHtml = html.style.overscrollBehaviorY;
+    const prevBody = body.style.overscrollBehaviorY;
+    html.style.overscrollBehaviorY = "contain";
+    body.style.overscrollBehaviorY = "contain";
+    return () => {
+      html.style.overscrollBehaviorY = prevHtml;
+      body.style.overscrollBehaviorY = prevBody;
+    };
+  }, [isExpanded]);
+  // 확장 재생 화면: 위쪽(헤더/앨범아트/곡 정보)을 아래로 쓸어내리면 닫힘 (스포티파이/유튜브 뮤직처럼).
+  // 아래 큐/가사 목록은 스크롤해야 하니 이 핸들러를 안 붙이고, 세로로 80px 이상 + 가로보다 확실히
+  // 길게 움직였을 때만 인정해서 슬라이더 조작/탭과 안 겹치게 함.
+  const swipeDownStartRef = useRef<{ x: number; y: number } | null>(null);
+  const swipeDownHandlers = {
+    onTouchStart: (e: React.TouchEvent) => {
+      const t = e.touches[0];
+      swipeDownStartRef.current = { x: t.clientX, y: t.clientY };
+    },
+    onTouchEnd: (e: React.TouchEvent) => {
+      const start = swipeDownStartRef.current;
+      swipeDownStartRef.current = null;
+      if (!start) return;
+      const t = e.changedTouches[0];
+      const dy = t.clientY - start.y;
+      const dx = Math.abs(t.clientX - start.x);
+      if (dy > 80 && dy > dx * 1.5) setIsExpanded(false);
+    },
+  };
+  // "재생목록에 저장" 메뉴(현재 곡 / 전체 / 선택) 상태
+  const [saveMenuOpen, setSaveMenuOpen] = useState(false);
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIdx, setSelectedIdx] = useState<Set<number>>(new Set());
+  function toggleSelected(idx: number) {
+    setSelectedIdx((prev) => {
+      const next = new Set(prev);
+      if (next.has(idx)) next.delete(idx);
+      else next.add(idx);
+      return next;
+    });
+  }
   const [activeTab, setActiveTab] = useState<ExpandedTab>("queue");
 
   // "가사" 탭 — 원래는 Genius/YouTube 둘 다 가사 원문을 못 줘서 보류했다가, API 키 없이 무료로
@@ -609,6 +705,10 @@ export default function MiniPlayer({
       previewTimeoutRef.current = null;
     }
     setIsPreviewing(mixRequest.highlight);
+    // (B단계 3-4, 2026-10-25) 하단 탭 "하이라이트"/"모두 재생"은 화면을 바꾸지 않고 바로 재생만
+    // 시작해서, 눌러도 뭔가 일어났는지 잘 안 보인다는 피드백 — 믹스를 시작하면 확장 플레이어를
+    // 바로 펼쳐서 어떤 곡이 재생되는지 보여줌(이후 곡이 자동으로 넘어갈 땐 펼치지 않음).
+    setIsExpanded(true);
   }, [mixRequest]);
 
   // 진행바용 재생 위치 폴링 (유튜브 API는 재생 위치 변경 이벤트가 따로 없어서 주기적으로 조회해야 함)
@@ -734,10 +834,14 @@ export default function MiniPlayer({
       playerRef.current?.seekTo?.(details.seekTime, true);
       setCurrentTime(details.seekTime);
     });
+    navigator.mediaSession.setActionHandler("nexttrack", () => onNextRef.current?.());
+    navigator.mediaSession.setActionHandler("previoustrack", () => goPrevious());
     return () => {
       navigator.mediaSession.setActionHandler("play", null);
       navigator.mediaSession.setActionHandler("pause", null);
       navigator.mediaSession.setActionHandler("seekto", null);
+      navigator.mediaSession.setActionHandler("nexttrack", null);
+      navigator.mediaSession.setActionHandler("previoustrack", null);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -848,11 +952,27 @@ export default function MiniPlayer({
           </button>
           <button
             type="button"
+            onClick={goPrevious}
+            aria-label="이전 곡"
+            className="shrink-0 rounded-full p-1.5 text-white/70 hover:bg-white/10 hover:text-white"
+          >
+            ⏮
+          </button>
+          <button
+            type="button"
             onClick={togglePlay}
             aria-label={isPlaying ? "일시정지" : "재생"}
             className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-sm text-black"
           >
             {isPlaying ? "❚❚" : "▶"}
+          </button>
+          <button
+            type="button"
+            onClick={() => onNext?.()}
+            aria-label="다음 곡"
+            className="shrink-0 rounded-full p-1.5 text-white/70 hover:bg-white/10 hover:text-white"
+          >
+            ⏭
           </button>
           <button
             type="button"
@@ -919,11 +1039,27 @@ export default function MiniPlayer({
           <div className="flex items-center gap-2">
             <button
               type="button"
+              onClick={goPrevious}
+              aria-label="이전 곡"
+              className="shrink-0 rounded-full p-1.5 text-white/70 hover:bg-white/10 hover:text-white"
+            >
+              ⏮
+            </button>
+            <button
+              type="button"
               onClick={togglePlay}
               aria-label={isPlaying ? "일시정지" : "재생"}
               className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-sm text-black"
             >
               {isPlaying ? "❚❚" : "▶"}
+            </button>
+            <button
+              type="button"
+              onClick={() => onNext?.()}
+              aria-label="다음 곡"
+              className="shrink-0 rounded-full p-1.5 text-white/70 hover:bg-white/10 hover:text-white"
+            >
+              ⏭
             </button>
             <button
               type="button"
@@ -1063,7 +1199,7 @@ export default function MiniPlayer({
               overflow-hidden/overflow-y-auto로 따로 잘려서, 화면 하나에 다 안 들어가면 남는 부분이
               스크롤 없이 그냥 안 보이게 잘렸던 것 — 데스크톱(lg)에서만 내부 스크롤을 쓰고, 모바일에선
               이 바깥 오버레이 전체가 통째로 스크롤되게 바꿈. */}
-          <div className="flex items-center justify-between px-6 py-4">
+          <div className="flex items-center justify-between px-6 py-4" {...swipeDownHandlers}>
             <button
               type="button"
               onClick={() => setIsExpanded(false)}
@@ -1096,7 +1232,10 @@ export default function MiniPlayer({
                 양쪽을 같은 높이로 맞춰주고(stretch) 이 칸은 그 안에서 세로 중앙 정렬만 하기 때문에,
                 오른쪽이 아무리 길어도 앨범아트가 화면 밖으로 밀려나지 않음. */}
             <div className="flex min-h-0 flex-col items-center justify-center gap-6 py-4 lg:overflow-y-auto">
-              <div className="flex h-72 w-72 items-center justify-center overflow-hidden rounded-xl bg-white/5 shadow-2xl sm:h-80 sm:w-80">
+              <div
+                className="flex h-72 w-72 items-center justify-center overflow-hidden rounded-xl bg-white/5 shadow-2xl sm:h-80 sm:w-80"
+                {...swipeDownHandlers}
+              >
                 {track.image ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={track.image} alt={track.name} className="h-full w-full object-cover" />
@@ -1104,7 +1243,7 @@ export default function MiniPlayer({
                   <span className="text-6xl text-white/25">♪</span>
                 )}
               </div>
-              <div className="text-center">
+              <div className="text-center" {...swipeDownHandlers}>
                 <p className="text-xl font-semibold">{track.name}</p>
                 <p className="mt-1 text-white/50">{track.artist}</p>
               </div>
@@ -1121,11 +1260,27 @@ export default function MiniPlayer({
                 )}
                 <button
                   type="button"
+                  onClick={goPrevious}
+                  aria-label="이전 곡"
+                  className="rounded-full p-2 text-2xl text-white/80 hover:bg-white/10 hover:text-white"
+                >
+                  ⏮
+                </button>
+                <button
+                  type="button"
                   onClick={togglePlay}
                   aria-label={isPlaying ? "일시정지" : "재생"}
                   className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-white text-lg text-black"
                 >
                   {isPlaying ? "❚❚" : "▶"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onNext?.()}
+                  aria-label="다음 곡"
+                  className="rounded-full p-2 text-2xl text-white/80 hover:bg-white/10 hover:text-white"
+                >
+                  ⏭
                 </button>
                 <button
                   type="button"
@@ -1194,24 +1349,109 @@ export default function MiniPlayer({
                           하나씩 담을 필요 없이 지금 큐에 뜬 목록 전체를 한 번에 옮길 수 있음.
                           "관련 항목" 탭을 없앤 대신 생긴 자리라 탭 콘텐츠 맨 위에 둠. */}
                       {onSaveQueueToPlaylist && (
-                        <div className="flex justify-end px-2 pb-1">
-                          <button
-                            type="button"
-                            onClick={() => onSaveQueueToPlaylist(queue)}
-                            className="flex items-center gap-1 rounded-full border border-white/15 px-3 py-1 text-xs text-white/70 hover:bg-white/10 hover:text-white"
-                          >
-                            <span className="text-sm leading-none">＋</span>
-                            재생목록에 저장
-                          </button>
+                        <div className="relative flex justify-end gap-2 px-2 pb-1">
+                          {selectMode ? (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSelectMode(false);
+                                  setSelectedIdx(new Set());
+                                }}
+                                className="rounded-full border border-white/15 px-3 py-1 text-xs text-white/60 hover:bg-white/10"
+                              >
+                                취소
+                              </button>
+                              <button
+                                type="button"
+                                disabled={selectedIdx.size === 0}
+                                onClick={() => {
+                                  onSaveQueueToPlaylist(queue.filter((_, i) => selectedIdx.has(i)));
+                                  setSelectMode(false);
+                                  setSelectedIdx(new Set());
+                                }}
+                                className="rounded-full bg-white px-3 py-1 text-xs font-medium text-black disabled:opacity-40"
+                              >
+                                {selectedIdx.size}곡 담기
+                              </button>
+                            </>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => setSaveMenuOpen((v) => !v)}
+                              className="flex items-center gap-1 rounded-full border border-white/15 px-3 py-1 text-xs text-white/70 hover:bg-white/10 hover:text-white"
+                            >
+                              <span className="text-sm leading-none">＋</span>
+                              재생목록에 저장
+                            </button>
+                          )}
+                          {saveMenuOpen && !selectMode && (
+                            <div className="absolute right-2 top-8 z-10 w-52 overflow-hidden rounded-xl border border-white/15 bg-neutral-900 text-sm shadow-xl">
+                              {onAddCurrentToPlaylist && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setSaveMenuOpen(false);
+                                    onAddCurrentToPlaylist();
+                                  }}
+                                  className="block w-full px-4 py-3 text-left hover:bg-white/10"
+                                >
+                                  지금 듣는 곡 추가
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSaveMenuOpen(false);
+                                  onSaveQueueToPlaylist(queue);
+                                }}
+                                className="block w-full border-t border-white/10 px-4 py-3 text-left hover:bg-white/10"
+                              >
+                                다음 트랙 전체 ({queue.length}곡)
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSaveMenuOpen(false);
+                                  setSelectMode(true);
+                                }}
+                                className="block w-full border-t border-white/10 px-4 py-3 text-left hover:bg-white/10"
+                              >
+                                곡 선택해서 추가
+                              </button>
+                            </div>
+                          )}
                         </div>
                       )}
                       {queue.map((t, idx) => (
-                        <ExpandedTrackRow
-                          key={`${t.artist}-${t.name}-${idx}`}
-                          track={t}
-                          index={idx}
-                          onClick={() => onSelectQueueTrack?.(t)}
-                        />
+                        <div key={`${t.artist}-${t.name}-${idx}`} className="flex items-center">
+                          {selectMode && (
+                            <button
+                              type="button"
+                              onClick={() => toggleSelected(idx)}
+                              aria-label={selectedIdx.has(idx) ? "선택 해제" : "선택"}
+                              className="flex h-10 w-10 shrink-0 items-center justify-center"
+                            >
+                              <span
+                                className={`flex h-5 w-5 items-center justify-center rounded border text-xs ${
+                                  selectedIdx.has(idx) ? "border-white bg-white text-black" : "border-white/30"
+                                }`}
+                              >
+                                {selectedIdx.has(idx) ? "✓" : ""}
+                              </span>
+                            </button>
+                          )}
+                          <div className="min-w-0 flex-1">
+                            <ExpandedTrackRow
+                              track={t}
+                              index={idx}
+                              onClick={() => {
+                                if (!selectMode) return onSelectQueueTrack?.(t);
+                                toggleSelected(idx);
+                              }}
+                            />
+                          </div>
+                        </div>
                       ))}
                     </>
                   ))}

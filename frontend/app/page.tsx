@@ -13,6 +13,7 @@ import PlaylistDetailOverlay from "@/components/PlaylistDetailOverlay";
 import StaleTracksModal from "@/components/StaleTracksModal";
 import AuthModal from "@/components/AuthModal";
 import RankingPage from "@/components/RankingPage";
+import ArtistPage from "@/components/ArtistPage";
 import { supabase } from "@/lib/supabase";
 import {
   search,
@@ -58,12 +59,17 @@ import {
   getProfile,
   likePlaylist,
   unlikePlaylist,
+  followUser,
+  unfollowUser,
+  getMyNickname,
+  setBio,
   PlaylistApiError,
   type Favorite,
   type FavoriteTrack,
   type Playlist,
   type PlaylistTrack,
   type PublicPlaylist,
+  type UserProfilePage,
 } from "@/lib/playlistApi";
 import { MUSIC_CATEGORIES } from "@/lib/categories";
 
@@ -78,6 +84,9 @@ function shuffleArray<T>(arr: T[]): T[] {
   }
   return copy;
 }
+
+// 무드 칩 결과 표시 방식 비교용: "sheet" = 하단 시트, "scroll" = 결과 위치로 자동 스크롤
+const MOOD_RESULT_MODE: "sheet" | "scroll" = "scroll";
 
 export default function Home() {
   const [artists, setArtists] = useState<Artist[]>([]);
@@ -101,6 +110,10 @@ export default function Home() {
   const [tracks, setTracks] = useState<Track[]>([]);
   const [selectedArtist, setSelectedArtist] = useState<string | null>(null);
   const [isSearching, setIsSearching] = useState(false);
+  const [searchingQuery, setSearchingQuery] = useState("");
+  const swipeBackRef = useRef<{ x: number; y: number } | null>(null);
+  // 공개 전환하려다 로그인이 필요해서 로그인 팝업을 띄운 재생목록 — 로그인 성공 후 이어서 공개 전환
+  const resumePublishRef = useRef<Playlist | null>(null);
   const [isRecommending, setIsRecommending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [favorites, setFavorites] = useState<Favorite[]>([]);
@@ -140,6 +153,7 @@ export default function Home() {
   const DIARY_HISTORY_CAP = 10;
   type DiaryHistoryEntry = {
     date: string; // YYYY-MM-DD
+    at?: string; // ISO 일시 — 시각 표시용(예전에 저장된 기록엔 없을 수 있음)
     text: string;
     message: string;
     moodLabel: string;
@@ -150,10 +164,18 @@ export default function Home() {
   const [isDiaryOpen, setIsDiaryOpen] = useState(false);
   const [diaryText, setDiaryText] = useState("");
   const [diaryResult, setDiaryResult] = useState<DiaryReflectionResult | null>(null);
+  useEffect(() => {
+    if (!diaryResult?.message) return;
+    (document.activeElement as HTMLElement | null)?.blur?.();
+    setTimeout(() => diaryResultRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 100);
+  }, [diaryResult?.message]);
   const [isDiaryLoading, setIsDiaryLoading] = useState(false);
   const [diaryError, setDiaryError] = useState<string | null>(null);
   const [diaryHistory, setDiaryHistory] = useState<DiaryHistoryEntry[]>([]);
   const [isDiaryHistoryOpen, setIsDiaryHistoryOpen] = useState(false);
+  // (B단계 4) 결과(공감 글)가 입력창 아래라 키보드에 가려져 안 보이던 문제 — 결과가 오면 키보드를
+  // 내리고 결과 위치로 스크롤해서 공감 글이 처음부터 끝까지 보이게 함.
+  const diaryResultRef = useRef<HTMLDivElement | null>(null);
   const DIARY_TEXT_MAX_LENGTH = 500;
 
   // 검색/무드 선택 전에도 중앙이 비어 보이지 않게, 홈 화면 기본으로 깔아둘 인기곡 차트.
@@ -180,6 +202,10 @@ export default function Home() {
   // 유튜브 iframe 자체(로고/자막 버튼/재생바)를 그대로 보여주면 여전히 "남의 사이트를 빌려온 느낌"이라는
   // 추가 피드백을 받고, 재생/진행바 UI는 전부 MiniPlayer가 자체적으로 그림 — 여긴 videoId만 넘겨줌.
   const [nowPlaying, setNowPlaying] = useState<NowPlayingTrack | null>(null);
+  // 이전곡 버튼용: 직전에 재생하던 곡들을 쌓아둠 (최대 30곡)
+  const nowPlayingRef = useRef<NowPlayingTrack | null>(null);
+  nowPlayingRef.current = nowPlaying;
+  const playHistoryRef = useRef<NowPlayingTrack[]>([]);
 
   // (Task #44-3) "믹스" 시작 버튼 2개(하이라이트 믹스/전체 믹스) 전용 신호 — "빠른 선곡" 풀에서
   // 무작위 곡 하나를 골라 바로 재생 시작. MiniPlayer의 번개 토글 버튼(지금 재생 중인 곡 하나를
@@ -234,6 +260,9 @@ export default function Home() {
   // 그 사람이 공개한 재생목록 모음(프로필 페이지)으로 들어감.
   const [viewingProfileNickname, setViewingProfileNickname] = useState<string | null>(null);
   const [profilePlaylists, setProfilePlaylists] = useState<PublicPlaylist[] | null>(null);
+  // (프로필 화면/팔로우, 2026-10-29) 프로필 카드에 쓰는 자동 계산 값(팔로워 수, 배지 등)과,
+  // 내가 팔로우 중인 닉네임 목록(랭킹 "팔로우" 탭용).
+  const [profileInfo, setProfileInfo] = useState<UserProfilePage | null>(null);
   // 재생목록을 처음 공개로 전환하려는데 아직 닉네임이 없으면(백엔드 428) 닉네임 설정 모달을
   // 띄움 — 어느 재생목록을 공개하려던 시도였는지 기억해뒀다가, 닉네임 저장에 성공하면 그
   // 재생목록 공개 전환을 자동으로 다시 시도함(사용자가 "공개" 버튼을 두 번 누르지 않게).
@@ -405,6 +434,15 @@ export default function Home() {
       }
       return;
     }
+    // (버그 수정, 2026-10-22, 피드백 #2) 비로그인이면 카테고리부터 고르게 한 뒤 마지막에 403으로
+    // 로그인 팝업이 뜨고, 로그인해도 공개가 이어지지 않아서 처음부터 다시 눌러야 했음(그때 또
+    // 같은 팝업이 반복). 로그인이 필요하다는 걸 맨 앞에서 먼저 확인해서 로그인부터 시키고, 로그인에
+    // 성공하면 원래 하려던 공개 전환(카테고리 선택)을 자동으로 이어서 띄움.
+    if (supabase && !userEmail) {
+      resumePublishRef.current = playlist;
+      setIsAuthModalOpen(true);
+      return;
+    }
     // 비공개 -> 공개: 카테고리를 먼저 고르게 함 (닉네임과 같은 "그 순간에만 물어보기" 패턴).
     setPendingVisibilityPlaylist(playlist);
     setSelectedCategory(null);
@@ -434,8 +472,9 @@ export default function Home() {
         setNicknameError(null);
         setIsNicknameModalOpen(true);
       } else if (status === 403) {
+        // 세션이 만료됐거나 로그인이 풀린 경우 — 로그인 후 공개 전환을 이어서 하도록 기억해둠
         setIsCategoryModalOpen(false);
-        setError("재생목록을 공개하려면 먼저 로그인해주세요.");
+        resumePublishRef.current = playlist;
         setIsAuthModalOpen(true);
       } else {
         setError("재생목록 공개 설정을 바꾸지 못했어요.");
@@ -473,17 +512,49 @@ export default function Home() {
     }
   }
 
+  // 하단 "홈" 탭 — 검색 결과/보관함/랭킹/기록 등 어떤 화면에 있든 열려 있는 걸 모두 닫고 홈 맨 위로.
+  function handleGoHome() {
+    clearSearchResults();
+    setIsLibraryOpen(false);
+    setIsPublicFeedOpen(false);
+    setViewingPublicPlaylistId(null);
+    setPublicPlaylistTracks(null);
+    setViewingProfileNickname(null);
+    setProfilePlaylists(null);
+    setIsDiaryOpen(false);
+    setIsProfileSheetOpen(false);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
   function handleOpenPublicFeed() {
     setIsPublicFeedOpen(true);
     setViewingPublicPlaylistId(null);
     setPublicPlaylistTracks(null);
     setViewingProfileNickname(null);
     setProfilePlaylists(null);
+    setProfileInfo(null);
     setIsLoadingPublicFeed(true);
     getPublicPlaylists()
       .then(setPublicPlaylists)
       .catch(() => setError("공개 재생목록을 불러오지 못했어요."))
       .finally(() => setIsLoadingPublicFeed(false));
+  }
+
+  // 헤더 사람 아이콘 시트의 "내 프로필" — 내 닉네임으로 프로필 화면을 바로 엽니다. 닉네임은
+  // 재생목록을 처음 공개할 때 정하므로, 아직 없으면 안내만 함.
+  async function handleOpenMyProfile() {
+    setIsProfileSheetOpen(false);
+    try {
+      const { nickname } = await getMyNickname();
+      if (!nickname) {
+        setError("아직 닉네임이 없어요. 재생목록을 공개하면 닉네임을 정할 수 있어요.");
+        return;
+      }
+      handleOpenPublicFeed();
+      handleViewProfile(nickname);
+    } catch {
+      setError("내 프로필을 불러오지 못했어요.");
+    }
   }
 
   function handleViewPublicPlaylist(playlistId: number) {
@@ -498,9 +569,52 @@ export default function Home() {
   function handleViewProfile(nickname: string) {
     setViewingProfileNickname(nickname);
     setProfilePlaylists(null);
+    setProfileInfo(null);
     getProfile(nickname)
-      .then((res) => setProfilePlaylists(res.playlists))
+      .then((res) => {
+        setProfilePlaylists(res.playlists);
+        setProfileInfo(res);
+      })
       .catch(() => setError("프로필을 불러오지 못했어요."));
+  }
+
+  // 팔로우/언팔로우 — 낙관적으로 먼저 화면에 반영하고 서버 값으로 덮어씀, 실패하면 되돌림.
+  // 비로그인(403)이면 로그인 모달(좋아요/공개 전환과 같은 패턴).
+  async function handleToggleFollow() {
+    if (!profileInfo) return;
+    const prev = profileInfo;
+    const nextFollowed = !prev.followedByMe;
+    setProfileInfo({
+      ...prev,
+      followedByMe: nextFollowed,
+      followerCount: Math.max(0, prev.followerCount + (nextFollowed ? 1 : -1)),
+    });
+    try {
+      const result = nextFollowed ? await followUser(prev.nickname) : await unfollowUser(prev.nickname);
+      setProfileInfo((cur) =>
+        cur && cur.nickname === prev.nickname
+          ? { ...cur, followedByMe: result.followedByMe, followerCount: result.followerCount }
+          : cur
+      );
+    } catch (err) {
+      setProfileInfo((cur) => (cur && cur.nickname === prev.nickname ? prev : cur));
+      if (err instanceof PlaylistApiError && err.status === 403) {
+        setError("팔로우하려면 먼저 로그인해주세요.");
+        setIsAuthModalOpen(true);
+      } else {
+        setError("팔로우 처리에 실패했어요.");
+      }
+    }
+  }
+
+  // 한 줄 소개 저장(내 프로필에서만 호출됨)
+  async function handleSaveBio(bio: string) {
+    try {
+      const r = await setBio(bio);
+      setProfileInfo((cur) => (cur ? { ...cur, bio: r.bio || null } : cur));
+    } catch {
+      setError("한 줄 소개를 저장하지 못했어요.");
+    }
   }
 
   // 랭킹 페이지 안 "뒤로" — 곡 목록 화면이면 그걸 닫고(프로필 화면이었으면 프로필로, 아니었으면
@@ -512,6 +626,7 @@ export default function Home() {
     } else if (viewingProfileNickname !== null) {
       setViewingProfileNickname(null);
       setProfilePlaylists(null);
+      setProfileInfo(null);
     }
   }
 
@@ -529,6 +644,7 @@ export default function Home() {
       ...p,
       likedByMe: nextLiked,
       likeCount: p.likeCount + (nextLiked ? 1 : -1),
+      weeklyLikeCount: Math.max(0, p.weeklyLikeCount + (nextLiked ? 1 : -1)),
     }));
     setPublicPlaylists(optimistic);
     setProfilePlaylists((prev) => (prev ? optimistic(prev) : prev));
@@ -536,6 +652,7 @@ export default function Home() {
     try {
       const result = nextLiked ? await likePlaylist(playlist.id) : await unlikePlaylist(playlist.id);
       const applyServer = applyTo((p) => ({ ...p, likeCount: result.likeCount, likedByMe: result.likedByMe }));
+      // weeklyLikeCount는 서버 응답에 없어서 낙관적 값을 그대로 둠(피드를 다시 열면 정확한 값)
       setPublicPlaylists(applyServer);
       setProfilePlaylists((prev) => (prev ? applyServer(prev) : prev));
     } catch (err) {
@@ -692,7 +809,13 @@ export default function Home() {
   // 검색을 그만두려면 새로고침밖에 방법이 없었음. 아래 "뒤로" 버튼이 이 함수로 검색 관련
   // state를 전부 비워서 홈 화면으로 돌아가게 함 — handleSearch의 에러 처리 분기와 같은 목록을
   // 비우지만, 에러 메시지는 안 지움(사용자가 직접 누른 거라 에러가 아니므로).
+  // 곡 ⋮ 메뉴의 "이 아티스트 곡 보기" — 그 아티스트 이름으로 검색해서 검색 결과 화면으로 감.
+  function handleViewArtist(track: Track) {
+    handleSearch(track.artist);
+  }
+
   function clearSearchResults() {
+    searchBarRef.current?.clear();
     setArtists([]);
     setSearchTracks([]);
     setTagSearchTracks([]);
@@ -705,14 +828,41 @@ export default function Home() {
     setTracks([]);
   }
 
-  async function handleSearch(query: string) {
+  // 갤럭시 뒤로가기(제스처/버튼)도 검색 결과 화면을 닫도록: 결과 화면이 뜰 때 history 항목을 하나
+  // 쌓아두고, 뒤로가기(popstate)가 오면 앱이 닫히는 대신 결과 화면만 닫음. 화면 안 "뒤로"
+  // 버튼으로 닫은 경우엔 쌓아둔 항목을 되돌려서(history.back) 항목이 남지 않게 함.
+  const hasSearchResults = searchTracks.length > 0 || tagSearchTracks.length > 0 || artists.length > 0;
+  const searchHistoryPushedRef = useRef(false);
+  useEffect(() => {
+    if (hasSearchResults && !searchHistoryPushedRef.current) {
+      window.history.pushState({ unbeatSearch: true }, "");
+      searchHistoryPushedRef.current = true;
+    } else if (!hasSearchResults && searchHistoryPushedRef.current) {
+      searchHistoryPushedRef.current = false;
+      if (window.history.state?.unbeatSearch) window.history.back();
+    }
+  }, [hasSearchResults]);
+  useEffect(() => {
+    function onPopState() {
+      if (searchHistoryPushedRef.current) {
+        searchHistoryPushedRef.current = false;
+        clearSearchResults();
+      }
+    }
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function handleSearch(query: string, artist?: string) {
     setError(null);
+    setSearchingQuery(query);
     setIsSearching(true);
     setSelectedArtist(null);
     setSelectedMood(null);
     setTracks([]);
     try {
-      const data = await search(query);
+      const data = await search(query, artist);
       setArtists(data.artists);
       setSearchTracks(data.tracks);
       setTagSearchTracks(data.tagTracks);
@@ -755,19 +905,58 @@ export default function Home() {
     }
   }
 
-  async function handleSelectArtist(artistName: string) {
+  // "검색된 아티스트"에는 Last.fm이 유튜브 영상 제목 같은 가짜 항목("TWS(투어스) '내 이름을 불러줘'
+  // (4K)")과 표기만 다른 중복("TWS (투어스)"/"TWS(투어스)")까지 섞어 줌. 청취자 수가 1위의 5%
+  // 미만이거나, 따옴표·(4K) 같은 영상 제목 흔적이 있거나, 공백·괄호만 다른 중복이면 걸러서
+  // 최대 4개만 보여줌. 전부 걸러져 비면 원본을 그대로 씀.
+  function cleanSearchArtists(list: Artist[]): Artist[] {
+    if (list.length === 0) return list;
+    const norm = (s: string) => s.toLowerCase().replace(/[^0-9a-z가-힣]/g, "");
+    // "ILLIT (아일릿)"은 "ILLIT"·"아일릿"과 같은 아티스트라서, 전체/괄호 앞/괄호 안을 모두 같은 이름으로 취급
+    const keysOf = (name: string): string[] => {
+      const keys = [norm(name)];
+      const m = name.match(/^(.*?)\s*\((.*?)\)\s*$/);
+      if (m) keys.push(norm(m[1]), norm(m[2]));
+      return keys.filter(Boolean);
+    };
+    const maxListeners = Math.max(...list.map((a) => Number(a.listeners) || 0));
+    const seen = new Set<string>();
+    const out: Artist[] = [];
+    for (const a of list) {
+      const listeners = Number(a.listeners) || 0;
+      // 1위의 절반에 못 미치면 같은 가수의 다른 표기이거나 가짜 항목이라 숨김(대부분 1개만 남음)
+      if (maxListeners > 0 && listeners < maxListeners * 0.5) continue;
+      if (/['"‘’“”]|\(4K\)|\bMV\b|M\/V|Official|[!?]|라이브|킬링|직캠|티저|무대|영상|반응/i.test(a.name)) continue;
+      const keys = keysOf(a.name);
+      // 이미 고른 이름("악뮤")으로 시작하는데 훨씬 긴 이름은 영상 제목("악뮤(AKMU)의 킬링보이스를…")이라 제외
+      const nn = norm(a.name);
+      if ([...seen].some((k) => k.length >= 2 && nn.startsWith(k) && nn.length > k.length + 6)) continue;
+      if (keys.some((k) => seen.has(k))) continue;
+      keys.forEach((k) => seen.add(k));
+      out.push(a);
+      if (out.length >= 3) break;
+    }
+    return out.length > 0 ? out : list;
+  }
+
+  // 아티스트 카드를 누르면 그 아티스트의 전용 전체화면 페이지(ArtistPage)를 엶 —
+  // 예전엔 아래에 곡 몇 개만 덧붙여서 검색 결과 맨 아래 "다른 곡"과 똑같은 목록이 중복으로 나왔음.
+  const [artistPageName, setArtistPageName] = useState<string | null>(null);
+
+  function handleSelectArtist(artistName: string) {
     setError(null);
     setSelectedArtist(artistName);
-    setIsRecommending(true);
-    setTracks([]);
-    try {
-      const data = await recommendByArtist(artistName);
-      setTracks(data.tracks);
-    } catch (err) {
-      setError("추천 트랙을 불러오지 못했어요.");
-    } finally {
-      setIsRecommending(false);
-    }
+    setArtistPageName(artistName);
+  }
+
+  const moodSheetSwipeRef = useRef<{ x: number; y: number } | null>(null);
+  const moodResultRef = useRef<HTMLDivElement | null>(null);
+
+  // 무드 바텀시트 닫기 — 선택한 무드와 결과 곡을 비워서 홈 화면 원래 상태로
+  function handleCloseMoodSheet() {
+    setSelectedMood(null);
+    setDomesticMoodTracks([]);
+    setInternationalMoodTracks([]);
   }
 
   async function handleSelectMood(tag: string) {
@@ -791,6 +980,10 @@ export default function Home() {
       const data = await discoverByMood(tag);
       setDomesticMoodTracks(data.domesticTracks);
       setInternationalMoodTracks(data.internationalTracks);
+      // 자동 스크롤 모드: 결과가 렌더된 뒤 그 위치로 부드럽게 이동
+      if (MOOD_RESULT_MODE === "scroll") {
+        setTimeout(() => moodResultRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
+      }
     } catch (err) {
       setError("무드 곡을 불러오지 못했어요.");
     } finally {
@@ -804,10 +997,22 @@ export default function Home() {
     setDiaryError(null);
     setIsDiaryLoading(true);
     try {
-      const data = await getDiaryReflection(text);
+      // 공감 메시지를 먼저 받아 바로 보여주고, 추천곡은 이어서 따로 채움(곡 조회가 느려도
+      // "위로받기" 응답이 같이 늦어지지 않게)
+      const data = await getDiaryReflection(text, false);
       setDiaryResult(data);
+      discoverByMood(data.moodTag)
+        .then((tracks) => {
+          setDiaryResult((prev) =>
+            prev && prev.moodTag === data.moodTag
+              ? { ...prev, domesticTracks: tracks.domesticTracks, internationalTracks: tracks.internationalTracks }
+              : prev
+          );
+        })
+        .catch((e) => console.warn("[diary] 추천곡 조회 실패:", e));
       const entry: DiaryHistoryEntry = {
         date: new Date().toISOString().slice(0, 10),
+        at: new Date().toISOString(),
         text,
         message: data.message,
         moodLabel: data.moodLabel,
@@ -921,6 +1126,8 @@ export default function Home() {
       // 검색/차트/즐겨찾기/재생목록처럼 큐 바깥에서 완전히 다른 곡을 골랐을 땐 false(기본값)로
       // 남아서, 이전 곡과 장르가 전혀 다른 후보들이 새 큐에 섞여 들어가지 않도록 통째로 새로 채움.
       fromQueue?: boolean;
+      // 이전곡 버튼으로 돌아가는 재생이면 true — 히스토리에 현재 곡을 다시 쌓지 않음
+      skipHistory?: boolean;
     }
   ) {
     setError(null);
@@ -930,6 +1137,10 @@ export default function Home() {
       // 더 여유 있게 쓸 수 있음.
       const videoId = track.videoId ?? (await searchYoutubeVideo(track.artist, track.name)).videoId;
       if (videoId) {
+        const prev = nowPlayingRef.current;
+        if (prev && !options?.skipHistory && prev.videoId !== videoId) {
+          playHistoryRef.current = [...playHistoryRef.current, prev].slice(-30);
+        }
         setNowPlaying({ videoId, name: track.name, artist: track.artist, image: track.image ?? null });
         if (options?.manualNext !== undefined) {
           // 재생목록에서 고른 곡들을 순서대로 재생 중 — 큐를 비슷한 곡으로 덮어쓰지 않고
@@ -971,6 +1182,17 @@ export default function Home() {
     }
     mixRequestIdRef.current += 1;
     setMixRequest({ id: mixRequestIdRef.current, highlight });
+  }
+
+  // (B단계 3-5, 2026-10-25) 빠른 선곡/다시 듣기의 "모두 재생" — 화면에 보이는 목록을 순서대로 재생하고,
+  // 하단 플레이어의 "다음 트랙" 패널에도 그 목록의 나머지 곡이 그대로 나오게 함(재생목록 이어재생과
+  // 같은 manualNext 방식). 별도의 "전체보기" 화면은 만들지 않기로 함.
+  function handlePlayAll(list: Track[]) {
+    if (list.length === 0) return;
+    const [first, ...rest] = list;
+    handlePlay(first, { manualNext: rest });
+    mixRequestIdRef.current += 1;
+    setMixRequest({ id: mixRequestIdRef.current, highlight: false });
   }
 
   // (§47, §48) append=false(기본값)면 예전처럼 큐를 완전히 새로 채움 — 검색/차트/즐겨찾기 등
@@ -1432,6 +1654,15 @@ export default function Home() {
           </div>
         </div>
       </header>
+      {/* 모바일은 검색을 누르면 전체화면 검색창이 바로 닫혀서, 결과가 올 때까지 아무 변화 없이
+          메인 화면만 보였음("검색이 안 되고 그냥 메인으로 간다"는 피드백 5-1). 결과가 올 때까지
+          로딩 표시를 띄워서 검색이 진행 중이라는 걸 알 수 있게 함. */}
+      {isSearching && (
+        <div className="sticky top-[57px] z-10 flex items-center justify-center gap-2 border-b border-white/10 bg-neutral-900/95 px-4 py-2.5 text-sm text-white/80 backdrop-blur">
+          <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+          &quot;{searchingQuery}&quot; 검색 중...
+        </div>
+      )}
 
       {/* 모바일 "보관함" 전체화면 서랍 — 즐겨찾기 아티스트/즐겨찾기 곡/내 재생목록을 데스크톱
           사이드바와 완전히 같은 내용(renderFavoriteArtists/renderLibraryPanel)으로 보여줌. */}
@@ -1504,39 +1735,27 @@ export default function Home() {
       {quickPickTracks.length > 0 && (
         <div className="w-full max-w-xl">
           <div className="mb-2 flex items-center justify-between">
-            <p className="text-xs text-white/40">빠른 선곡</p>
+            <p className="text-xl font-bold text-white">빠른 선곡</p>
             {/* (Task #44-3) "믹스" 버튼 2개 — 특정 곡을 고르지 않고 눌러서 바로 무작위 재생을
                 시작하는 전용 진입점. MiniPlayer 안의 번개 토글(지금 재생 중인 곡 하나에 대해
                 하이라이트 모드를 켜고 끔)과는 다른, "처음부터 하이라이트/전곡 중 하나를 골라
                 믹스를 시작"하는 버튼이 따로 있었으면 좋겠다는 요청으로 추가. */}
+            {/* (B단계 3-3, 2026-10-25) 하이라이트 믹스는 하단 탭의 "하이라이트"와 똑같은 동작이라
+                중복이어서 뺌 — 대신 "새로고침"(추천 다시 받기)과 "모두 재생"(구 전체 믹스)만 둠. */}
             <div className="flex items-center gap-1.5">
               <button
                 type="button"
-                onClick={() => handleStartMix(true)}
-                className="rounded-full border border-white/10 px-2.5 py-1 text-[11px] text-white/60 hover:border-white/30 hover:text-white"
-                title={
-                  selectedMood
-                    ? `"${selectedMoodLabel}" 무드 안에서만 하이라이트를 이어서 재생`
-                    : "즐겨찾기 기반 추천 곡들의 하이라이트만 이어서 재생"
-                }
+                onClick={() => handlePlayAll(quickPickTracks)}
+                aria-label="모두 재생"
+                className="rounded-full border border-white/30 px-3 py-1 text-xs font-medium text-white hover:bg-white/10"
+                title="빠른 선곡 모두 재생"
               >
-                하이라이트 믹스
-              </button>
-              <button
-                type="button"
-                onClick={() => handleStartMix(false)}
-                className="rounded-full border border-white/10 px-2.5 py-1 text-[11px] text-white/60 hover:border-white/30 hover:text-white"
-                title={
-                  selectedMood
-                    ? `"${selectedMoodLabel}" 무드 안에서만 전곡 재생`
-                    : "즐겨찾기 기반 추천 곡으로 전곡 재생 시작"
-                }
-              >
-                전체 믹스
+                모두 재생
               </button>
             </div>
           </div>
           <CompactTrackGrid
+            onViewArtist={handleViewArtist}
             tracks={quickPickTracks}
             isFavorite={isTrackFavorite}
             onToggleFavorite={handleToggleFavoriteTrack}
@@ -1547,6 +1766,81 @@ export default function Home() {
         </div>
       )}
 
+      {/* (B단계 3-2, 2026-10-22) 무드 칩을 눌러도 결과가 화면 한참 아래에 나와서 변화가 안 보인다는
+          피드백 — 모바일(sm 미만)은 결과를 아래에서 올라오는 바텀시트로 띄워서 바로 보이게 함(위로
+          쓸어내리듯 아래로 쓸면 닫힘). 데스크톱(sm 이상)은 원래처럼 인라인으로 그대로 둠. 재생바(z-30)
+          아래(z-25)에 두고, 재생 중이면 재생바 위로 올려서 재생바를 안 가리게 함. */}
+      {selectedMood && (
+        <div
+          ref={moodResultRef}
+          className={
+            MOOD_RESULT_MODE === "sheet"
+              ? `fixed inset-x-0 z-[25] flex max-h-[62dvh] flex-col rounded-t-2xl border-t border-white/10 bg-neutral-950 shadow-2xl ${
+                  nowPlaying ? "bottom-[8.5rem]" : "bottom-16"
+                } sm:static sm:z-auto sm:max-h-none sm:w-full sm:max-w-xl sm:rounded-none sm:border-0 sm:bg-transparent sm:shadow-none`
+              : "w-full max-w-xl scroll-mt-20"
+          }
+        >
+          <div
+            // 터치와 마우스(Mac 반응형 미리보기 테스트용) 모두 받도록 포인터 이벤트 사용.
+            // 헤더 안 버튼(믹스 재생/새로고침/✕)을 누르는 건 드래그로 취급하지 않음.
+            className={`shrink-0 touch-none select-none px-4 pb-2 pt-2 sm:hidden ${
+              MOOD_RESULT_MODE === "sheet" ? "" : "hidden"
+            }`}
+            onPointerDown={(e) => {
+              if ((e.target as HTMLElement).closest("button")) return;
+              moodSheetSwipeRef.current = { x: e.clientX, y: e.clientY };
+              e.currentTarget.setPointerCapture(e.pointerId);
+            }}
+            onPointerUp={(e) => {
+              const start = moodSheetSwipeRef.current;
+              moodSheetSwipeRef.current = null;
+              if (!start) return;
+              const dy = e.clientY - start.y;
+              if (dy > 50 && dy > Math.abs(e.clientX - start.x) * 1.5) {
+                handleCloseMoodSheet();
+              }
+            }}
+            onPointerCancel={() => {
+              moodSheetSwipeRef.current = null;
+            }}
+          >
+            <div className="mx-auto mb-2 h-1 w-10 rounded-full bg-white/20" />
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-sm font-semibold">&quot;{selectedMoodLabel}&quot;</p>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => handleStartMix(false)}
+                  className="rounded-full bg-white px-3 py-1 text-[11px] font-medium text-black"
+                >
+                  믹스 재생
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSelectMood(selectedMood)}
+                  className="rounded-full border border-white/15 px-2.5 py-1 text-[11px] text-white/70"
+                >
+                  새로고침
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCloseMoodSheet}
+                  aria-label="닫기"
+                  className="rounded-full p-1.5 text-white/50 hover:bg-white/10 hover:text-white"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+          </div>
+          <div
+            className={
+              MOOD_RESULT_MODE === "sheet"
+                ? "overflow-y-auto px-4 pb-4 sm:overflow-visible sm:p-0"
+                : "w-full"
+            }
+          >
       {isLoadingMood && <p className="text-sm text-white/50">곡 불러오는 중...</p>}
 
       {/* 국내/해외 구분해서 보여달라는 피드백 — Last.fm 무드 태그가 서구 팝 위주라
@@ -1560,8 +1854,9 @@ export default function Home() {
             <>
               {domesticMoodTracks.length > 0 && (
                 <div className="mb-6">
-                  <p className="mb-2 text-xs text-white/40">"{selectedMoodLabel}" 국내 인기곡</p>
+                  <p className="mb-2 text-xl font-bold text-white">"{selectedMoodLabel}" 국내 인기곡</p>
                   <CompactTrackGrid
+                    onViewArtist={handleViewArtist}
                     tracks={domesticMoodTracks}
                     isFavorite={isTrackFavorite}
                     onToggleFavorite={handleToggleFavoriteTrack}
@@ -1573,8 +1868,9 @@ export default function Home() {
               )}
               {internationalMoodTracks.length > 0 && (
                 <div>
-                  <p className="mb-2 text-xs text-white/40">"{selectedMoodLabel}" 해외 인기곡</p>
+                  <p className="mb-2 text-xl font-bold text-white">"{selectedMoodLabel}" 해외 인기곡</p>
                   <CompactTrackGrid
+                    onViewArtist={handleViewArtist}
                     tracks={internationalMoodTracks}
                     isFavorite={isTrackFavorite}
                     onToggleFavorite={handleToggleFavoriteTrack}
@@ -1588,6 +1884,9 @@ export default function Home() {
           )}
         </div>
       )}
+          </div>
+        </div>
+      )}
 
       {/* (UI 재구조화, 2026-10-14) 검색 결과 영역(검색된 곡/관련 곡/검색된 아티스트/비슷한
           아티스트 곡/"OO의 다른 곡") 전체를 모바일(sm 미만)에서만 전체화면으로 덮어서, 홈 피드랑
@@ -1596,11 +1895,28 @@ export default function Home() {
           피드백도 모바일 한정이었음). 검색 결과가 하나도 없으면 이 래퍼 자체가 아예 없는 셈이라
           평소 홈 화면엔 전혀 영향 없음. */}
       {(searchTracks.length > 0 || tagSearchTracks.length > 0 || artists.length > 0) && (
-        <div className="fixed inset-0 z-20 flex flex-col gap-6 overflow-y-auto bg-black p-4 pb-44 sm:static sm:z-auto sm:flex sm:flex-col sm:gap-6 sm:overflow-visible sm:bg-transparent sm:p-0">
+        <div
+          className="fixed inset-0 z-20 flex flex-col gap-6 overflow-y-auto bg-black p-4 pb-44 sm:static sm:z-auto sm:flex sm:flex-col sm:gap-6 sm:overflow-visible sm:bg-transparent sm:p-0"
+          // 아이폰처럼 화면 왼쪽 가장자리에서 오른쪽으로 쓸어서 뒤로 가기(모바일 전용 — 가로 스크롤 목록과
+          // 안 겹치게 왼쪽 가장자리 48px에서 시작한 제스처만 인정).
+          onTouchStart={(e) => {
+            const t = e.touches[0];
+            swipeBackRef.current = t.clientX <= 48 ? { x: t.clientX, y: t.clientY } : null;
+          }}
+          onTouchEnd={(e) => {
+            const start = swipeBackRef.current;
+            swipeBackRef.current = null;
+            if (!start) return;
+            const t = e.changedTouches[0];
+            if (t.clientX - start.x > 70 && Math.abs(t.clientY - start.y) < 60) {
+              clearSearchResults();
+            }
+          }}
+        >
           <button
             type="button"
             onClick={clearSearchResults}
-            className="flex items-center gap-1 text-sm text-white/70 hover:text-white sm:hidden"
+            className="sticky top-0 z-10 -mx-4 -mt-4 flex items-center gap-1 bg-black/95 px-4 py-4 text-base text-white/80 hover:text-white sm:hidden"
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-4 w-4">
               <path d="m15 18-6-6 6-6" />
@@ -1609,15 +1925,15 @@ export default function Home() {
           </button>
       {searchTracks.length > 0 && (
         <div className="w-full max-w-xl">
-          <p className="mb-2 text-xs text-white/40">
+          <p className="mb-2 text-xl font-bold text-white">
             검색된 곡
             {aiGuessedQuery && (
-              <span className="ml-1 text-white/30">
+              <span className="ml-1 text-xs font-normal text-white/30">
                 (AI 추측: <span className="text-white/50">{aiGuessedQuery}</span>로 검색됨)
               </span>
             )}
             {youtubeFallbackUsed && (
-              <span className="ml-1 text-white/30">
+              <span className="ml-1 text-xs font-normal text-white/30">
                 (Last.fm에 없어서 유튜브에서 찾았어요 · 첫 곡은 청취자 수 등 정보 없음)
               </span>
             )}
@@ -1637,8 +1953,9 @@ export default function Home() {
           제목으로 구분해서 보여줌. 카드보다 촘촘한 줄 스타일(CompactTrackGrid, 무드 탐색과 동일)로 표시. */}
       {tagSearchTracks.length > 0 && (
         <div className="w-full max-w-xl">
-          <p className="mb-2 text-xs text-white/40">관련 곡 (장르/연대)</p>
+          <p className="mb-2 text-xl font-bold text-white">관련 곡 (장르/연대)</p>
           <CompactTrackGrid
+            onViewArtist={handleViewArtist}
             tracks={tagSearchTracks}
             isFavorite={isTrackFavorite}
             onToggleFavorite={handleToggleFavoriteTrack}
@@ -1650,21 +1967,21 @@ export default function Home() {
 
       {artists.length > 0 && (
         <div className="w-full max-w-xl">
-          <p className="mb-2 text-xs text-white/40">
+          <p className="mb-2 text-xl font-bold text-white">
             검색된 아티스트
             {correctedArtistName && (
-              <span className="ml-1 text-white/30">
+              <span className="ml-1 text-xs font-normal text-white/30">
                 (오타 교정: <span className="text-white/50">{correctedArtistName}</span>로 검색됨)
               </span>
             )}
             {!correctedArtistName && aiGuessedQuery && (
-              <span className="ml-1 text-white/30">
+              <span className="ml-1 text-xs font-normal text-white/30">
                 (AI 추측: <span className="text-white/50">{aiGuessedQuery}</span>로 검색됨)
               </span>
             )}
           </p>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-            {artists.map((artist) => (
+            {cleanSearchArtists(artists).map((artist) => (
               <ArtistCard
                 key={artist.name}
                 artist={artist}
@@ -1682,7 +1999,7 @@ export default function Home() {
 
       {tracks.length > 0 && (
         <div className="w-full max-w-xl">
-          <p className="mb-2 text-xs text-white/40">"{selectedArtist}"와 비슷한 아티스트의 곡</p>
+          <p className="mb-2 text-xl font-bold text-white">"{selectedArtist}"의 인기곡</p>
           <TrackList
             tracks={tracks}
             isFavorite={isTrackFavorite}
@@ -1698,7 +2015,7 @@ export default function Home() {
           좋겠다"는 요청 반영. /recommend(비슷한 아티스트)와 달리 이 아티스트 "본인"의 곡만 씀. */}
       {searchContextArtist && searchArtistTracks.length > 0 && (
         <div className="w-full max-w-xl">
-          <p className="mb-2 text-xs text-white/40">"{searchContextArtist}"의 다른 곡</p>
+          <p className="mb-2 text-xl font-bold text-white">"{searchContextArtist}"의 다른 곡</p>
           <TrackList
             tracks={searchArtistTracks}
             isFavorite={isTrackFavorite}
@@ -1717,7 +2034,7 @@ export default function Home() {
           (§61) 검색 중(searchContextArtist가 있을 때)엔 위 섹션으로 대체되므로 숨김. */}
       {!searchContextArtist && chartTracks.length > 0 && (
         <div className="w-full max-w-xl">
-          <p className="mb-2 text-xs text-white/40">지금 인기 있는 곡 (글로벌)</p>
+          <p className="mb-2 text-xl font-bold text-white">지금 인기 있는 곡 (글로벌)</p>
           <TrackList
             tracks={chartTracks}
             isFavorite={isTrackFavorite}
@@ -1733,31 +2050,25 @@ export default function Home() {
           뜨면 헷갈림). "스크롤 내리면 나오는 부분" 요청으로 글로벌 차트 밑, 다시 듣기 위에 배치. */}
       {!searchContextArtist && !selectedMood && contextMood && (
         <div className="w-full max-w-xl">
-          <p className="mb-2 text-xs text-white/40">
-            {contextMood.description} · &quot;{contextMood.moodLabel}&quot; 추천
+          <p className="text-xl font-bold text-white">
+            &quot;{contextMood.moodLabel}&quot; 추천
           </p>
-          {contextMood.domesticTracks.length > 0 && (
-            <div className="mb-6">
-              <CompactTrackGrid
-                tracks={contextMood.domesticTracks}
-                isFavorite={isTrackFavorite}
-                onToggleFavorite={handleToggleFavoriteTrack}
-                onPlay={handlePlay}
-                onAddToPlaylist={handleOpenAddToPlaylist}
-                scrollable
-              />
-            </div>
-          )}
-          {contextMood.internationalTracks.length > 0 && (
-            <CompactTrackGrid
-              tracks={contextMood.internationalTracks}
-              isFavorite={isTrackFavorite}
-              onToggleFavorite={handleToggleFavoriteTrack}
-              onPlay={handlePlay}
-              onAddToPlaylist={handleOpenAddToPlaylist}
-              scrollable
-            />
-          )}
+          <p className="mb-2 text-xs text-white/40">{contextMood.description}</p>
+          {/* (2026-10-25) 한국 서비스라 날씨 추천에는 국내곡만 보여줌 — 해외곡은 국내곡이 하나도
+              없을 때만 대신 보여줘서 이 섹션이 비어 보이지 않게 함. */}
+          <CompactTrackGrid
+            onViewArtist={handleViewArtist}
+            tracks={
+              contextMood.domesticTracks.length > 0
+                ? contextMood.domesticTracks
+                : contextMood.internationalTracks
+            }
+            isFavorite={isTrackFavorite}
+            onToggleFavorite={handleToggleFavoriteTrack}
+            onPlay={handlePlay}
+            onAddToPlaylist={handleOpenAddToPlaylist}
+            scrollable
+          />
         </div>
       )}
 
@@ -1768,8 +2079,19 @@ export default function Home() {
           다른 기준의 서로 다른 목록이라 중복이 아님. */}
       {recentPlaysAsTrack.length > 0 && (
         <div className="w-full max-w-xl">
-          <p className="mb-2 text-xs text-white/40">다시 듣기</p>
+          <div className="mb-2 flex items-center justify-between">
+            <p className="text-xl font-bold text-white">다시 듣기</p>
+            <button
+              type="button"
+              onClick={() => handlePlayAll(recentPlaysAsTrack)}
+              aria-label="모두 재생"
+              className="rounded-full border border-white/30 px-3 py-1 text-xs font-medium text-white hover:bg-white/10"
+            >
+              모두 재생
+            </button>
+          </div>
           <CompactTrackGrid
+            onViewArtist={handleViewArtist}
             tracks={recentPlaysAsTrack}
             isFavorite={isTrackFavorite}
             onToggleFavorite={handleToggleFavoriteTrack}
@@ -1786,7 +2108,7 @@ export default function Home() {
           섹션도 같은 API를 US 리전으로 호출해서 새로 추가함. */}
       {krChartTracks.length > 0 && (
         <div className="w-full max-w-xl">
-          <p className="mb-2 text-xs text-white/40">국내 인기 급상승</p>
+          <p className="mb-2 text-xl font-bold text-white">국내 인기 급상승</p>
           <TrackList
             tracks={krChartTracks}
             isFavorite={isTrackFavorite}
@@ -1799,7 +2121,7 @@ export default function Home() {
 
       {usTrendingTracks.length > 0 && (
         <div className="w-full max-w-xl">
-          <p className="mb-2 text-xs text-white/40">해외 인기 급상승</p>
+          <p className="mb-2 text-xl font-bold text-white">해외 인기 급상승</p>
           <TrackList
             tracks={usTrendingTracks}
             isFavorite={isTrackFavorite}
@@ -1814,10 +2136,10 @@ export default function Home() {
           아티스트 랭킹을 계속 보여주면 "검색해도 다 똑같다"는 원래 지적이 그대로 남기 때문. */}
       {!searchContextArtist && topArtists.length > 0 && (
         <div className="w-full max-w-xl">
-          <p className="mb-2 text-xs text-white/40">인기 아티스트</p>
-          <div className="flex gap-3 overflow-x-auto pb-2">
+          <p className="mb-2 text-xl font-bold text-white">인기 아티스트</p>
+          <div className="scrollbar-none flex snap-x snap-mandatory gap-3 overflow-x-auto pb-2">
             {topArtists.map((artist) => (
-              <div key={artist.name} className="w-64 shrink-0">
+              <div key={artist.name} className="w-64 shrink-0 snap-start snap-always">
                 <ArtistCard
                   artist={artist}
                   isSelected={selectedArtist === artist.name}
@@ -1862,7 +2184,7 @@ export default function Home() {
     >
       <button
         type="button"
-        onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+        onClick={handleGoHome}
         className="flex flex-1 flex-col items-center justify-center gap-1 text-[11px]"
         style={{ color: "#ff3b5c" }}
       >
@@ -1929,6 +2251,13 @@ export default function Home() {
           <p className="mb-4 truncate text-sm font-medium">{userEmail}</p>
           <button
             type="button"
+            onClick={handleOpenMyProfile}
+            className="mb-2 w-full rounded-md bg-white/10 px-3 py-2.5 text-sm font-medium hover:bg-white/15"
+          >
+            내 프로필
+          </button>
+          <button
+            type="button"
             onClick={async () => {
               await supabase?.auth.signOut();
               setIsProfileSheetOpen(false);
@@ -1949,6 +2278,17 @@ export default function Home() {
         onClose={() => setNowPlaying(null)}
         onActuallyPlaying={() => handleActuallyPlaying(nowPlaying)}
         onEnded={() => handleTrackEnded()}
+        onNext={() => handleTrackEnded()}
+        onAddCurrentToPlaylist={() =>
+          nowPlaying &&
+          handleOpenAddToPlaylist({ name: nowPlaying.name, artist: nowPlaying.artist, image: nowPlaying.image })
+        }
+        onPrevious={() => {
+          const prev = playHistoryRef.current[playHistoryRef.current.length - 1];
+          if (!prev) return;
+          playHistoryRef.current = playHistoryRef.current.slice(0, -1);
+          handlePlay(prev, { skipHistory: true });
+        }}
         onNativeAutoAdvance={(data) =>
           handleTrackEnded({ videoId: data.videoId, name: data.title, artist: data.artist })
         }
@@ -2033,13 +2373,24 @@ export default function Home() {
 
     {isAuthModalOpen && (
       <AuthModal
-        onClose={() => setIsAuthModalOpen(false)}
+        onClose={() => {
+          setIsAuthModalOpen(false);
+          resumePublishRef.current = null;
+        }}
         onAuthSuccess={() => {
           // userEmail은 onAuthStateChange 구독이 곧 알아서 채워주지만, 로그인 직후
           // 버튼 텍스트가 바뀌는 게 한 박자 늦어 보이지 않도록 여기서도 즉시 갱신 시도.
           supabase?.auth.getSession().then(({ data }) => {
             setUserEmail(data.session?.user.email ?? null);
           });
+          // 공개 전환하다가 로그인하러 온 거면, 로그인 성공 직후 카테고리 선택부터 이어서 진행
+          const resume = resumePublishRef.current;
+          resumePublishRef.current = null;
+          if (resume) {
+            setPendingVisibilityPlaylist(resume);
+            setSelectedCategory(null);
+            setIsCategoryModalOpen(true);
+          }
         }}
       />
     )}
@@ -2052,7 +2403,7 @@ export default function Home() {
         onClick={() => setIsDiaryOpen(false)}
       >
         <div
-          className="max-h-[85vh] w-full max-w-lg overflow-y-auto rounded-lg border border-white/10 bg-neutral-900 p-5"
+          className="max-h-[85dvh] w-full max-w-lg overflow-y-auto rounded-lg border border-white/10 bg-neutral-900 p-5"
           onClick={(e) => e.stopPropagation()}
         >
           <div className="mb-3 flex items-center justify-between">
@@ -2068,7 +2419,10 @@ export default function Home() {
 
           <textarea
             value={diaryText}
-            onChange={(e) => setDiaryText(e.target.value.slice(0, DIARY_TEXT_MAX_LENGTH))}
+            onChange={(e) => setDiaryText(e.target.value)}
+            maxLength={DIARY_TEXT_MAX_LENGTH}
+            autoCorrect="off"
+            autoCapitalize="off"
             placeholder="오늘 있었던 일이나 지금 기분을 편하게 적어보세요"
             rows={4}
             autoFocus
@@ -2091,14 +2445,17 @@ export default function Home() {
           {diaryError && <p className="mt-2 text-xs text-red-400">{diaryError}</p>}
 
           {diaryResult && (
-            <div className="mt-4 border-t border-white/10 pt-4">
-              <p className="text-sm leading-relaxed text-white/90">{diaryResult.message}</p>
+            <div ref={diaryResultRef} className="mt-4 scroll-mt-2 border-t border-white/10 pt-4">
+              <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-white/90">
+                {diaryResult.message}
+              </p>
               <p className="mb-2 mt-3 text-xs text-white/40">
                 &quot;{diaryResult.moodLabel}&quot; 어울리는 곡
               </p>
               {diaryResult.domesticTracks.length > 0 && (
                 <div className="mb-2">
                   <CompactTrackGrid
+                    onViewArtist={handleViewArtist}
                     tracks={diaryResult.domesticTracks}
                     isFavorite={isTrackFavorite}
                     onToggleFavorite={handleToggleFavoriteTrack}
@@ -2110,6 +2467,7 @@ export default function Home() {
               )}
               {diaryResult.internationalTracks.length > 0 && (
                 <CompactTrackGrid
+                  onViewArtist={handleViewArtist}
                   tracks={diaryResult.internationalTracks}
                   isFavorite={isTrackFavorite}
                   onToggleFavorite={handleToggleFavoriteTrack}
@@ -2133,12 +2491,26 @@ export default function Home() {
               {isDiaryHistoryOpen && (
                 <ul className="mt-2 space-y-2">
                   {diaryHistory.map((entry, i) => (
-                    <li key={`${entry.date}-${i}`} className="rounded-md bg-black/20 p-2 text-xs">
+                    <li key={`${entry.at ?? entry.date}-${i}`} className="rounded-md bg-black/20 p-2 text-xs">
                       <div className="flex items-center justify-between text-white/40">
-                        <span>{entry.date}</span>
+                        <span>
+                          {entry.at
+                            ? new Date(entry.at).toLocaleString("ko-KR", {
+                                month: "numeric",
+                                day: "numeric",
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              })
+                            : entry.date}
+                        </span>
                         <span>&quot;{entry.moodLabel}&quot;</span>
                       </div>
-                      <p className="mt-1 line-clamp-2 text-white/70">{entry.message}</p>
+                      {entry.text && (
+                        <p className="mt-1 whitespace-pre-wrap break-words text-white/50">
+                          내 일기: {entry.text}
+                        </p>
+                      )}
+                      <p className="mt-1 text-white/70">{entry.message}</p>
                     </li>
                   ))}
                 </ul>
@@ -2147,6 +2519,17 @@ export default function Home() {
           )}
         </div>
       </div>
+    )}
+
+    {artistPageName && (
+      <ArtistPage
+        artistName={artistPageName}
+        onClose={() => setArtistPageName(null)}
+        isFavorite={isTrackFavorite}
+        onToggleFavorite={handleToggleFavoriteTrack}
+        onPlay={handlePlay}
+        onAddToPlaylist={handleOpenAddToPlaylist}
+      />
     )}
 
     {/* (게이미피케이션, UI 재구조화) 다른 사용자가 공개한 재생목록 둘러보기 — 전용 전체화면
@@ -2168,6 +2551,9 @@ export default function Home() {
           setIsPublicFeedOpen(false);
         }}
         onToggleLike={handleToggleLike}
+        profileInfo={profileInfo}
+        onToggleFollow={handleToggleFollow}
+        onSaveBio={handleSaveBio}
       />
     )}
 

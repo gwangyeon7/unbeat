@@ -10,13 +10,22 @@ REDIS_DB = int(os.getenv("REDIS_DB", "0"))
 
 CACHE_TTL_SECONDS = 60 * 60  # 1시간. 아티스트 정보는 자주 안 바뀌니까 넉넉하게 잡음.
 
-_client = redis.Redis(
+# Render 무료 Key Value는 동시 연결 수 제한이 작아서 "max number of clients reached"가 로그에
+# 쏟아졌음. 기본 풀은 상한이 없어 FastAPI 스레드가 몰리면 연결을 계속 늘리므로, 상한(10)을 두고
+# 넘치면 잠깐 기다리게(BlockingConnectionPool) 함. 기다리다 timeout 나면 RedisError라 기존처럼
+# "캐시 없이 진행"으로 빠짐. health_check로 죽은 연결은 재사용 전에 걸러냄.
+_pool = redis.BlockingConnectionPool(
     host=REDIS_HOST,
     port=REDIS_PORT,
     db=REDIS_DB,
     decode_responses=True,
+    max_connections=int(os.getenv("REDIS_MAX_CONNECTIONS", "10")),
+    timeout=2,
     socket_connect_timeout=1,
+    socket_timeout=2,
+    health_check_interval=30,
 )
+_client = redis.Redis(connection_pool=_pool)
 
 
 def get_cached(key: str):
@@ -52,6 +61,19 @@ RECENT_SEARCH_LIMIT = 10
 RECENT_SEARCH_TTL_SECONDS = 60 * 60 * 24 * 30  # 30일
 
 
+def _entry_query(raw: str):
+    """최근 검색 항목에서 검색어만 뽑음. 저장 형식이 plain string -> JSON으로 바뀌기 전에 쌓인 옛
+    항목(JSON이 아님)이 리스트에 남아있으면 json.loads가 터져서 /search 자체가 500으로 실패했음
+    (검색 시 push_search_history가 예외를 안 잡아서) — 파싱 안 되면 그 문자열을 검색어로 취급."""
+    try:
+        parsed = json.loads(raw)
+    except (json.JSONDecodeError, TypeError):
+        return raw
+    if isinstance(parsed, dict):
+        return parsed.get("query")
+    return str(parsed)
+
+
 def push_search_history(session_id: str, query: str, image: Optional[str] = None):
     """
     검색창 드롭다운에 쓸 '최근 검색' 목록. 분석용 이벤트 로그(MariaDB events 테이블)와는
@@ -71,7 +93,7 @@ def push_search_history(session_id: str, query: str, image: Optional[str] = None
         # 저장 형식이 JSON으로 바뀌어서 lrem(key, 0, query)로 직접 매치가 안 되니, 기존 목록을
         # 읽어와 query가 같은 항목만 걸러내고 다시 쓰는 방식으로 변경.
         raw_list = _client.lrange(key, 0, -1)
-        remaining = [r for r in raw_list if json.loads(r).get("query") != query]
+        remaining = [r for r in raw_list if _entry_query(r) != query]
         if len(remaining) != len(raw_list):
             _client.delete(key)
             if remaining:
@@ -110,7 +132,7 @@ def remove_search_history(session_id: str, query: str):
     key = f"recent-searches:{session_id}"
     try:
         raw_list = _client.lrange(key, 0, -1)
-        remaining = [r for r in raw_list if json.loads(r).get("query") != query]
+        remaining = [r for r in raw_list if _entry_query(r) != query]
         if len(remaining) != len(raw_list):
             _client.delete(key)
             if remaining:

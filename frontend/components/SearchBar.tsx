@@ -7,7 +7,7 @@ import { searchSuggest, type SearchSuggestion } from "@/lib/api";
 export type RecentSearchEntry = { query: string; image: string | null };
 
 type SearchBarProps = {
-  onSearch: (query: string) => void;
+  onSearch: (query: string, artist?: string) => void;
   isLoading?: boolean;
   recentSearches?: RecentSearchEntry[];
   onRemoveRecent?: (query: string) => void;
@@ -19,6 +19,8 @@ type SearchBarProps = {
 
 export type SearchBarHandle = {
   openMobileSearch: () => void;
+  // 검색 결과에서 뒤로 나왔을 때 입력창에 남아있는 이전 검색어를 비움 (피드백 #5)
+  clear: () => void;
 };
 
 const SearchBar = forwardRef<SearchBarHandle, SearchBarProps>(function SearchBar(
@@ -73,6 +75,10 @@ const SearchBar = forwardRef<SearchBarHandle, SearchBarProps>(function SearchBar
   // 건드릴 이유가 없음) — "열어라"는 명령 하나만 받으면 충분함.
   useImperativeHandle(ref, () => ({
     openMobileSearch: () => setIsMobileOpen(true),
+    clear: () => {
+      setValue("");
+      setSuggestions({ tracks: [], artists: [] });
+    },
   }));
 
   function handleSubmit(e: React.FormEvent) {
@@ -92,9 +98,9 @@ const SearchBar = forwardRef<SearchBarHandle, SearchBarProps>(function SearchBar
     setIsMobileOpen(false);
   }
 
-  function handleSelectSuggestion(query: string) {
+  function handleSelectSuggestion(query: string, artist?: string) {
     setValue(query);
-    onSearch(query);
+    onSearch(query, artist);
     setIsDropdownOpen(false);
     setIsMobileOpen(false);
   }
@@ -117,7 +123,7 @@ const SearchBar = forwardRef<SearchBarHandle, SearchBarProps>(function SearchBar
               // 클릭이 input의 onBlur(드롭다운 닫기)보다 먼저 처리되게 함 — 모바일 전체화면
               // 검색에는 onBlur로 안 닫는 로직이 없지만, 같은 핸들러를 공유하니 그대로 둠
               onMouseDown={(e) => e.preventDefault()}
-              onClick={() => handleSelectSuggestion(track.name)}
+              onClick={() => handleSelectSuggestion(track.name, track.artist)}
               className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm text-white/80 hover:bg-white/5"
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-4 w-4 shrink-0 text-white/30">
@@ -159,7 +165,7 @@ const SearchBar = forwardRef<SearchBarHandle, SearchBarProps>(function SearchBar
     return (
       <>
         <p className="px-4 pt-2 text-[10px] uppercase tracking-wide text-white/30">최근 검색</p>
-        <ul className="flex gap-3 overflow-x-auto px-4 py-3">
+        <ul className="scrollbar-none flex gap-3 overflow-x-auto px-4 py-3">
           {recentSearches.map(({ query, image }) => (
             <li key={query} className="w-24 shrink-0">
               <div className="relative">

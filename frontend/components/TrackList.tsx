@@ -25,7 +25,7 @@ export default function TrackList({
   }
 
   return (
-    <div className="flex w-full max-w-xl gap-3 overflow-x-auto pb-2">
+    <div className="scrollbar-none flex w-full max-w-xl snap-x snap-mandatory gap-3 overflow-x-auto pb-2">
       {tracks.map((track, idx) => (
         // 버튼(★) 안에 또 버튼을 넣을 수 없어서(HTML 명세상 버튼 중첩 불가) 카드 자체는
         // div + role="button"으로 만들고, 안쪽 즐겨찾기 버튼만 진짜 <button>으로 둠.
@@ -40,7 +40,7 @@ export default function TrackList({
               onPlay?.(track);
             }
           }}
-          className="group relative w-36 flex-shrink-0 cursor-pointer rounded-lg border border-white/10 bg-white/5 p-2 text-left transition hover:border-white/30"
+          className="group relative w-36 flex-shrink-0 snap-start snap-always cursor-pointer rounded-lg border border-white/10 bg-white/5 p-2 text-left transition hover:border-white/30"
         >
           <div className="relative aspect-square w-full overflow-hidden rounded-md bg-gradient-to-br from-accent/30 to-white/5">
             {track.image ? (
@@ -104,11 +104,6 @@ export default function TrackList({
           </div>
           <p className="mt-2 truncate text-sm font-medium">{track.name}</p>
           <p className="truncate text-xs text-white/50">{track.artist}</p>
-          {track.listeners && (
-            <p className="truncate text-[10px] text-white/30">
-              {Number(track.listeners).toLocaleString()}명
-            </p>
-          )}
         </div>
       ))}
     </div>

@@ -10,10 +10,7 @@ export const MUSIC_CATEGORIES: { value: string; label: string }[] = [
   { value: "rock", label: "록" },
   { value: "pop", label: "팝" },
   { value: "indie", label: "인디" },
-  { value: "electronic", label: "일렉트로닉" },
-  { value: "acoustic", label: "어쿠스틱" },
-  { value: "jazz", label: "재즈" },
-  { value: "classical", label: "클래식" },
-  { value: "ost", label: "OST" },
+  // (2026-10-29) 칩이 너무 많아 보기 힘들다는 피드백으로 재즈/클래식/OST는 선택지에서 뺌.
+  // 서버(MUSIC_CATEGORIES)에는 그대로 남겨둠 — 이미 그 카테고리로 공개된 재생목록이 있어도 안 깨지게.
   { value: "etc", label: "기타" },
 ];

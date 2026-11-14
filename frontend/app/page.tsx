@@ -45,6 +45,9 @@ import {
   addFavoriteTrack,
   removeFavoriteTrack,
   markFavoriteTrackOpened,
+  setFavoriteTrackImage,
+  setPlaylistTrackImage,
+  renamePlaylist,
   getPlaylists,
   createPlaylist,
   deletePlaylist,
@@ -72,6 +75,7 @@ import {
   type UserProfilePage,
 } from "@/lib/playlistApi";
 import { MUSIC_CATEGORIES } from "@/lib/categories";
+import { fillMissingTrackImages } from "@/lib/fillTrackImages";
 
 // "빠른 선곡" 섹션에서, 같은 후보 목록이라도 새로고침마다 다르게 보이도록 순서를 섞는 데 씀.
 // (Fisher-Yates) — 진짜 개인화 추천 AI는 이 프로젝트 범위 밖(ROADMAP 목표에 명시)이라, 최소한
@@ -240,9 +244,22 @@ export default function Home() {
   const [openPlaylistId, setOpenPlaylistId] = useState<number | null>(null);
   // "다시 듣기" 목록도 재생목록처럼 기본은 접어두고, 눌렀을 때만 펼쳐서 사이드바 공간을 덜 차지하게 함.
   const [isFavoriteTracksExpanded, setIsFavoriteTracksExpanded] = useState(false);
+  // 보관함에서 연 재생목록 상세를 "뒤로" 닫으면 홈이 아니라 보관함으로 돌아오게 하려는 표시
+  const playlistOpenedFromLibraryRef = useRef(false);
+  // 같은 이유로, 보관함의 즐겨찾기 아티스트에서 연 아티스트 페이지를 닫으면 보관함으로 복귀
+  const artistOpenedFromLibraryRef = useRef(false);
+  // 보관함 행의 ⋯ 메뉴: 열려 있는 행의 키("pl-<id>" / "fa-<id>"), 없으면 null
+  const [libraryMenuKey, setLibraryMenuKey] = useState<string | null>(null);
+  // 보관함 재생목록 행에서 ⋯ → "이름 수정"을 누른 재생목록과 입력 중인 이름
+  const [renamingPlaylistId, setRenamingPlaylistId] = useState<number | null>(null);
+  const [renameDraft, setRenameDraft] = useState("");
+  // 모바일 보관함: 즐겨찾기 영역의 탭(곡 / 아티스트)
+  const [libraryFavTab, setLibraryFavTab] = useState<"tracks" | "artists">("tracks");
   const [isCreatingPlaylist, setIsCreatingPlaylist] = useState(false);
   const [newPlaylistName, setNewPlaylistName] = useState("");
   const [isGeneratingPlaylists, setIsGeneratingPlaylists] = useState(false);
+  // ✨ 자동 생성 결과가 비었을 때 보관함 안에 보여줄 안내(에러가 아니라 안내라서 setError와 분리)
+  const [autoPlaylistNotice, setAutoPlaylistNotice] = useState<string | null>(null);
   // (게이미피케이션 2단계, 2026-10-10) 공개/비공개 전환 + 다른 사람 재생목록 둘러보기 피드.
   // 처음엔 재생목록 상세 화면 안 🌐 아이콘+모달이었는데, "게이미피케이션 기능이 아이콘 하나로
   // 띡 나오니 이상하다"는 라이브 피드백으로 하단 탭바의 전용 탭 + 전체화면(RankingPage)으로
@@ -286,6 +303,46 @@ export default function Home() {
   // 하단 탭바의 "검색" 탭이 SearchBar 내부의 모바일 전체화면 검색을 대신 열게 하기 위한 ref.
   // (state를 끌어올리지 않고 메서드만 노출 — SearchBar.tsx의 openMobileSearch 참고)
   const searchBarRef = useRef<SearchBarHandle>(null);
+
+  // 즐겨찾기 곡 목록(보관함/사이드바)을 열면 이미지 없이 저장된 곡의 커버를 구해서 화면에 채우고
+  // playlist-service에 저장 — 다음부터는 다시 안 구함(구하는 순서는 서버 resolve_track_image 그대로).
+  useEffect(() => {
+    if (!isLibraryOpen && !isFavoriteTracksExpanded) return;
+    fillMissingTrackImages(
+      favoriteTracks.filter((t) => !t.imageUrl),
+      {
+        keyOf: (t) => `fav:${t.id}`,
+        artistOf: (t) => t.artistName,
+        trackOf: (t) => t.trackName,
+        onFound: (t, imageUrl) => {
+          setFavoriteTracks((prev) => prev.map((f) => (f.id === t.id ? { ...f, imageUrl } : f)));
+          setFavoriteTrackImage(t.id, imageUrl).catch(() => {});
+        },
+      }
+    );
+  }, [isLibraryOpen, isFavoriteTracksExpanded, favoriteTracks]);
+
+  // 재생목록 상세를 열 때도 같은 방식 — 자동 생성 재생목록처럼 이미지 없이 담긴 곡을 채움
+  const openPlaylistTracks = openPlaylistId !== null ? playlistTracksById[openPlaylistId] : undefined;
+  useEffect(() => {
+    if (openPlaylistId === null || !openPlaylistTracks) return;
+    const playlistId = openPlaylistId;
+    fillMissingTrackImages(
+      openPlaylistTracks.filter((t) => !t.imageUrl),
+      {
+        keyOf: (t) => `pl:${t.id}`,
+        artistOf: (t) => t.artistName,
+        trackOf: (t) => t.trackName,
+        onFound: (t, imageUrl) => {
+          setPlaylistTracksById((prev) => ({
+            ...prev,
+            [playlistId]: (prev[playlistId] ?? []).map((p) => (p.id === t.id ? { ...p, imageUrl } : p)),
+          }));
+          setPlaylistTrackImage(playlistId, t.id, imageUrl).catch(() => {});
+        },
+      }
+    );
+  }, [openPlaylistId, openPlaylistTracks]);
   // 로그인은 선택 기능(ROADMAP 5-2 결정) — null이면 비로그인 상태로 기존처럼 전부 동작.
   // 로그인했을 때만 헤더에 이메일/로그아웃 버튼이 뜨고, api.ts가 Authorization 헤더를 추가로 보냄.
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
@@ -334,6 +391,29 @@ export default function Home() {
       refreshPlaylists();
     } catch (err) {
       setError("재생목록 생성에 실패했어요. playlist-service(8081)가 켜져있는지 확인해주세요.");
+    }
+  }
+
+  function startRenamePlaylist(playlist: Playlist) {
+    setRenamingPlaylistId(playlist.id);
+    setRenameDraft(playlist.name);
+  }
+
+  // 빈 이름이거나 바뀐 게 없으면 저장하지 않고 취소로 처리. 성공하면 목록에서 이름만 바꿈 —
+  // 상세 화면(PlaylistDetailOverlay)도 playlists에서 찾아 그리므로 제목이 같이 바뀜.
+  async function submitRenamePlaylist(playlist: Playlist) {
+    const name = renameDraft.trim();
+    setRenamingPlaylistId(null);
+    if (!name || name === playlist.name) return;
+    try {
+      const updated = await renamePlaylist(playlist.id, name);
+      setPlaylists((prev) => prev.map((p) => (p.id === playlist.id ? { ...p, name: updated.name } : p)));
+    } catch (err) {
+      setError(
+        err instanceof PlaylistApiError && err.status === 400
+          ? "재생목록 이름은 1~50자로 입력해주세요."
+          : "재생목록 이름을 바꾸지 못했어요."
+      );
     }
   }
 
@@ -400,17 +480,25 @@ export default function Home() {
     }
   }
 
-  // "새 재생목록 누르고 이름 정해서 곡 하나씩 넣는 건 뻔하다, 내가 들은 곡 분석해서 장르별로
-  // 알아서 만들어졌으면 좋겠다"는 피드백으로 추가 — 즐겨찾기한 곡의 Last.fm 태그를 백엔드가 분석해서
-  // 케이팝/발라드/힙합 같은 장르별 재생목록을 통째로 만들어줌.
+  // 즐겨찾기한 곡을 서버가 무작위로 섞어서 "오늘의 믹스" 재생목록 1개(최대 20곡)를 만들어줌 —
+  // 누를 때마다 구성/순서가 바뀌고, 이전 자동 재생목록은 새 믹스로 교체됨.
+  // (원래는 Last.fm 태그로 장르별 재생목록을 만들었는데 태그가 비거나 장르별 곡 수가 모자라 결과가 빈약했음)
   async function handleGenerateAutoPlaylists() {
     setIsGeneratingPlaylists(true);
     setError(null);
+    setAutoPlaylistNotice(null);
     try {
-      await generateAutoPlaylists();
+      const created = await generateAutoPlaylists();
+      // 빈 결과는 실패가 아니라 "즐겨찾기가 없음" — 서버는 기존 자동 재생목록을 그대로 둠
+      if (created.length === 0) {
+        setAutoPlaylistNotice("즐겨찾기한 곡이 있어야 만들어져요.");
+      } else {
+        // 두 번째부터도 새로 만들어졌다는 걸 알 수 있게 매번 안내를 보여줌
+        setAutoPlaylistNotice(`즐겨찾기에서 ${created[0].trackCount}곡을 골라 '오늘의 믹스'를 만들었어요.`);
+      }
       refreshPlaylists();
     } catch (err) {
-      setError("취향 분석에 실패했어요. 즐겨찾기한 곡이 2곡 이상 있는지 확인해주세요.");
+      setError("오늘의 믹스를 만들지 못했어요. 잠시 후 다시 시도해주세요.");
     } finally {
       setIsGeneratingPlaylists(false);
     }
@@ -1058,7 +1146,7 @@ export default function Home() {
         setFavoriteTracks((prev) => prev.filter((f) => f.id !== existing.id));
       } else {
         // Last.fm 태그 조회 때문에 응답이 살짝 늦을 수 있음 (백그라운드에서 태그 가져와서 같이 저장)
-        const saved = await addFavoriteTrack(track.artist, track.name, track.url);
+        const saved = await addFavoriteTrack(track.artist, track.name, track.url, track.image ?? null);
         setFavoriteTracks((prev) => [saved, ...prev]);
       }
     } catch (err) {
@@ -1378,6 +1466,53 @@ export default function Home() {
   // 모바일 보관함 서랍이 완전히 같은 마크업/핸들러를 씀. closeAfterSelect는 모바일
   // 서랍에서만 true로 넘겨서, 아티스트를 고르면 서랍을 자동으로 닫아줌(데스크톱은 애초에
   // 서랍이 없으니 그냥 무시됨).
+  // 보관함 행 오른쪽 ⋯ 버튼 + 작은 메뉴. 항목이 늘어나도(이름 수정 등) 행이 복잡해지지 않게 함.
+  function renderRowMenu(
+    key: string,
+    items: { label: string; danger?: boolean; onClick: () => void }[]
+  ) {
+    const open = libraryMenuKey === key;
+    return (
+      <div className="relative shrink-0">
+        <button
+          type="button"
+          onClick={() => setLibraryMenuKey(open ? null : key)}
+          aria-label="더보기"
+          className="rounded-full p-2 text-white/70 hover:bg-white/10 hover:text-white"
+        >
+          {/* 곡 행(CompactTrackRow)과 같은 세로 점 3개 */}
+          <svg viewBox="0 0 24 24" fill="currentColor" className="h-5 w-5" aria-hidden="true">
+            <circle cx="12" cy="5" r="1.8" />
+            <circle cx="12" cy="12" r="1.8" />
+            <circle cx="12" cy="19" r="1.8" />
+          </svg>
+        </button>
+        {open && (
+          <>
+            <div className="fixed inset-0 z-10" onClick={() => setLibraryMenuKey(null)} />
+            <div className="absolute right-0 top-full z-20 mt-1 min-w-[8rem] overflow-hidden rounded-lg border border-white/10 bg-neutral-900 shadow-lg">
+              {items.map((item) => (
+                <button
+                  key={item.label}
+                  type="button"
+                  onClick={() => {
+                    setLibraryMenuKey(null);
+                    item.onClick();
+                  }}
+                  className={`block w-full px-4 py-2.5 text-left text-sm hover:bg-white/10 ${
+                    item.danger ? "text-red-400" : "text-white"
+                  }`}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
+          </>
+        )}
+      </div>
+    );
+  }
+
   function renderFavoriteArtists(closeAfterSelect = false) {
     if (favorites.length === 0) return null;
     return (
@@ -1449,8 +1584,8 @@ export default function Home() {
                 type="button"
                 onClick={handleGenerateAutoPlaylists}
                 disabled={isGeneratingPlaylists}
-                aria-label="취향 분석해서 자동 생성"
-                title="즐겨찾기한 곡을 장르별로 분석해서 자동으로 재생목록을 만들어요"
+                aria-label="오늘의 믹스 만들기"
+                title="즐겨찾기한 곡을 섞어서 '오늘의 믹스'를 만들어요"
                 className="rounded-full px-1.5 py-0.5 text-sm text-white/50 hover:bg-white/10 hover:text-white disabled:opacity-40"
               >
                 {isGeneratingPlaylists ? "…" : "✨"}
@@ -1481,6 +1616,10 @@ export default function Home() {
             </div>
           </div>
 
+          {autoPlaylistNotice && (
+            <p className="mb-2 rounded-md bg-white/5 px-2 py-1.5 text-xs text-white/60">{autoPlaylistNotice}</p>
+          )}
+
           {isCreatingPlaylist && (
             <div className="mb-2 flex gap-1">
               <input
@@ -1506,7 +1645,7 @@ export default function Home() {
 
           {playlists.length === 0 && !isCreatingPlaylist ? (
             <p className="text-xs text-white/30">
-              아직 만든 재생목록이 없어요. ✨ 버튼으로 즐겨찾기한 곡을 분석해서 자동으로 만들거나,
+              아직 만든 재생목록이 없어요. ✨ 버튼으로 즐겨찾기한 곡을 섞어서 '오늘의 믹스'를 만들거나,
               ＋ 버튼으로 직접 만들 수 있어요.
             </p>
           ) : (
@@ -1547,6 +1686,256 @@ export default function Home() {
           )}
         </div>
       </>
+    );
+  }
+
+  // 모바일 보관함 전용 레이아웃 — 보관함의 주인은 "내 재생목록"이라 맨 위에 크게 두고,
+  // 즐겨찾기(곡/아티스트)는 아래에 탭으로 묶어서 재생목록과 경쟁하지 않게 함.
+  // 데스크톱 사이드바(renderFavoriteArtists/renderLibraryPanel)는 건드리지 않음.
+  function renderMobileLibrary() {
+    return (
+      <div className="flex flex-col gap-8">
+        <section>
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="text-lg font-bold">내 재생목록</h2>
+            <button
+              type="button"
+              onClick={() => setIsCreatingPlaylist((v) => !v)}
+              aria-label="새 재생목록 직접 만들기"
+              className="rounded-full bg-white/10 px-3 py-1.5 text-xs font-semibold text-white hover:bg-white/20"
+            >
+              ＋ 새로 만들기
+            </button>
+          </div>
+
+          {/* 아이콘만 있으면 뭐 하는 버튼인지 몰라서, 글자가 있는 버튼으로 바꿈 */}
+          <div className="mb-3 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={handleGenerateAutoPlaylists}
+              disabled={isGeneratingPlaylists}
+              className="rounded-full border border-white/15 px-3 py-1.5 text-xs text-white/80 hover:bg-white/10 disabled:opacity-40"
+            >
+              {isGeneratingPlaylists ? "만드는 중…" : "✨ 오늘의 믹스 만들기"}
+            </button>
+            <button
+              type="button"
+              onClick={handleOpenCleanup}
+              disabled={isLoadingStale}
+              className="rounded-full border border-white/15 px-3 py-1.5 text-xs text-white/80 hover:bg-white/10 disabled:opacity-40"
+            >
+              {isLoadingStale ? "찾는 중…" : "안 들은 곡 정리"}
+            </button>
+          </div>
+
+          {autoPlaylistNotice && (
+            <p className="mb-3 rounded-lg bg-white/5 px-3 py-2 text-sm text-white/70">{autoPlaylistNotice}</p>
+          )}
+
+          {isCreatingPlaylist && (
+            <div className="mb-3 flex gap-2">
+              <input
+                autoFocus
+                value={newPlaylistName}
+                onChange={(e) => setNewPlaylistName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") handleCreatePlaylistSubmit();
+                  if (e.key === "Escape") setIsCreatingPlaylist(false);
+                }}
+                placeholder="재생목록 이름"
+                className="min-w-0 flex-1 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm outline-none focus:border-accent"
+              />
+              <button
+                type="button"
+                onClick={handleCreatePlaylistSubmit}
+                className="shrink-0 rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-black"
+              >
+                추가
+              </button>
+            </div>
+          )}
+
+          {playlists.length === 0 && !isCreatingPlaylist ? (
+            <p className="text-sm text-white/40">
+              아직 만든 재생목록이 없어요. ✨ 버튼으로 즐겨찾기한 곡을 섞어서 '오늘의 믹스'를 만들거나, ＋ 버튼으로
+              직접 만들 수 있어요.
+            </p>
+          ) : (
+            <div className="flex flex-col">
+              {playlists.map((playlist) => {
+                const tile = playlist.coverImageUrl ? (
+                  // 담긴 곡 중 이미지 있는 가장 최근 곡의 커버 — 없으면 아래 ♪/✨ 타일
+                  <img
+                    src={playlist.coverImageUrl}
+                    alt={playlist.name}
+                    className="h-12 w-12 shrink-0 rounded-md object-cover"
+                  />
+                ) : (
+                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-md bg-gradient-to-br from-accent/40 to-white/5 text-xl">
+                    {playlist.isAutoGenerated ? "✨" : "♪"}
+                  </div>
+                );
+
+                // 이름 수정 중에는 행 전체를 버튼이 아닌 입력 줄로 바꿈 — 버튼 안에 input을 두면
+                // 입력칸 클릭이 "재생목록 열기"로 새어 나감
+                if (renamingPlaylistId === playlist.id) {
+                  return (
+                    <div key={playlist.id} className="flex items-center gap-3 py-2 pr-2">
+                      {/* 커버가 입력칸 위로 겹치지 않게 고정 크기 칸 안에 넣음 */}
+                      <div className="h-12 w-12 shrink-0 overflow-hidden rounded-md">
+                        {playlist.coverImageUrl ? (
+                          <img
+                            src={playlist.coverImageUrl}
+                            alt={playlist.name}
+                            className="h-full w-full object-cover"
+                          />
+                        ) : (
+                          <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-accent/40 to-white/5 text-xl">
+                            {playlist.isAutoGenerated ? "✨" : "♪"}
+                          </div>
+                        )}
+                      </div>
+                      <input
+                        autoFocus
+                        value={renameDraft}
+                        maxLength={50}
+                        onChange={(e) => setRenameDraft(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") submitRenamePlaylist(playlist);
+                          if (e.key === "Escape") setRenamingPlaylistId(null);
+                        }}
+                        aria-label="재생목록 이름"
+                        className="min-w-0 flex-1 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm outline-none focus:border-accent"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => submitRenamePlaylist(playlist)}
+                        className="shrink-0 rounded-lg bg-accent px-3 py-2 text-sm font-semibold text-black"
+                      >
+                        확인
+                      </button>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div key={playlist.id} className="flex items-center">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        playlistOpenedFromLibraryRef.current = true;
+                        openPlaylistDetail(playlist.id);
+                        setIsLibraryOpen(false);
+                      }}
+                      className="flex min-w-0 flex-1 items-center gap-3 rounded-lg py-2 pr-2 text-left hover:bg-white/5"
+                    >
+                      {tile}
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-semibold">{playlist.name}</p>
+                        <p className="text-xs text-white/40">{playlist.trackCount}곡</p>
+                      </div>
+                    </button>
+                    {renderRowMenu(`pl-${playlist.id}`, [
+                      { label: "이름 수정", onClick: () => startRenamePlaylist(playlist) },
+                      { label: "삭제", danger: true, onClick: () => handleDeletePlaylist(playlist.id) },
+                    ])}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </section>
+
+        {(favoriteTracks.length > 0 || favorites.length > 0) && (
+          <section>
+            <div className="mb-3 flex items-center gap-2">
+              <h2 className="mr-1 text-lg font-bold">즐겨찾기</h2>
+              <button
+                type="button"
+                onClick={() => setLibraryFavTab("tracks")}
+                className={`rounded-full px-3 py-1 text-xs font-medium ${
+                  libraryFavTab === "tracks" ? "bg-white text-black" : "bg-white/10 text-white/60"
+                }`}
+              >
+                곡 {favoriteTracks.length}
+              </button>
+              <button
+                type="button"
+                onClick={() => setLibraryFavTab("artists")}
+                className={`rounded-full px-3 py-1 text-xs font-medium ${
+                  libraryFavTab === "artists" ? "bg-white text-black" : "bg-white/10 text-white/60"
+                }`}
+              >
+                아티스트 {favorites.length}
+              </button>
+            </div>
+
+            {libraryFavTab === "tracks" ? (
+              favoriteTracks.length === 0 ? (
+                <p className="text-sm text-white/40">즐겨찾기한 곡이 없어요.</p>
+              ) : (
+                <div className="flex flex-col gap-1">
+                  {favoriteTracks.map((t) => (
+                    <FavoriteTrackRow
+                      key={t.id}
+                      track={t}
+                      onPlay={handlePlay}
+                      onToggleFavorite={handleToggleFavoriteTrack}
+                      onAddToPlaylist={handleOpenAddToPlaylist}
+                    />
+                  ))}
+                </div>
+              )
+            ) : favorites.length === 0 ? (
+              <p className="text-sm text-white/40">즐겨찾기한 아티스트가 없어요.</p>
+            ) : (
+              <div className="flex flex-col gap-1">
+                {favorites.map((f) => (
+                  <div key={f.id} className="flex items-center rounded-lg hover:bg-white/5">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        artistOpenedFromLibraryRef.current = true;
+                        handleSelectArtist(f.artistName);
+                        setIsLibraryOpen(false);
+                      }}
+                      className="flex min-w-0 flex-1 items-center gap-3 p-2 text-left"
+                    >
+                      {f.imageUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={f.imageUrl}
+                          alt={f.artistName}
+                          className="h-12 w-12 shrink-0 rounded-full object-cover"
+                        />
+                      ) : (
+                        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-white/10 text-base font-bold text-white/60">
+                          {f.artistName.trim().charAt(0).toUpperCase()}
+                        </div>
+                      )}
+                      <span className="flex-1 truncate text-sm font-medium">{f.artistName}</span>
+                    </button>
+                    {renderRowMenu(`fa-${f.id}`, [
+                      {
+                        label: "즐겨찾기 해제",
+                        danger: true,
+                        onClick: async () => {
+                          try {
+                            await removeFavorite(f.id);
+                            setFavorites((prev) => prev.filter((x) => x.id !== f.id));
+                          } catch {
+                            setError("즐겨찾기 해제에 실패했어요.");
+                          }
+                        },
+                      },
+                    ])}
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+        )}
+      </div>
     );
   }
 
@@ -1682,10 +2071,9 @@ export default function Home() {
             <h2 className="text-base font-semibold">보관함</h2>
           </div>
           <div className="flex-1 overflow-y-auto p-4">
-            <div className="flex flex-col gap-8">
-              {favorites.length > 0 && <div>{renderFavoriteArtists(true)}</div>}
-              {renderLibraryPanel(true)}
-            </div>
+            {/* 에러 메시지는 본문(main)에 그려져서 보관함 서랍 뒤에 가려졌음 — 서랍 안에도 같이 보여줌 */}
+            {error && <p className="mb-4 rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-400">{error}</p>}
+            {renderMobileLibrary()}
           </div>
         </div>
       )}
@@ -2339,8 +2727,16 @@ export default function Home() {
           <PlaylistDetailOverlay
             playlist={playlist}
             tracks={playlistTracksById[openPlaylistId]}
-            onClose={() => setOpenPlaylistId(null)}
+            onClose={() => {
+              setOpenPlaylistId(null);
+              // 보관함에서 들어왔으면 뒤로 가기 시 보관함으로 복귀
+              if (playlistOpenedFromLibraryRef.current) {
+                playlistOpenedFromLibraryRef.current = false;
+                setIsLibraryOpen(true);
+              }
+            }}
             onPlayTrack={(t) => {
+              playlistOpenedFromLibraryRef.current = false;
               // 재생목록 상세 화면(z-40)이 하단 미니 플레이어(z-30)를 통째로 가리고 있어서,
               // 곡을 눌러 실제로 재생이 시작돼도 화면엔 아무 변화가 없어 보이는 문제가 있었음
               // — "이어재생"/"반복재생"처럼 재생 시작 시 화면을 닫아서 미니 플레이어가 바로
@@ -2524,7 +2920,13 @@ export default function Home() {
     {artistPageName && (
       <ArtistPage
         artistName={artistPageName}
-        onClose={() => setArtistPageName(null)}
+        onClose={() => {
+          setArtistPageName(null);
+          if (artistOpenedFromLibraryRef.current) {
+            artistOpenedFromLibraryRef.current = false;
+            setIsLibraryOpen(true);
+          }
+        }}
         isFavorite={isTrackFavorite}
         onToggleFavorite={handleToggleFavoriteTrack}
         onPlay={handlePlay}

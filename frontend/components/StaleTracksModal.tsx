@@ -32,7 +32,7 @@ export default function StaleTracksModal({ tracks, months, onClose, onDeleteSele
   }
 
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 px-4" onClick={onClose}>
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 px-4" onClick={onClose}>
       <div
         className="w-full max-w-sm rounded-lg border border-white/10 bg-neutral-900 p-4"
         onClick={(e) => e.stopPropagation()}

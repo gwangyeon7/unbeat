@@ -88,6 +88,14 @@ export function recommendByArtist(artistName: string): Promise<{ tracks: Track[]
   return fetchJson(`/recommend?artist_name=${query}`);
 }
 
+// 보관함의 즐겨찾기/재생목록 곡처럼 이미지 없이 저장된 곡의 커버를 서버에 물어봄
+// (iTunes -> Last.fm -> Deezer -> 아티스트 사진 순, 서버에서 캐싱됨)
+export function getTrackImage(artistName: string, trackName: string): Promise<{ image: string | null }> {
+  return fetchJson(
+    `/track-image?artist=${encodeURIComponent(artistName)}&track=${encodeURIComponent(trackName)}`
+  );
+}
+
 // (§61) 검색 중 홈 화면 "지금 인기 있는 곡"/"인기 아티스트"를 검색과 무관한 고정 콘텐츠로 두지 말고
 // 검색한 아티스트 본인의 다른 곡으로 채워달라는 요청으로 추가. recommendByArtist(/recommend)는
 // "비슷한 아티스트들"의 곡이라 의도가 달라서 재사용하지 않고 분리된 엔드포인트를 씀.

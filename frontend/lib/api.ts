@@ -91,9 +91,15 @@ export function recommendByArtist(artistName: string): Promise<{ tracks: Track[]
 // (§61) 검색 중 홈 화면 "지금 인기 있는 곡"/"인기 아티스트"를 검색과 무관한 고정 콘텐츠로 두지 말고
 // 검색한 아티스트 본인의 다른 곡으로 채워달라는 요청으로 추가. recommendByArtist(/recommend)는
 // "비슷한 아티스트들"의 곡이라 의도가 달라서 재사용하지 않고 분리된 엔드포인트를 씀.
-export function getArtistTopTracks(artistName: string): Promise<{ tracks: Track[] }> {
+export function getArtistTopTracks(
+  artistName: string,
+  opts?: { limit?: number; lyricsOnly?: boolean }
+): Promise<{ tracks: Track[] }> {
   const query = encodeURIComponent(artistName);
-  return fetchJson(`/artist-top-tracks?artist_name=${query}`);
+  const extra =
+    (opts?.limit ? `&limit=${opts.limit}` : "") +
+    (opts?.lyricsOnly === false ? "&lyrics_only=false" : "");
+  return fetchJson(`/artist-top-tracks?artist_name=${query}${extra}`);
 }
 
 // 아티스트 검색 없이, 무드/상황 태그만으로 인기곡을 가져옴 (홈 화면 탐색용)

@@ -13,6 +13,7 @@ import PlaylistDetailOverlay from "@/components/PlaylistDetailOverlay";
 import StaleTracksModal from "@/components/StaleTracksModal";
 import AuthModal from "@/components/AuthModal";
 import RankingPage from "@/components/RankingPage";
+import ArtistPage from "@/components/ArtistPage";
 import { supabase } from "@/lib/supabase";
 import {
   search,
@@ -904,19 +905,48 @@ export default function Home() {
     }
   }
 
-  async function handleSelectArtist(artistName: string) {
+  // "검색된 아티스트"에는 Last.fm이 유튜브 영상 제목 같은 가짜 항목("TWS(투어스) '내 이름을 불러줘'
+  // (4K)")과 표기만 다른 중복("TWS (투어스)"/"TWS(투어스)")까지 섞어 줌. 청취자 수가 1위의 5%
+  // 미만이거나, 따옴표·(4K) 같은 영상 제목 흔적이 있거나, 공백·괄호만 다른 중복이면 걸러서
+  // 최대 4개만 보여줌. 전부 걸러져 비면 원본을 그대로 씀.
+  function cleanSearchArtists(list: Artist[]): Artist[] {
+    if (list.length === 0) return list;
+    const norm = (s: string) => s.toLowerCase().replace(/[^0-9a-z가-힣]/g, "");
+    // "ILLIT (아일릿)"은 "ILLIT"·"아일릿"과 같은 아티스트라서, 전체/괄호 앞/괄호 안을 모두 같은 이름으로 취급
+    const keysOf = (name: string): string[] => {
+      const keys = [norm(name)];
+      const m = name.match(/^(.*?)\s*\((.*?)\)\s*$/);
+      if (m) keys.push(norm(m[1]), norm(m[2]));
+      return keys.filter(Boolean);
+    };
+    const maxListeners = Math.max(...list.map((a) => Number(a.listeners) || 0));
+    const seen = new Set<string>();
+    const out: Artist[] = [];
+    for (const a of list) {
+      const listeners = Number(a.listeners) || 0;
+      // 1위의 절반에 못 미치면 같은 가수의 다른 표기이거나 가짜 항목이라 숨김(대부분 1개만 남음)
+      if (maxListeners > 0 && listeners < maxListeners * 0.5) continue;
+      if (/['"‘’“”]|\(4K\)|\bMV\b|M\/V|Official|[!?]|라이브|킬링|직캠|티저|무대|영상|반응/i.test(a.name)) continue;
+      const keys = keysOf(a.name);
+      // 이미 고른 이름("악뮤")으로 시작하는데 훨씬 긴 이름은 영상 제목("악뮤(AKMU)의 킬링보이스를…")이라 제외
+      const nn = norm(a.name);
+      if ([...seen].some((k) => k.length >= 2 && nn.startsWith(k) && nn.length > k.length + 6)) continue;
+      if (keys.some((k) => seen.has(k))) continue;
+      keys.forEach((k) => seen.add(k));
+      out.push(a);
+      if (out.length >= 3) break;
+    }
+    return out.length > 0 ? out : list;
+  }
+
+  // 아티스트 카드를 누르면 그 아티스트의 전용 전체화면 페이지(ArtistPage)를 엶 —
+  // 예전엔 아래에 곡 몇 개만 덧붙여서 검색 결과 맨 아래 "다른 곡"과 똑같은 목록이 중복으로 나왔음.
+  const [artistPageName, setArtistPageName] = useState<string | null>(null);
+
+  function handleSelectArtist(artistName: string) {
     setError(null);
     setSelectedArtist(artistName);
-    setIsRecommending(true);
-    setTracks([]);
-    try {
-      const data = await recommendByArtist(artistName);
-      setTracks(data.tracks);
-    } catch (err) {
-      setError("추천 트랙을 불러오지 못했어요.");
-    } finally {
-      setIsRecommending(false);
-    }
+    setArtistPageName(artistName);
   }
 
   const moodSheetSwipeRef = useRef<{ x: number; y: number } | null>(null);
@@ -1951,7 +1981,7 @@ export default function Home() {
             )}
           </p>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-            {artists.map((artist) => (
+            {cleanSearchArtists(artists).map((artist) => (
               <ArtistCard
                 key={artist.name}
                 artist={artist}
@@ -1969,7 +1999,7 @@ export default function Home() {
 
       {tracks.length > 0 && (
         <div className="w-full max-w-xl">
-          <p className="mb-2 text-xl font-bold text-white">"{selectedArtist}"와 비슷한 아티스트의 곡</p>
+          <p className="mb-2 text-xl font-bold text-white">"{selectedArtist}"의 인기곡</p>
           <TrackList
             tracks={tracks}
             isFavorite={isTrackFavorite}
@@ -2489,6 +2519,17 @@ export default function Home() {
           )}
         </div>
       </div>
+    )}
+
+    {artistPageName && (
+      <ArtistPage
+        artistName={artistPageName}
+        onClose={() => setArtistPageName(null)}
+        isFavorite={isTrackFavorite}
+        onToggleFavorite={handleToggleFavoriteTrack}
+        onPlay={handlePlay}
+        onAddToPlaylist={handleOpenAddToPlaylist}
+      />
     )}
 
     {/* (게이미피케이션, UI 재구조화) 다른 사용자가 공개한 재생목록 둘러보기 — 전용 전체화면

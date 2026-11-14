@@ -38,11 +38,13 @@ export default function ArtistCard({
             unoptimized
           />
         ) : (
-          <div className="h-12 w-12 rounded-full bg-white/10" />
+          // 사진이 없으면 이름 첫 글자로 채움(빈 회색 원 대신)
+          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-white/10 text-base font-bold text-white/60">
+            {artist.name.trim().charAt(0).toUpperCase()}
+          </div>
         )}
         <div>
           <p className="text-sm font-medium">{artist.name}</p>
-          <p className="text-xs text-white/50">청취자 {Number(artist.listeners).toLocaleString()}명</p>
         </div>
       </button>
       <button

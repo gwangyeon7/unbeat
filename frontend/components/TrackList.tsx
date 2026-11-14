@@ -104,11 +104,6 @@ export default function TrackList({
           </div>
           <p className="mt-2 truncate text-sm font-medium">{track.name}</p>
           <p className="truncate text-xs text-white/50">{track.artist}</p>
-          {track.listeners && (
-            <p className="truncate text-[10px] text-white/30">
-              {Number(track.listeners).toLocaleString()}명
-            </p>
-          )}
         </div>
       ))}
     </div>

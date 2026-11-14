@@ -751,6 +751,13 @@ def root():
     return {"message": "Unbeat API 실행 중 (Last.fm 기반)"}
 
 
+# 헬스체크/업타임 모니터링 전용. DB·Redis·외부 API를 전혀 건드리지 않고 프로세스가 살아있으면
+# 즉시 200을 반환 — playlist-service의 /healthz(HealthController)와 같은 취지.
+@app.get("/health")
+def health():
+    return {"status": "ok"}
+
+
 @app.get("/auth/me")
 def auth_me(authorization: Optional[str] = Header(default=None)):
     """
@@ -765,9 +772,41 @@ def auth_me(authorization: Optional[str] = Header(default=None)):
     return {"logged_in": True, **user}
 
 
+def fetch_youtube_channel_thumb(artist_name: str) -> Optional[str]:
+    """
+    Last.fm엔 아티스트 사진이 거의 없어서, 유튜브 공식 채널의 프로필 이미지를 대신 씀.
+    search.list는 호출당 쿼터 100이라 결과(없음 포함)를 길게 캐싱함 — 같은 아티스트는 한 번만 조회.
+    """
+    if not YOUTUBE_API_KEY:
+        return None
+    cache_key = f"yt-channel-thumb:{artist_name.lower().strip()}"
+    cached = get_cached(cache_key)
+    if cached is not None:
+        return cached.get("url")
+    try:
+        res = requests.get(YOUTUBE_SEARCH_URL, params={
+            "part": "snippet",
+            "type": "channel",
+            "maxResults": 1,
+            "q": artist_name,
+            "key": YOUTUBE_API_KEY,
+        }, timeout=4)
+        if res.status_code != 200:
+            print(f"[yt-channel-thumb] {artist_name}: 상태코드 {res.status_code}")
+            return None
+        items = res.json().get("items", [])
+        thumbs = items[0]["snippet"]["thumbnails"] if items else {}
+        url = (thumbs.get("high") or thumbs.get("medium") or thumbs.get("default") or {}).get("url")
+    except Exception as e:
+        print(f"[yt-channel-thumb] {artist_name}: 예외 - {e}")
+        return None
+    set_cached(cache_key, {"url": url}, ttl=60 * 60 * 24 * 30)
+    return url
+
+
 @app.get("/search-artist")
 def search_artist(artist_name: str, x_session_id: Optional[str] = Header(default=None)):
-    cache_key = f"search-artist:{artist_name.lower().strip()}"
+    cache_key = f"search-artist:v2:{artist_name.lower().strip()}"
     cached = get_cached(cache_key)
     if cached is not None:
         if x_session_id:
@@ -789,6 +828,15 @@ def search_artist(artist_name: str, x_session_id: Optional[str] = Header(default
         }
         for item in matches
     ]
+
+    # 사진이 없는 상위 3명만 유튜브 채널 프로필 이미지로 채움(쿼터 절약)
+    targets = [a for a in artists[:3] if not a["image"]]
+    if targets:
+        with ThreadPoolExecutor(max_workers=3) as executor:
+            thumbs = list(executor.map(lambda a: fetch_youtube_channel_thumb(a["name"]), targets))
+        for a, t in zip(targets, thumbs):
+            if t:
+                a["image"] = t
 
     result = {"artists": artists}
     set_cached(cache_key, result)
@@ -1373,8 +1421,46 @@ def recommend_by_artist(artist_name: str, x_session_id: Optional[str] = Header(d
     return {**result, "cached": False}
 
 
+_JUNK_TRACK_RE = re.compile(
+    r"[@|]|\(4K\)|\bMV\b|M/V|official|fancam|직캠|인기가요|inkigayo|뮤직뱅크|음악중심|엠카운트다운|"
+    r"live clip|performance video|teaser|reaction|\bshorts\b",
+    re.IGNORECASE,
+)
+
+
+def _fetch_artist_top_raw(artist_name: str, limit: int) -> list:
+    """Last.fm artist.getTopTracks 원본 목록. 아티스트를 못 찾으면(에러) 빈 목록."""
+    try:
+        data = lastfm_get({"method": "artist.getTopTracks", "artist": artist_name, "limit": limit})
+        return data.get("toptracks", {}).get("track", [])
+    except HTTPException as e:
+        print(f"[artist-top-tracks] '{artist_name}' artist.getTopTracks 실패(빈 결과로 처리): {e.detail}")
+        return []
+
+
+def _clean_top_tracks(tracks: list) -> list:
+    """유튜브 영상 제목 같은 가짜 곡(\"@인기가요\", \"(4K)\" 등)과 제목만 다른 중복을 걸러냄."""
+    seen = set()
+    out = []
+    for t in tracks:
+        name = t.get("name", "")
+        if _JUNK_TRACK_RE.search(name):
+            continue
+        key = re.sub(r"[^0-9a-z가-힣]", "", name.lower())
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        out.append(t)
+    return out
+
+
 @app.get("/artist-top-tracks")
-def artist_top_tracks(artist_name: str, x_session_id: Optional[str] = Header(default=None)):
+def artist_top_tracks(
+    artist_name: str,
+    limit: int = 15,
+    lyrics_only: bool = True,
+    x_session_id: Optional[str] = Header(default=None),
+):
     """
     (§61) "검색해도 검색된 곡 말고는 다 똑같다, 유튜브 뮤직처럼 검색한 것과 관련된 곡이 홈에도
     떴으면 좋겠다"는 요청으로 추가. 검색 시 홈 화면의 "지금 인기 있는 곡"/"인기 아티스트"처럼
@@ -1388,7 +1474,9 @@ def artist_top_tracks(artist_name: str, x_session_id: Optional[str] = Header(def
     """
     # v3: 한글 제목 보완 파싱 버그 수정(ko-title v2)으로 같이 버전업 — 안 올리면 버그로
     # title=None이었던 예전 캐시가 그대로 재사용됨
-    cache_key = f"artist-top-tracks:v8:{artist_name.lower().strip()}"
+    # 아티스트 상세 화면은 곡을 더 많이(limit), 가사 필터 없이(lyrics_only=false) 달라고 요청함
+    limit = max(5, min(limit, 40))
+    cache_key = f"artist-top-tracks:v9:{artist_name.lower().strip()}:{limit}:{int(lyrics_only)}"
     cached = get_cached(cache_key)
     if cached is not None:
         return {**cached, "cached": True}
@@ -1399,16 +1487,24 @@ def artist_top_tracks(artist_name: str, x_session_id: Optional[str] = Header(def
     # "Artist not found" 에러가 나면 lastfm_get()이 HTTPException을 던져 그대로 500급으로 죽고
     # 있었음(§60에서 겪은 것과 같은 패턴). 실패해도 빈 목록으로 취급하고 로그를 남겨서, 다음에
     # 이 로그로 정확한 원인(진짜 아티스트 자체가 없는 건지, 표기 문제인지)을 확인할 수 있게 함.
-    try:
-        data = lastfm_get({
-            "method": "artist.getTopTracks",
-            "artist": artist_name,
-            "limit": 30,  # 가사 필터로 걸러질 걸 감안해서 넉넉히 모아둠(§44와 동일 원칙)
-        })
-        raw_tracks = data.get("toptracks", {}).get("track", [])
-    except HTTPException as e:
-        print(f"[artist-top-tracks] '{artist_name}' artist.getTopTracks 실패(빈 결과로 처리): {e.detail}")
-        raw_tracks = []
+    raw_tracks = _fetch_artist_top_raw(artist_name, max(30, limit + 10))
+    if not raw_tracks:
+        # "빅뱅"처럼 한글 표기가 Last.fm에선 "BIGBANG" 같은 다른 이름으로 등록된 경우가 많아서,
+        # 아티스트 검색 결과의 다른 표기로 최대 3번 더 시도함(첫 번째로 곡이 나오는 이름을 씀)
+        try:
+            cand = lastfm_get({"method": "artist.search", "artist": artist_name, "limit": 5})
+            names = [
+                m["name"]
+                for m in cand.get("results", {}).get("artistmatches", {}).get("artist", [])
+                if m.get("name") and m["name"].lower() != artist_name.lower()
+            ]
+        except HTTPException:
+            names = []
+        for alt in names[:3]:
+            raw_tracks = _fetch_artist_top_raw(alt, max(30, limit + 10))
+            if raw_tracks:
+                print(f"[artist-top-tracks] '{artist_name}' -> 대체 표기 '{alt}'로 조회")
+                break
 
     print(f"[artist-top-tracks] '{artist_name}' -> Last.fm 원본 {len(raw_tracks)}곡")
 
@@ -1423,7 +1519,11 @@ def artist_top_tracks(artist_name: str, x_session_id: Optional[str] = Header(def
         })
 
     # "둘러보기" 목적의 목록이라 가사 있는 곡만 걸러서 내려줌(§44와 동일 원칙, 검색 자체와는 별개 취급)
-    tracks = _filter_tracks_with_lyrics(tracks, 15)
+    tracks = _clean_top_tracks(tracks)
+    if lyrics_only:
+        tracks = _filter_tracks_with_lyrics(tracks, limit)
+    else:
+        tracks = tracks[:limit]
     tracks = _apply_korean_titles(tracks)
     print(f"[artist-top-tracks] '{artist_name}' -> 가사 필터 통과 {len(tracks)}곡")
 

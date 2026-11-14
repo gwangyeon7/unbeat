@@ -836,12 +836,30 @@ def resolve_track_image(artist_name: str, track_name: str, images: list) -> Opti
 
     itunes_image = fetch_itunes_artwork(artist_name, track_name)
     image = itunes_image or best_image(images) or fetch_deezer_track_cover(artist_name, track_name)
+    # 곡 커버를 끝내 못 구했으면 음표 아이콘 대신 그 아티스트의 Deezer 사진을 대신 보여줌.
+    # (resolve_artist_image는 내부에서 곡 이미지를 다시 부르므로 순환을 피하려고 Deezer 사진만 직접 조회)
+    used_artist_photo = False
+    if not image:
+        pic_key = f"deezer-artist-pic:v1:{artist_name.lower().strip()}"
+        pic_cached = get_cached(pic_key)
+        if pic_cached is not None:
+            image = pic_cached.get("url")
+        else:
+            image = fetch_deezer_artist_picture(artist_name)
+            # 같은 아티스트의 곡 여러 개가 한꺼번에 조회돼도 Deezer를 한 번만 부르게 캐싱
+            set_cached(pic_key, {"url": image},
+                       ttl=TRACK_IMAGE_CACHE_TTL_SECONDS if image else TRACK_IMAGE_NEGATIVE_CACHE_TTL_SECONDS)
+        used_artist_photo = bool(image)
     # (§51) 찾았을 때만 길게(30일) 캐싱하고, 못 찾았을 때는 짧게(30분)만 캐싱 — iTunes 호출이
     # 몰려서 일시적으로 실패한 것뿐인데 그걸 "이 곡은 이미지가 없다"고 한 달씩 확정 지어버리면
     # 안 되기 때문. BLACKPINK/Lisa/JISOO처럼 이미지가 확실히 있어야 할 메이저 아티스트 곡들이
     # 그룹째로 이미지가 안 뜨는 걸 발견해서 원인을 추적하다가 찾음 — 캐싱을 추가한 직후 iTunes
     # 요청이 몰렸던 시점에 실패한 결과가 그대로 30일 캐싱되어 버렸던 것.
-    ttl = TRACK_IMAGE_CACHE_TTL_SECONDS if image else TRACK_IMAGE_NEGATIVE_CACHE_TTL_SECONDS
+    if used_artist_photo:
+        # 아티스트 사진은 진짜 앨범 커버가 아니므로 짧게(6시간)만 캐싱 — iTunes가 풀리면 곧 진짜 커버로 교체됨
+        ttl = 60 * 60 * 6
+    else:
+        ttl = TRACK_IMAGE_CACHE_TTL_SECONDS if image else TRACK_IMAGE_NEGATIVE_CACHE_TTL_SECONDS
     set_cached(cache_key, {"url": image}, ttl=ttl)
     return image
 

@@ -671,6 +671,112 @@ def fetch_itunes_artwork(artist_name: str, track_name: str) -> Optional[str]:
         return None
 
 
+DEEZER_TRACK_SEARCH_URL = "https://api.deezer.com/search/track"
+
+
+def _name_keys(name: str) -> list:
+    """비교용 이름 조각들 — "A2O & A2O LITE", "ILLIT (아일릿)"처럼 여러 표기가 섞인 이름을 나눠서
+    각각 비교함. 0/o는 같은 글자로 봄("A20 LITE"로 잘못 적힌 "A2O LITE" 같은 경우)."""
+    parts = re.split(r"\(|\)|&|,|\bfeat\.?|\bx\b|\bwith\b", name.lower())
+    keys = [re.sub(r"[^0-9a-z가-힣]", "", p).replace("0", "o") for p in parts + [name.lower()]]
+    return [k for k in keys if k]
+
+
+def _deezer_artist_matches(requested: str, found: str) -> bool:
+    req_keys, found_keys = _name_keys(requested), _name_keys(found)
+    for a in req_keys:
+        for b in found_keys:
+            short, long_ = sorted((a, b), key=len)
+            if len(short) >= 2 and long_.startswith(short):
+                return True
+            if fuzz.ratio(a, b) >= 80:
+                return True
+    return False
+
+
+def _has_hangul(s: str) -> bool:
+    return bool(re.search(r"[가-힣]", s))
+
+
+def _deezer_search_first_track(artist_name: str, track_name: str) -> Optional[dict]:
+    try:
+        res = requests.get(
+            DEEZER_TRACK_SEARCH_URL, params={"q": f"{artist_name} {track_name}", "limit": 1}, timeout=4
+        )
+        if res.status_code != 200:
+            print(f"[deezer-track] {artist_name} - {track_name}: 상태코드 {res.status_code}")
+            return None
+        items = res.json().get("data") or []
+    except Exception as e:
+        print(f"[deezer-track] {artist_name} - {track_name}: 예외 - {e}")
+        return None
+    return items[0] if items else None
+
+
+def deezer_official_artist_name(artist_name: str) -> Optional[str]:
+    """한글 아티스트명("리센느") -> Deezer 공식명("RESCENE"). 곡 검색은 한글명으로 안 되지만
+    아티스트 검색은 한글로도 잘 매칭돼서, 공식명을 얻어 곡 검색을 다시 하는 데 씀."""
+    cache_key = f"deezer-artist-name:v1:{artist_name.lower().strip()}"
+    cached = get_cached(cache_key)
+    if cached is not None:
+        return cached.get("name")
+    try:
+        res = requests.get(DEEZER_ARTIST_SEARCH_URL, params={"q": artist_name, "limit": 1}, timeout=4)
+        if res.status_code != 200:
+            print(f"[deezer-artist-name] {artist_name}: 상태코드 {res.status_code}")
+            return None
+        items = res.json().get("data") or []
+    except Exception as e:
+        print(f"[deezer-artist-name] {artist_name}: 예외 - {e}")
+        return None
+    name = items[0].get("name", "").strip() if items else None
+    ttl = TRACK_IMAGE_CACHE_TTL_SECONDS if name else TRACK_IMAGE_NEGATIVE_CACHE_TTL_SECONDS
+    set_cached(cache_key, {"name": name}, ttl=ttl)
+    return name or None
+
+
+def fetch_deezer_track_cover(artist_name: str, track_name: str) -> Optional[str]:
+    """
+    iTunes·Last.fm 다음의 3순위 곡 이미지. iTunes가 429/403으로 거절할 때가 잦아서 추가함.
+    Deezer는 한글 아티스트명("리센느")으로는 곡 검색이 거의 안 돼서, 그럴 땐 아티스트 검색으로
+    공식명("RESCENE")을 얻어 한 번 더 검색함. 결과 1위가 다른 가수의 같은 제목 곡("TWS plot twist"
+    -> Med "The Plot Twist")일 때가 있어서 아티스트·제목을 확인함.
+    """
+    item = _deezer_search_first_track(artist_name, track_name)
+    if item:
+        url = _deezer_cover_if_match(item, artist_name, track_name)
+        if url:
+            return url
+    if _has_hangul(artist_name) or not item:
+        official = deezer_official_artist_name(artist_name)
+        if official and official.lower() != artist_name.lower().strip():
+            retry = _deezer_search_first_track(official, track_name)
+            if retry:
+                return _deezer_cover_if_match(retry, official, track_name)
+    return None
+
+
+def _deezer_cover_if_match(item: dict, artist_name: str, track_name: str) -> Optional[str]:
+    found_artist = item.get("artist", {}).get("name", "")
+    found_title = item.get("title", "")
+    title_score = fuzz.partial_ratio(found_title.lower(), track_name.lower())
+    if _deezer_artist_matches(artist_name, found_artist):
+        ok = title_score >= 60
+    elif _has_hangul(artist_name) != _has_hangul(found_artist):
+        # 한글/영문 표기가 달라 이름 비교가 안 되는 경우("리센느" vs "RESCENE")는 제목이 거의 같을 때만 인정
+        ok = title_score >= 90
+    else:
+        ok = False
+    if not ok:
+        print(f"[deezer-track] {artist_name} - {track_name}: 불일치로 버림({found_artist} - {found_title})")
+        return None
+    url = item.get("album", {}).get("cover_big")
+    # 커버가 없는 앨범은 해시 자리가 빈 기본 이미지 주소(".../cover//500x500...")를 줌
+    if not url or "/cover//" in url:
+        return None
+    return url
+
+
 def fetch_itunes_artist_artwork(artist_name: str) -> Optional[str]:
     """
     "인기 아티스트" 카드용 이미지 보완. Last.fm은 아티스트 프로필 이미지를 몇 년 전부터
@@ -721,19 +827,39 @@ def resolve_track_image(artist_name: str, track_name: str, images: list) -> Opti
     큐 등 여러 엔드포인트에서 반복해서 조회되는 경우가 많으므로, 한 번 찾은 이미지는 Redis에
     캐싱해서 재사용 — 같은 곡을 다시 조회할 땐 iTunes를 아예 안 부르게 됨.
     """
-    cache_key = f"track-image:v2:{artist_name.lower().strip()}:{track_name.lower().strip()}"
+    # v3: Deezer를 3순위로 추가(iTunes가 429/403으로 거절하고 Last.fm에도 없을 때 빈 이미지가 많았음)
+    # v4: 한글 아티스트명이면 Deezer 공식명으로 곡 검색을 한 번 더 함
+    cache_key = f"track-image:v4:{artist_name.lower().strip()}:{track_name.lower().strip()}"
     cached = get_cached(cache_key)
     if cached is not None:
         return cached.get("url")
 
     itunes_image = fetch_itunes_artwork(artist_name, track_name)
-    image = itunes_image or best_image(images)
+    image = itunes_image or best_image(images) or fetch_deezer_track_cover(artist_name, track_name)
+    # 곡 커버를 끝내 못 구했으면 음표 아이콘 대신 그 아티스트의 Deezer 사진을 대신 보여줌.
+    # (resolve_artist_image는 내부에서 곡 이미지를 다시 부르므로 순환을 피하려고 Deezer 사진만 직접 조회)
+    used_artist_photo = False
+    if not image:
+        pic_key = f"deezer-artist-pic:v1:{artist_name.lower().strip()}"
+        pic_cached = get_cached(pic_key)
+        if pic_cached is not None:
+            image = pic_cached.get("url")
+        else:
+            image = fetch_deezer_artist_picture(artist_name)
+            # 같은 아티스트의 곡 여러 개가 한꺼번에 조회돼도 Deezer를 한 번만 부르게 캐싱
+            set_cached(pic_key, {"url": image},
+                       ttl=TRACK_IMAGE_CACHE_TTL_SECONDS if image else TRACK_IMAGE_NEGATIVE_CACHE_TTL_SECONDS)
+        used_artist_photo = bool(image)
     # (§51) 찾았을 때만 길게(30일) 캐싱하고, 못 찾았을 때는 짧게(30분)만 캐싱 — iTunes 호출이
     # 몰려서 일시적으로 실패한 것뿐인데 그걸 "이 곡은 이미지가 없다"고 한 달씩 확정 지어버리면
     # 안 되기 때문. BLACKPINK/Lisa/JISOO처럼 이미지가 확실히 있어야 할 메이저 아티스트 곡들이
     # 그룹째로 이미지가 안 뜨는 걸 발견해서 원인을 추적하다가 찾음 — 캐싱을 추가한 직후 iTunes
     # 요청이 몰렸던 시점에 실패한 결과가 그대로 30일 캐싱되어 버렸던 것.
-    ttl = TRACK_IMAGE_CACHE_TTL_SECONDS if image else TRACK_IMAGE_NEGATIVE_CACHE_TTL_SECONDS
+    if used_artist_photo:
+        # 아티스트 사진은 진짜 앨범 커버가 아니므로 짧게(6시간)만 캐싱 — iTunes가 풀리면 곧 진짜 커버로 교체됨
+        ttl = 60 * 60 * 6
+    else:
+        ttl = TRACK_IMAGE_CACHE_TTL_SECONDS if image else TRACK_IMAGE_NEGATIVE_CACHE_TTL_SECONDS
     set_cached(cache_key, {"url": image}, ttl=ttl)
     return image
 
@@ -758,6 +884,13 @@ def health():
     return {"status": "ok"}
 
 
+@app.get("/track-image")
+def get_track_image(artist: str, track: str):
+    """보관함의 즐겨찾기/재생목록 곡처럼 이미지 없이 저장된 곡을 열 때 프론트가 한 곡씩 물어봄.
+    순서는 resolve_track_image 그대로(iTunes -> Last.fm -> Deezer -> 아티스트 사진)이고 결과도 거기서 캐싱됨."""
+    return {"image": resolve_track_image(_clean_artist_name(artist), track, [])}
+
+
 @app.get("/auth/me")
 def auth_me(authorization: Optional[str] = Header(default=None)):
     """
@@ -772,41 +905,68 @@ def auth_me(authorization: Optional[str] = Header(default=None)):
     return {"logged_in": True, **user}
 
 
-def fetch_youtube_channel_thumb(artist_name: str) -> Optional[str]:
+DEEZER_ARTIST_SEARCH_URL = "https://api.deezer.com/search/artist"
+
+
+def fetch_deezer_artist_picture(artist_name: str) -> Optional[str]:
     """
-    Last.fm엔 아티스트 사진이 거의 없어서, 유튜브 공식 채널의 프로필 이미지를 대신 씀.
-    search.list는 호출당 쿼터 100이라 결과(없음 포함)를 길게 캐싱함 — 같은 아티스트는 한 번만 조회.
+    Last.fm엔 아티스트 사진이 거의 없어서 Deezer 공개 API(키 불필요)의 아티스트 사진을 씀.
+    예전엔 유튜브 채널 프로필 이미지를 썼는데 search.list가 호출당 쿼터 100이라 교체함.
+    "빅뱅"->BIGBANG, "아일릿"->ILLIT처럼 한글 검색어도 맞는 아티스트로 매칭되는 걸 확인함.
     """
-    if not YOUTUBE_API_KEY:
+    try:
+        res = requests.get(DEEZER_ARTIST_SEARCH_URL, params={"q": artist_name, "limit": 1}, timeout=4)
+        if res.status_code != 200:
+            print(f"[deezer-artist] {artist_name}: 상태코드 {res.status_code}")
+            return None
+        items = res.json().get("data") or []
+    except Exception as e:
+        print(f"[deezer-artist] {artist_name}: 예외 - {e}")
         return None
-    cache_key = f"yt-channel-thumb:{artist_name.lower().strip()}"
+    url = items[0].get("picture_big") if items else None
+    # 사진이 없는 아티스트는 해시 자리가 빈 기본 이미지 주소(".../artist//500x500...")를 줌
+    if not url or "/artist//" in url:
+        return None
+    return url
+
+
+def fetch_top_track_cover(artist_name: str) -> Optional[str]:
+    """Deezer에서 사진을 못 찾았을 때의 대체 이미지 — 그 아티스트 인기곡 1위의 앨범 커버."""
+    try:
+        data = lastfm_get({"method": "artist.getTopTracks", "artist": artist_name, "limit": 1})
+        tracks = data.get("toptracks", {}).get("track", [])
+    except HTTPException:
+        return None
+    return track_image(tracks[0]) if tracks else None
+
+
+def resolve_artist_image(artist_name: str) -> Optional[str]:
+    # 찾았을 때만 30일, 못 찾았을 때는 30분만 캐싱(§51과 같은 이유 — 일시적 실패가 굳지 않게)
+    cache_key = f"artist-image:v2:{artist_name.lower().strip()}"
     cached = get_cached(cache_key)
     if cached is not None:
         return cached.get("url")
-    try:
-        res = requests.get(YOUTUBE_SEARCH_URL, params={
-            "part": "snippet",
-            "type": "channel",
-            "maxResults": 1,
-            "q": artist_name,
-            "key": YOUTUBE_API_KEY,
-        }, timeout=4)
-        if res.status_code != 200:
-            print(f"[yt-channel-thumb] {artist_name}: 상태코드 {res.status_code}")
-            return None
-        items = res.json().get("items", [])
-        thumbs = items[0]["snippet"]["thumbnails"] if items else {}
-        url = (thumbs.get("high") or thumbs.get("medium") or thumbs.get("default") or {}).get("url")
-    except Exception as e:
-        print(f"[yt-channel-thumb] {artist_name}: 예외 - {e}")
-        return None
-    set_cached(cache_key, {"url": url}, ttl=60 * 60 * 24 * 30)
-    return url
+    image = fetch_deezer_artist_picture(artist_name) or fetch_top_track_cover(artist_name)
+    ttl = TRACK_IMAGE_CACHE_TTL_SECONDS if image else TRACK_IMAGE_NEGATIVE_CACHE_TTL_SECONDS
+    set_cached(cache_key, {"url": image}, ttl=ttl)
+    return image
+
+
+def _fill_artist_images(artists: list) -> None:
+    """검색 결과 아티스트 중 사진이 없는 항목을 Deezer 사진(실패 시 인기곡 앨범 커버)으로 채움(제자리 수정)."""
+    targets = [a for a in artists[:5] if not a.get("image")]
+    if not targets:
+        return
+    with ThreadPoolExecutor(max_workers=5) as executor:
+        images = list(executor.map(lambda a: resolve_artist_image(a["name"]), targets))
+    for a, img in zip(targets, images):
+        if img:
+            a["image"] = img
 
 
 @app.get("/search-artist")
 def search_artist(artist_name: str, x_session_id: Optional[str] = Header(default=None)):
-    cache_key = f"search-artist:v2:{artist_name.lower().strip()}"
+    cache_key = f"search-artist:v4:{artist_name.lower().strip()}"
     cached = get_cached(cache_key)
     if cached is not None:
         if x_session_id:
@@ -829,11 +989,11 @@ def search_artist(artist_name: str, x_session_id: Optional[str] = Header(default
         for item in matches
     ]
 
-    # 사진이 없는 상위 3명만 유튜브 채널 프로필 이미지로 채움(쿼터 절약)
-    targets = [a for a in artists[:3] if not a["image"]]
+    # 사진이 없는 아티스트는 Deezer 사진(실패 시 인기곡 1위 앨범 커버)으로 채움
+    targets = [a for a in artists if not a["image"]]
     if targets:
-        with ThreadPoolExecutor(max_workers=3) as executor:
-            thumbs = list(executor.map(lambda a: fetch_youtube_channel_thumb(a["name"]), targets))
+        with ThreadPoolExecutor(max_workers=5) as executor:
+            thumbs = list(executor.map(lambda a: resolve_artist_image(a["name"]), targets))
         for a, t in zip(targets, thumbs):
             if t:
                 a["image"] = t
@@ -890,7 +1050,7 @@ def _search_exact_pick(q: str, artist: str, x_session_id: Optional[str]):
     같은 제목의 다른 곡(예: "Meteor" 수십 개)과 이름이 비슷한 엉뚱한 아티스트가 훨씬 많이 떠서,
     사용자가 고른 바로 그 곡이 묻혔음(2026-10-22 피드백). 아티스트까지 넘겨서 그 곡을 맨 앞에,
     아티스트 카드는 그 아티스트 하나를 맨 앞에 둠."""
-    cache_key = f"search-pick:v2:{artist.lower().strip()}:{q.lower().strip()}"
+    cache_key = f"search-pick:v4:{artist.lower().strip()}:{q.lower().strip()}"
     cached = get_cached(cache_key)
     if cached is not None:
         if x_session_id:
@@ -927,6 +1087,8 @@ def _search_exact_pick(q: str, artist: str, x_session_id: Optional[str]):
     artists = _build_artist_results(artist_matches)
     artists.sort(key=lambda a: 0 if _norm(a["name"]) == want_artist else 1)
     artists = artists[:1] if artists and _norm(artists[0]["name"]) == want_artist else artists
+
+    _fill_artist_images(artists)
 
     result = {
         "artists": artists,
@@ -1030,7 +1192,7 @@ def _search_by_query(q: str, x_session_id: Optional[str] = None):
     # 등)로 남는 버그 발견 — _apply_korean_titles에 아티스트명 보완(resolve_korean_artist_name)
     # 추가했으니 과거 캐시 무효화를 위해 버전업(v23/v24 버전 번호는 실제로 안 쓰였음 — 직전
     # 중간 수정 때 혼선으로 건너뜀, 동작엔 영향 없음).
-    cache_key = f"search:v28:{q.lower().strip()}"
+    cache_key = f"search:v30:{q.lower().strip()}"
     cached = get_cached(cache_key)
     if cached is not None:
         if x_session_id:
@@ -1197,7 +1359,7 @@ def _search_by_query(q: str, x_session_id: Optional[str] = None):
         # 버전 안 올리면 새 로직이 반영 안 된다"는 문제와 똑같은 패턴). 그래서 이 안쪽 캐시도
         # 같이 버전업.
         # v4: ko-title 캐시 키를 v2로 올린 것과 같은 이유로 같이 버전업 (한글 제목 파싱 버그 수정)
-        ai_fallback_cache_key = f"search-ai-fallback:v9:{q.lower().strip()}"
+        ai_fallback_cache_key = f"search-ai-fallback:v10:{q.lower().strip()}"
         cached_fallback = get_cached(ai_fallback_cache_key)
         if cached_fallback is not None:
             print(f"[search-ai-fallback] '{q}' -> 캐시된 결과 재사용(호출 없음), 검증됨={cached_fallback.get('verified')}")
@@ -1337,6 +1499,8 @@ def _search_by_query(q: str, x_session_id: Optional[str] = None):
         print(f"[search-tag-tracks] '{q}' -> genre_tag={genre_tag!r}, decade_tag={decade_tag!r}, "
               f"원본 후보 {len(candidates)}개 -> 가사 필터 통과 {len(tag_tracks)}개")
 
+    _fill_artist_images(artists)
+
     result = {
         "artists": artists,
         "tracks": tracks,
@@ -1357,7 +1521,7 @@ def _search_by_query(q: str, x_session_id: Optional[str] = None):
 @app.get("/recommend")
 def recommend_by_artist(artist_name: str, x_session_id: Optional[str] = Header(default=None)):
     # v3: 한글 아티스트명 보완(_apply_korean_titles) 추가로 버전업
-    cache_key = f"recommend:v5:{artist_name.lower().strip()}"
+    cache_key = f"recommend:v6:{artist_name.lower().strip()}"
     cached = get_cached(cache_key)
     if cached is not None:
         if x_session_id:
@@ -1476,7 +1640,7 @@ def artist_top_tracks(
     # title=None이었던 예전 캐시가 그대로 재사용됨
     # 아티스트 상세 화면은 곡을 더 많이(limit), 가사 필터 없이(lyrics_only=false) 달라고 요청함
     limit = max(5, min(limit, 40))
-    cache_key = f"artist-top-tracks:v9:{artist_name.lower().strip()}:{limit}:{int(lyrics_only)}"
+    cache_key = f"artist-top-tracks:v10:{artist_name.lower().strip()}:{limit}:{int(lyrics_only)}"
     cached = get_cached(cache_key)
     if cached is not None:
         return {**cached, "cached": True}
@@ -1534,54 +1698,6 @@ def artist_top_tracks(
         log_event(x_session_id, "artist_top_tracks_view", artist_name, result_count=len(tracks))
 
     return {**result, "cached": False}
-
-
-def _youtube_thumbnail_fallback(artist_name: str, track_name: str) -> Optional[str]:
-    """
-    "빠른 선곡"에서 iTunes+Last.fm 둘 다 실패한 곡(비공식/리믹스/쇼미더머니 참가곡처럼 정식
-    음원 유통이 안 된 트랙 등)의 이미지를 마지막으로 보강하려고 추가. 유튜브 뮤직이 이런 곡도
-    이미지가 뜨는 이유는 사실 "앨범 커버"가 아니라 그 곡이 올라간 유튜브 영상 자체의 썸네일을
-    쓰기 때문 — 우리도 이미 재생 버튼용으로 유튜브 검색(`/youtube-search`)을 하고 있으니, 같은
-    캐시 키(`youtube-search:{artist}:{track}`)를 그대로 재사용해서 이미지용으로도 활용함.
-    이렇게 하면 (1) 이미 재생해서 캐싱된 곡은 API를 다시 안 부르고 캐시에서 바로 videoId를 꺼내
-    쓸 수 있고, (2) 여기서 새로 검색해서 캐싱해두면 나중에 그 곡을 재생할 때도 `/youtube-search`가
-    API를 다시 안 부르고 이 캐시를 그대로 씀 — 두 기능이 캐시를 공유해서 쿼터를 이중으로 안 씀.
-    썸네일 자체(`i.ytimg.com/vi/{videoId}/...`)는 유튜브 API 쿼터를 안 쓰는 공개 정적 URL이라,
-    videoId만 한 번 알아내면 이미지 조회 자체는 무료임.
-
-    의도적으로 "빠른 선곡"에만 적용함 — "다시 듣기"(즐겨찾기 전체)처럼 곡 수가 많은 목록까지
-    적용하면 캐시 안 된 곡마다 검색 API 호출(100유닛, 하루 한도 10,000유닛=약 100회)이 나가서
-    하루 쿼터를 화면 하나 로드에 다 쓸 수도 있음 — 사용자와 상의 후 범위를 이렇게 좁힘.
-    """
-    if not YOUTUBE_API_KEY:
-        return None
-
-    cache_key = f"youtube-search:{artist_name.lower().strip()}:{track_name.lower().strip()}"
-    cached = get_cached(cache_key)
-    if cached is not None:
-        video_id = cached.get("videoId")
-        return f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg" if video_id else None
-
-    try:
-        res = requests.get(YOUTUBE_SEARCH_URL, params={
-            "part": "snippet",
-            "type": "video",
-            "maxResults": 1,
-            "q": f"{artist_name} {track_name}",
-            "key": YOUTUBE_API_KEY,
-        }, timeout=3)
-        if res.status_code != 200:
-            print(f"[youtube-thumbnail-fallback] {artist_name} - {track_name}: 상태코드 {res.status_code}")
-            return None
-        items = res.json().get("items", [])
-        video_id = items[0]["id"]["videoId"] if items else None
-    except Exception as e:
-        print(f"[youtube-thumbnail-fallback] {artist_name} - {track_name}: 예외 발생 - {e}")
-        return None
-
-    # /youtube-search와 정확히 같은 스키마({"videoId": ...})로 캐싱해야 두 기능이 캐시를 호환해서 씀
-    set_cached(cache_key, {"videoId": video_id}, ttl=YOUTUBE_SEARCH_CACHE_TTL_SECONDS)
-    return f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg" if video_id else None
 
 
 # (§57) 캐싱 위치를 이 함수 안에서 호출부(search())로 옮김 — 원래는 여기서 "모델이 준 추측
@@ -1730,7 +1846,7 @@ def ai_quick_picks(payload: AiQuickPicksRequest, x_session_id: Optional[str] = H
     # v2: 이미지 유튜브 썸네일 폴백(§39) 추가로 계산 로직이 바뀌어서 캐시 키 버전업.
     # v3: 가로 스크롤 UI 도입에 맞춰 개수를 9→15로 늘려서 또 한 번 버전업
     # (오늘 이미 저장된 옛 캐시가 9곡짜리 그대로 나가는 걸 막기 위함 — [[학습노트 36번]]과 같은 이유).
-    cache_key = f"quick-picks-ai:v3:{x_session_id or 'anon'}:{date.today().isoformat()}"
+    cache_key = f"quick-picks-ai:v4:{x_session_id or 'anon'}:{date.today().isoformat()}"
     cached = get_cached(cache_key)
     if cached is not None:
         return {**cached, "cached": True}
@@ -1803,9 +1919,6 @@ def ai_quick_picks(payload: AiQuickPicksRequest, x_session_id: Optional[str] = H
         seen.add(matched_key)
 
         image = resolve_track_image(matched_artist, match["name"], match.get("image", []))
-        if not image:
-            # iTunes/Last.fm 둘 다 실패한 곡(비공식 발매/쇼미더머니류)은 유튜브 영상 썸네일로 마지막 보강
-            image = _youtube_thumbnail_fallback(matched_artist, match["name"])
 
         tracks.append({
             "name": match["name"],
@@ -1830,7 +1943,7 @@ SIMILAR_TRACKS_RAW_CAP = 40  # 가사 필터로 걸러질 걸 감안해서, 후�
 # 덕분에 첫 호출부터 큐가 훨씬 꽉 차 보이고, 최대치(프론트 MAX_QUEUE_SIZE=40)까지도 이어붙이기
 # 한두 번이면 도달함. 너무 크게 올리지 않은 이유는 아래 이미지 리졸브 비용과 직결되기 때문.
 SIMILAR_TRACKS_FINAL_COUNT = 25  # 가사 있는 곡만 걸러낸 뒤 큐에 실제로 담을 개수
-SIMILAR_TRACKS_CACHE_VERSION = "v14"  # similar_tracks()와 next-tracks override 등록/삭제 엔드포인트가 같이 참조함. v10: 한글 제목/아티스트명 보완(_apply_korean_titles) 추가로 버전업
+SIMILAR_TRACKS_CACHE_VERSION = "v15"  # similar_tracks()와 next-tracks override 등록/삭제 엔드포인트가 같이 참조함. v10: 한글 제목/아티스트명 보완(_apply_korean_titles) 추가로 버전업
 
 # (§84) Last.fm 유사곡/유사 아티스트 결과가 이보다 적으면 AI 폴백을 추가로 돌림. "도요한"처럼
 # artist.getSimilar가 결과 1개만 던지는 경우가 실사용 중 발견돼서 추가 — 그 1개 결과도 그대로
@@ -3000,7 +3113,7 @@ CURATED_TRACK_MATCH_THRESHOLD = 40
 def _resolve_single_curated_track(pair: tuple[str, str]) -> Optional[dict]:
     """_resolve_curated_tracks가 스레드풀로 병렬 호출하는 단일 (아티스트, 곡명) 처리 단위."""
     artist, track_name = pair
-    cache_key = f"curated-track:v2:{artist.lower()}:{track_name.lower()}"
+    cache_key = f"curated-track:v3:{artist.lower()}:{track_name.lower()}"
     cached_track = get_cached(cache_key)
     if cached_track is not None:
         return cached_track
@@ -3031,8 +3144,6 @@ def _resolve_single_curated_track(pair: tuple[str, str]) -> Optional[dict]:
     match = best_match
     matched_artist = _clean_artist_name(match.get("artist", ""))
     image = resolve_track_image(matched_artist, match["name"], match.get("image", []))
-    if not image:
-        image = _youtube_thumbnail_fallback(matched_artist, match["name"])
     resolved_track = {
         "name": match["name"],
         "artist": matched_artist,
@@ -3323,7 +3434,7 @@ def discover_by_mood(tag: str, x_session_id: Optional[str] = Header(default=None
     # 버전 때 잘못 매칭된 채로 캐싱된 풀(curated-track:v1 캐시 기반)이 안 섞이도록 재버전업.
     # v9: "sad"에서 Gee/Supernova 같은 무관 k-pop이 섞이는 버그 발견 후 전체 무드 감사 — sad/love/
     # study/chill/party 큐레이션 목록을 실제 Last.fm 매칭 검증 거쳐 재구성(아래 딕셔너리 주석 참고).
-    cache_key = f"discover-by-mood:v10:{tag.lower().strip()}"
+    cache_key = f"discover-by-mood:v11:{tag.lower().strip()}"
     pool = get_cached(cache_key)
 
     if pool is None:
@@ -3415,7 +3526,7 @@ def top_chart(country: Optional[str] = None):
     # v2: 이미지 우선순위 변경(§31) 캐시 무효화 — 안 그러면 카드마다 같은 아티스트 프로필
     # 사진이 반복되는 옛 캐시가 만료 전까지 계속 나감(실사용 중 발견).
     # v3: 한글 제목 보완 파싱 버그 수정(ko-title v2)으로 같이 버전업
-    cache_key = f"chart:top-tracks:v8:{country.lower()}" if country else "chart:top-tracks:v8"
+    cache_key = f"chart:top-tracks:v9:{country.lower()}" if country else "chart:top-tracks:v9"
     cached = get_cached(cache_key)
     if cached is not None:
         return {**cached, "cached": True}

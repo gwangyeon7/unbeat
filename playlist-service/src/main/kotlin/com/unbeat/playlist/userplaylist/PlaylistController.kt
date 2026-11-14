@@ -2,6 +2,8 @@ package com.unbeat.playlist.userplaylist
 
 import com.unbeat.playlist.auth.SupabaseAuth
 import com.unbeat.playlist.userplaylist.dto.PlaylistRequest
+import com.unbeat.playlist.userplaylist.dto.PlaylistRenameRequest
+import com.unbeat.playlist.userplaylist.dto.PlaylistTrackImageRequest
 import com.unbeat.playlist.userplaylist.dto.PlaylistTrackRequest
 import com.unbeat.playlist.userplaylist.dto.PlaylistVisibilityRequest
 import org.springframework.http.HttpStatus
@@ -82,6 +84,23 @@ class PlaylistController(
         }
     }
 
+    // 재생목록 이름 수정 — trim 후 1~50자만 허용(비었거나 너무 길면 400). 자동 생성 재생목록도 가능.
+    @PatchMapping("/{id}/name")
+    fun rename(
+        @RequestHeader("X-Session-Id") sessionId: String,
+        @PathVariable id: Long,
+        @RequestBody request: PlaylistRenameRequest
+    ): ResponseEntity<Any> {
+        val name = request.name.trim()
+        if (name.isEmpty() || name.length > 50) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(mapOf("error" to "재생목록 이름은 1~50자로 입력해주세요."))
+        }
+        val response = playlistService.rename(sessionId, id, name)
+        return if (response != null) ResponseEntity.ok(response)
+        else ResponseEntity.status(HttpStatus.NOT_FOUND).build()
+    }
+
     @DeleteMapping("/{id}")
     fun delete(
         @RequestHeader("X-Session-Id") sessionId: String,
@@ -110,6 +129,22 @@ class PlaylistController(
     ): ResponseEntity<Any> {
         val response = playlistService.addTrack(sessionId, id, request)
         return if (response != null) ResponseEntity.status(HttpStatus.CREATED).body(response)
+        else ResponseEntity.status(HttpStatus.NOT_FOUND).build()
+    }
+
+    // 이미지 없이 담긴 곡을 열 때 프론트가 구한 커버 이미지를 저장(컬럼 길이 500, https만 허용)
+    @PatchMapping("/{id}/tracks/{trackId}/image")
+    fun updateTrackImage(
+        @RequestHeader("X-Session-Id") sessionId: String,
+        @PathVariable id: Long,
+        @PathVariable trackId: Long,
+        @RequestBody request: PlaylistTrackImageRequest
+    ): ResponseEntity<Any> {
+        if (!request.imageUrl.startsWith("https://") || request.imageUrl.length > 500) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).build()
+        }
+        val response = playlistService.updateTrackImage(sessionId, id, trackId, request.imageUrl)
+        return if (response != null) ResponseEntity.ok(response)
         else ResponseEntity.status(HttpStatus.NOT_FOUND).build()
     }
 

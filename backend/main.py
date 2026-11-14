@@ -772,41 +772,68 @@ def auth_me(authorization: Optional[str] = Header(default=None)):
     return {"logged_in": True, **user}
 
 
-def fetch_youtube_channel_thumb(artist_name: str) -> Optional[str]:
+DEEZER_ARTIST_SEARCH_URL = "https://api.deezer.com/search/artist"
+
+
+def fetch_deezer_artist_picture(artist_name: str) -> Optional[str]:
     """
-    Last.fm엔 아티스트 사진이 거의 없어서, 유튜브 공식 채널의 프로필 이미지를 대신 씀.
-    search.list는 호출당 쿼터 100이라 결과(없음 포함)를 길게 캐싱함 — 같은 아티스트는 한 번만 조회.
+    Last.fm엔 아티스트 사진이 거의 없어서 Deezer 공개 API(키 불필요)의 아티스트 사진을 씀.
+    예전엔 유튜브 채널 프로필 이미지를 썼는데 search.list가 호출당 쿼터 100이라 교체함.
+    "빅뱅"->BIGBANG, "아일릿"->ILLIT처럼 한글 검색어도 맞는 아티스트로 매칭되는 걸 확인함.
     """
-    if not YOUTUBE_API_KEY:
+    try:
+        res = requests.get(DEEZER_ARTIST_SEARCH_URL, params={"q": artist_name, "limit": 1}, timeout=4)
+        if res.status_code != 200:
+            print(f"[deezer-artist] {artist_name}: 상태코드 {res.status_code}")
+            return None
+        items = res.json().get("data") or []
+    except Exception as e:
+        print(f"[deezer-artist] {artist_name}: 예외 - {e}")
         return None
-    cache_key = f"yt-channel-thumb:{artist_name.lower().strip()}"
+    url = items[0].get("picture_big") if items else None
+    # 사진이 없는 아티스트는 해시 자리가 빈 기본 이미지 주소(".../artist//500x500...")를 줌
+    if not url or "/artist//" in url:
+        return None
+    return url
+
+
+def fetch_top_track_cover(artist_name: str) -> Optional[str]:
+    """Deezer에서 사진을 못 찾았을 때의 대체 이미지 — 그 아티스트 인기곡 1위의 앨범 커버."""
+    try:
+        data = lastfm_get({"method": "artist.getTopTracks", "artist": artist_name, "limit": 1})
+        tracks = data.get("toptracks", {}).get("track", [])
+    except HTTPException:
+        return None
+    return track_image(tracks[0]) if tracks else None
+
+
+def resolve_artist_image(artist_name: str) -> Optional[str]:
+    # 찾았을 때만 30일, 못 찾았을 때는 30분만 캐싱(§51과 같은 이유 — 일시적 실패가 굳지 않게)
+    cache_key = f"artist-image:v1:{artist_name.lower().strip()}"
     cached = get_cached(cache_key)
     if cached is not None:
         return cached.get("url")
-    try:
-        res = requests.get(YOUTUBE_SEARCH_URL, params={
-            "part": "snippet",
-            "type": "channel",
-            "maxResults": 1,
-            "q": artist_name,
-            "key": YOUTUBE_API_KEY,
-        }, timeout=4)
-        if res.status_code != 200:
-            print(f"[yt-channel-thumb] {artist_name}: 상태코드 {res.status_code}")
-            return None
-        items = res.json().get("items", [])
-        thumbs = items[0]["snippet"]["thumbnails"] if items else {}
-        url = (thumbs.get("high") or thumbs.get("medium") or thumbs.get("default") or {}).get("url")
-    except Exception as e:
-        print(f"[yt-channel-thumb] {artist_name}: 예외 - {e}")
-        return None
-    set_cached(cache_key, {"url": url}, ttl=60 * 60 * 24 * 30)
-    return url
+    image = fetch_deezer_artist_picture(artist_name) or fetch_top_track_cover(artist_name)
+    ttl = TRACK_IMAGE_CACHE_TTL_SECONDS if image else TRACK_IMAGE_NEGATIVE_CACHE_TTL_SECONDS
+    set_cached(cache_key, {"url": image}, ttl=ttl)
+    return image
+
+
+def _fill_artist_images(artists: list) -> None:
+    """검색 결과 아티스트 중 사진이 없는 항목을 Deezer 사진(실패 시 인기곡 앨범 커버)으로 채움(제자리 수정)."""
+    targets = [a for a in artists[:5] if not a.get("image")]
+    if not targets:
+        return
+    with ThreadPoolExecutor(max_workers=5) as executor:
+        images = list(executor.map(lambda a: resolve_artist_image(a["name"]), targets))
+    for a, img in zip(targets, images):
+        if img:
+            a["image"] = img
 
 
 @app.get("/search-artist")
 def search_artist(artist_name: str, x_session_id: Optional[str] = Header(default=None)):
-    cache_key = f"search-artist:v2:{artist_name.lower().strip()}"
+    cache_key = f"search-artist:v3:{artist_name.lower().strip()}"
     cached = get_cached(cache_key)
     if cached is not None:
         if x_session_id:
@@ -829,11 +856,11 @@ def search_artist(artist_name: str, x_session_id: Optional[str] = Header(default
         for item in matches
     ]
 
-    # 사진이 없는 상위 3명만 유튜브 채널 프로필 이미지로 채움(쿼터 절약)
-    targets = [a for a in artists[:3] if not a["image"]]
+    # 사진이 없는 아티스트는 Deezer 사진(실패 시 인기곡 1위 앨범 커버)으로 채움
+    targets = [a for a in artists if not a["image"]]
     if targets:
-        with ThreadPoolExecutor(max_workers=3) as executor:
-            thumbs = list(executor.map(lambda a: fetch_youtube_channel_thumb(a["name"]), targets))
+        with ThreadPoolExecutor(max_workers=5) as executor:
+            thumbs = list(executor.map(lambda a: resolve_artist_image(a["name"]), targets))
         for a, t in zip(targets, thumbs):
             if t:
                 a["image"] = t
@@ -890,7 +917,7 @@ def _search_exact_pick(q: str, artist: str, x_session_id: Optional[str]):
     같은 제목의 다른 곡(예: "Meteor" 수십 개)과 이름이 비슷한 엉뚱한 아티스트가 훨씬 많이 떠서,
     사용자가 고른 바로 그 곡이 묻혔음(2026-10-22 피드백). 아티스트까지 넘겨서 그 곡을 맨 앞에,
     아티스트 카드는 그 아티스트 하나를 맨 앞에 둠."""
-    cache_key = f"search-pick:v2:{artist.lower().strip()}:{q.lower().strip()}"
+    cache_key = f"search-pick:v3:{artist.lower().strip()}:{q.lower().strip()}"
     cached = get_cached(cache_key)
     if cached is not None:
         if x_session_id:
@@ -927,6 +954,8 @@ def _search_exact_pick(q: str, artist: str, x_session_id: Optional[str]):
     artists = _build_artist_results(artist_matches)
     artists.sort(key=lambda a: 0 if _norm(a["name"]) == want_artist else 1)
     artists = artists[:1] if artists and _norm(artists[0]["name"]) == want_artist else artists
+
+    _fill_artist_images(artists)
 
     result = {
         "artists": artists,
@@ -1030,7 +1059,7 @@ def _search_by_query(q: str, x_session_id: Optional[str] = None):
     # 등)로 남는 버그 발견 — _apply_korean_titles에 아티스트명 보완(resolve_korean_artist_name)
     # 추가했으니 과거 캐시 무효화를 위해 버전업(v23/v24 버전 번호는 실제로 안 쓰였음 — 직전
     # 중간 수정 때 혼선으로 건너뜀, 동작엔 영향 없음).
-    cache_key = f"search:v28:{q.lower().strip()}"
+    cache_key = f"search:v29:{q.lower().strip()}"
     cached = get_cached(cache_key)
     if cached is not None:
         if x_session_id:
@@ -1336,6 +1365,8 @@ def _search_by_query(q: str, x_session_id: Optional[str] = None):
         tag_tracks = _filter_tracks_with_lyrics(candidates, 15)
         print(f"[search-tag-tracks] '{q}' -> genre_tag={genre_tag!r}, decade_tag={decade_tag!r}, "
               f"원본 후보 {len(candidates)}개 -> 가사 필터 통과 {len(tag_tracks)}개")
+
+    _fill_artist_images(artists)
 
     result = {
         "artists": artists,

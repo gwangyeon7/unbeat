@@ -7,9 +7,7 @@ package com.unbeat.playlist.userplaylist
  * (PlaylistService.setVisibility 참고).
  *
  * 자유 입력을 안 받고 고정 목록에서만 고르게 하는 이유 — "발라드"/"Ballad"/"발라드곡"처럼
- * 표기가 흩어지면 필터링 자체가 무의미해짐. AutoPlaylistService의 장르 분류(GENRE_LABELS)와
- * 비슷하지만 의도적으로 분리된 목록 — 저쪽은 Last.fm 태그 매칭용이고 이쪽은 사용자가 직접
- * 고르는 UI용이라 값이 꼭 같을 필요는 없음(그래서 중복이지만 각자 독립적으로 유지).
+ * 표기가 흩어지면 필터링 자체가 무의미해짐.
  */
 val MUSIC_CATEGORIES: Map<String, String> = linkedMapOf(
     "kpop" to "케이팝",

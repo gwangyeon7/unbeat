@@ -37,7 +37,8 @@ class FavoriteTrackService(
                     artistName = request.artistName,
                     trackName = request.trackName,
                     tags = tags.joinToString(",").ifBlank { null },
-                    url = request.trackUrl
+                    url = request.trackUrl,
+                    imageUrl = request.imageUrl
                 )
             ).toResponse()
         } catch (e: DataIntegrityViolationException) {
@@ -71,6 +72,17 @@ class FavoriteTrackService(
     }
 
     /**
+     * 이미지 없이 저장된 곡을 보관함에서 열 때 프론트가 구한 커버 이미지를 저장 — 다음부터는 다시 안 구하게.
+     * 소유권 체크는 remove()/markOpened()와 동일.
+     */
+    fun updateImage(sessionId: String, favoriteTrackId: Long, imageUrl: String): FavoriteTrackResponse? {
+        val track = favoriteTrackRepository.findById(favoriteTrackId).orElse(null) ?: return null
+        if (track.sessionId != sessionId) return null
+        track.imageUrl = imageUrl
+        return favoriteTrackRepository.save(track).toResponse()
+    }
+
+    /**
      * "즐겨찾기는 해뒀는데 시간이 지나면 안 듣는 곡도 생기지 않냐, 그런 곡을 분석해서 지워도 되는지
      * 물어봐주는 기능을 원한다"는 피드백으로 추가. 무작정 지우는 게 아니라 "지워도 될까요?"를
      * 물어보는 후보 목록만 반환 — 실제 삭제는 사용자가 고른 것만 프론트에서 기존 remove()로 개별 호출함.
@@ -92,6 +104,7 @@ class FavoriteTrackService(
         trackName = trackName,
         tags = tags?.split(",")?.filter { it.isNotBlank() } ?: emptyList(),
         url = url,
+        imageUrl = imageUrl,
         createdAt = createdAt.format(DateTimeFormatter.ISO_LOCAL_DATE_TIME),
         lastOpenedAt = lastOpenedAt?.format(DateTimeFormatter.ISO_LOCAL_DATE_TIME)
     )

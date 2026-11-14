@@ -43,6 +43,11 @@ class FavoriteTrack(
     // 실제로 이 컬럼이 없어서 "다시 듣기" 목록이 눌리지 않는 버그가 있었음.
     @Column(name = "url", length = 500)
     var url: String? = null,
+    // 곡 커버 이미지. 예전엔 이 컬럼이 없어서 보관함 즐겨찾기 곡이 항상 플레이스홀더로 떴음 —
+    // 이제 즐겨찾기할 때 프론트가 가진 이미지를 같이 저장하고, 비어 있는 곡은 보관함을 열 때
+    // 프론트가 backend /track-image로 구해서 PATCH /{id}/image로 채워 넣음.
+    @Column(name = "image_url", length = 500)
+    var imageUrl: String? = null,
 
     @Column(name = "created_at", nullable = false)
     val createdAt: LocalDateTime = LocalDateTime.now(),

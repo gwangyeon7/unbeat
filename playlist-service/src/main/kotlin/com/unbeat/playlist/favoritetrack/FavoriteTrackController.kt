@@ -1,5 +1,6 @@
 package com.unbeat.playlist.favoritetrack
 
+import com.unbeat.playlist.favoritetrack.dto.FavoriteTrackImageRequest
 import com.unbeat.playlist.favoritetrack.dto.FavoriteTrackRequest
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
@@ -61,6 +62,21 @@ class FavoriteTrackController(private val favoriteTrackService: FavoriteTrackSer
         @PathVariable id: Long
     ): ResponseEntity<Any> {
         val response = favoriteTrackService.markOpened(sessionId, id)
+        return if (response != null) ResponseEntity.ok(response)
+        else ResponseEntity.status(HttpStatus.NOT_FOUND).build()
+    }
+
+    // 보관함에서 이미지 없는 곡을 열 때 프론트가 구한 커버 이미지를 저장(컬럼 길이 500, https만 허용)
+    @PatchMapping("/{id}/image")
+    fun updateImage(
+        @RequestHeader("X-Session-Id") sessionId: String,
+        @PathVariable id: Long,
+        @RequestBody request: FavoriteTrackImageRequest
+    ): ResponseEntity<Any> {
+        if (!request.imageUrl.startsWith("https://") || request.imageUrl.length > 500) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).build()
+        }
+        val response = favoriteTrackService.updateImage(sessionId, id, request.imageUrl)
         return if (response != null) ResponseEntity.ok(response)
         else ResponseEntity.status(HttpStatus.NOT_FOUND).build()
     }

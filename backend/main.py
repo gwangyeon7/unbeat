@@ -753,7 +753,7 @@ def root():
 
 # 헬스체크/업타임 모니터링 전용. DB·Redis·외부 API를 전혀 건드리지 않고 프로세스가 살아있으면
 # 즉시 200을 반환 — playlist-service의 /healthz(HealthController)와 같은 취지.
-@app.get("/health")
+@app.api_route("/health", methods=["GET", "HEAD"])
 def health():
     return {"status": "ok"}
 

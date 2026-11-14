@@ -884,6 +884,13 @@ def health():
     return {"status": "ok"}
 
 
+@app.get("/track-image")
+def get_track_image(artist: str, track: str):
+    """보관함의 즐겨찾기/재생목록 곡처럼 이미지 없이 저장된 곡을 열 때 프론트가 한 곡씩 물어봄.
+    순서는 resolve_track_image 그대로(iTunes -> Last.fm -> Deezer -> 아티스트 사진)이고 결과도 거기서 캐싱됨."""
+    return {"image": resolve_track_image(_clean_artist_name(artist), track, [])}
+
+
 @app.get("/auth/me")
 def auth_me(authorization: Optional[str] = Header(default=None)):
     """

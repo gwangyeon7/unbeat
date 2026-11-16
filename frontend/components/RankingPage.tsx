@@ -414,7 +414,7 @@ export default function RankingPage({
   const [selectedFilterCategory, setSelectedFilterCategory] = useState<string | null>(null);
   // (랭킹 탭, 2026-10-29) "전체"(누적 좋아요 순) / "이번 주"(최근 7일 좋아요 순). 팔로우 탭은
   // 팔로우 기능을 만든 뒤 추가 예정. 이것도 이미 받아온 목록을 클라이언트에서 정렬만 함.
-  const [rankTab, setRankTab] = useState<"all" | "week">("all");
+  const [rankTab, setRankTab] = useState<"all" | "week" | "liked">("all");
 
   if (typeof document === "undefined") return null;
 
@@ -431,12 +431,17 @@ export default function RankingPage({
     selectedFilterCategory === null
       ? publicPlaylists
       : publicPlaylists.filter((p) => p.category === selectedFilterCategory);
+  // "좋아요한" 탭 — 이미 받아온 공개 목록에서 내가 ♥한 것만 모아 봄(새 API 없음). 카드에 표시되는
+  // 등수는 전체 랭킹에서의 실제 순위를 그대로 보여줌.
   const filteredFeedPlaylists =
     rankTab === "week"
       ? categoryFiltered
           .filter((p) => p.weeklyLikeCount > 0)
           .sort((a, b) => b.weeklyLikeCount - a.weeklyLikeCount)
-      : categoryFiltered;
+      : rankTab === "liked"
+        ? categoryFiltered.filter((p) => p.likedByMe)
+        : categoryFiltered;
+  const overallRank = (id: number) => publicPlaylists.findIndex((p) => p.id === id) + 1;
 
   const title =
     screen === "tracks"
@@ -590,6 +595,7 @@ export default function RankingPage({
               {([
                 ["all", "전체"],
                 ["week", "이번 주"],
+                ["liked", "좋아요한"],
               ] as const).map(([value, label]) => (
                 <button
                   key={value}
@@ -636,14 +642,16 @@ export default function RankingPage({
               <p className="p-4 text-sm text-white/40">
                 {rankTab === "week"
                   ? "이번 주에 좋아요를 받은 재생목록이 아직 없어요. 마음에 드는 재생목록에 ♥를 눌러보세요."
-                  : "이 카테고리에는 아직 공개된 재생목록이 없어요."}
+                  : rankTab === "liked"
+                    ? "아직 좋아요한 재생목록이 없어요. 마음에 드는 재생목록에 ♥를 눌러보세요. (로그인해야 저장돼요)"
+                    : "이 카테고리에는 아직 공개된 재생목록이 없어요."}
               </p>
             ) : (
               <div className="grid grid-cols-1 gap-4 pb-6 sm:grid-cols-2 xl:grid-cols-3">
                 {filteredFeedPlaylists.map((p, i) => (
                   <PlaylistCard
                     key={p.id}
-                    rank={i + 1}
+                    rank={rankTab === "liked" ? overallRank(p.id) : i + 1}
                     playlist={p}
                     onSelectPlaylist={onSelectPlaylist}
                     onViewProfile={onViewProfile}

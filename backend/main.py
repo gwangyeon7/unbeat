@@ -171,7 +171,37 @@ def _is_junk_artist_match(item: dict) -> bool:
         listeners = int(item.get("listeners") or 0)
     except (TypeError, ValueError):
         listeners = 0
-    return listeners <= JUNK_ARTIST_LISTENER_THRESHOLD
+    return listeners <= JUNK_ARTIST_LISTENER_THRESHOLD or _looks_like_video_title(item.get("name") or "")
+
+
+# (한글 검색 개선, 2026-11-16) 청취자 수가 많아도 이름이 유튜브 영상 제목인 가짜 "아티스트"가 있음 —
+# "메테오" 검색 시 "POP과 KPOP의 대결 | Sing Off | BTS, Psycho, 메테오, ..."가 아티스트로 뜨고,
+# "체포하겠어"엔 "ILLIT(아일릿) '체포하겠어 (You're Under Arrest)' (4K)"가 뜸. 프론트
+# cleanSearchArtists가 일부 거르고 있었지만 백엔드 결과 자체를 깨끗하게 해서 "부실한 결과" 판단(아래
+# _korean_results_poor)에도 쓰레기가 섞이지 않게 함. 진짜 이름과 겹치기 쉬운 규칙은 보수적으로:
+# 따옴표는 2개 이상(Guns N' Roses는 통과), 쉼표는 뒤가 "the ..."가 아닐 때만(Car, the garden /
+# Tyler, The Creator는 통과).
+VIDEO_TITLE_ARTIST_PATTERN = re.compile(
+    r"\||\(4K\)|\b4K\b|\bM/?V\b|official|직캠|킬링|티저|reaction|리액션|라이브|무대|영상",
+    re.IGNORECASE,
+)
+ARTIST_NAME_MAX_LEN = 30
+
+
+def _looks_like_video_title(name: str) -> bool:
+    name = name.strip()
+    if not name:
+        return False
+    if len(name) > ARTIST_NAME_MAX_LEN or VIDEO_TITLE_ARTIST_PATTERN.search(name):
+        return True
+    if len(re.findall(r"['\"‘’“”]", name)) >= 2:
+        return True
+    if re.search(r"\S\s*\([^)]*\)\s+\S", name):
+        return True  # "TWS(투어스) 도훈"처럼 "이름(별칭)" 뒤에 말이 더 붙은 항목 — 멤버 직캠/영상 제목 ((G)I-DLE은 통과)
+    parts = [p.strip() for p in name.split(",")]
+    if len(parts) >= 2 and all(parts) and not any(p.lower().startswith("the ") for p in parts[1:]):
+        return True  # "AKMU (악뮤), 아이유(IU)"처럼 여러 아티스트를 쉼표로 이어 붙인 항목
+    return False
 
 
 # /search에서 원래 검색어와 띄어쓰기 교정된 검색어(§45) 둘 다로 결과를 만들어야 해서,
@@ -222,6 +252,11 @@ def _is_junk_track_match(item: dict) -> bool:
     is_junk = (
         name.startswith("[")
         or any(marker in combined for marker in JUNK_TRACK_KEYWORD_MARKERS)
+        # (2026-11-16) 영상 제목이 곡/아티스트 칸에 들어간 스크로블: "... | Sing Off | ...",
+        # "창모 (CHANGMO) - 빌었어 [Boyhood]ㅣLyrics/가사" — 정식 곡명엔 '|'나 'lyrics'가 거의 없음
+        or "|" in combined
+        or "lyrics" in combined
+        or len(artist) > 40
         or bool(re.search(r"\b\d{6}\b", artist))  # 방송/이벤트명에 흔한 6자리 날짜(YYMMDD)
         or bool(re.search(r"\b(CH|TV)$", artist, re.IGNORECASE))  # 유튜브 채널명 패턴
     )
@@ -1105,6 +1140,281 @@ def _search_exact_pick(q: str, artist: str, x_session_id: Optional[str]):
     return {**result, "cached": False}
 
 
+# ---------------------------------------------------------------------------------------------
+# (한글 검색 개선, 2026-11-16) 보조 검색 소스
+# Last.fm은 스크로블 기반이라 "메테오"(창모 METEOR의 한글 발음)처럼 한글 표기로 찾는 곡을 못 찾음.
+# 실측(검색어 10개): iTunes Search API는 키 없이 쓸 수 있고, 기본(US) 스토어의 entity=song이 한글
+# 별칭까지 색인하고 있어서 메테오→CHANGMO "METEOR", 체포하겠어→ILLIT "You're Under Arrest",
+# 얼음들→AKMU "Melted", 빌었어→CHANGMO "wish"를 1위로 줌. 반면 country=KR 스토어는 한국에서
+# 음원 판매를 안 해서 song 검색이 항상 0건(뮤직비디오만 나옴) — 대신 KR의 musicArtist 검색은
+# 메테오→CHANGMO처럼 아티스트를 잘 줌. Deezer는 한글 제목이 정확히 같을 때만 맞고(아름다워 O)
+# 발음 표기(메테오 X, 체포하겠어 X)는 못 찾아서, iTunes가 429 등으로 막혔을 때의 예비로만 씀.
+# 호출 비용 통제: 한글 검색어 + Last.fm 결과가 "부실"할 때만 부르고, 검색어 단위로 6시간 캐싱.
+# iTunes가 429를 주면 1분간 iTunes 호출을 멈춤(resolve_track_image의 이미지 조회와 같은 한도를 공유하므로).
+AUX_SEARCH_CACHE_TTL_SECONDS = 60 * 60 * 6
+AUX_SEARCH_NEGATIVE_CACHE_TTL_SECONDS = 60 * 30
+ITUNES_COOLDOWN_KEY = "itunes-search-cooldown"
+ITUNES_COOLDOWN_SECONDS = 60
+AUX_TRACK_LIMIT = 6
+AUX_MIN_TRACKS = 3  # 한글 검색어인데 Last.fm 곡이 이보다 적으면 "부실"로 봄
+# 노래방/MR 반주 음원은 원곡을 찾는 검색에 방해만 됨(빌었어 → "모두의MR", "KY Noraebang")
+AUX_JUNK_ARTIST_PATTERN = re.compile(r"noraebang|karaoke|노래방|\bMR\b|모두의MR|tj media", re.IGNORECASE)
+AUX_JUNK_TITLE_PATTERN = re.compile(r"\binst(rumental)?\b|\bMR\b|karaoke|노래방", re.IGNORECASE)
+
+
+def _norm_key(s: str) -> str:
+    return re.sub(r"[^0-9a-z가-힣]", "", (s or "").lower())
+
+
+def _strip_paren(s: str) -> str:
+    """'창모 (Changmo)' -> '창모', '체포하겠어 (You're Under Arrest)' -> '체포하겠어' (괄호가 앞에만 있으면 그대로)."""
+    stripped = re.sub(r"\s*[\(\[].*?[\)\]]", "", s or "").strip()
+    return stripped or (s or "")
+
+
+def _track_dedupe_key(track: dict) -> tuple:
+    artist = _norm_key(_strip_paren(track.get("artist", ""))) or _norm_key(track.get("artist", ""))
+    name = _norm_key(_strip_paren(track.get("name", ""))) or _norm_key(track.get("name", ""))
+    return (artist, name)
+
+
+def _dedupe_tracks(tracks: list) -> list:
+    seen, out = set(), []
+    for t in tracks:
+        key = _track_dedupe_key(t)
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(t)
+    return out
+
+
+def _artist_keys(name: str) -> set:
+    """'ILLIT (아일릿)'은 'ILLIT'·'아일릿'과 같은 아티스트 — 전체/괄호 앞/괄호 안을 모두 키로 씀(프론트 규칙과 동일)."""
+    keys = {_norm_key(name)}
+    m = re.match(r"^(.*?)\s*\((.*?)\)\s*$", name or "")
+    if m:
+        keys |= {_norm_key(m.group(1)), _norm_key(m.group(2))}
+    return {k for k in keys if k}
+
+
+def _dedupe_artists(artists: list) -> list:
+    seen, out = set(), []
+    for a in artists:
+        keys = _artist_keys(a.get("name", ""))
+        if keys & seen:
+            continue
+        seen |= keys
+        out.append(a)
+    return out
+
+
+def _query_in_track(query: str, track: dict) -> bool:
+    """검색어가 곡 제목/아티스트에 들어있는지. 띄어쓰기로 나뉜 검색어("뉴진스 하입보이")는 각 단어가
+    아티스트+제목 어딘가에 모두 있으면 포함으로 봄."""
+    tokens = [_norm_key(tok) for tok in (query or "").split()]
+    tokens = [tok for tok in tokens if tok]
+    if not tokens:
+        return False
+    haystack = _norm_key(track.get("artist", "")) + "\n" + _norm_key(track.get("name", ""))
+    if len(tokens) == 1:
+        return tokens[0] in _norm_key(track.get("name", "")) or tokens[0] in _norm_key(track.get("artist", ""))
+    return all(tok in haystack for tok in tokens)
+
+
+def _korean_results_poor(q: str, artists: list, tracks: list) -> bool:
+    """한글 검색어에 대한 Last.fm 결과가 부실한지: 곡이 AUX_MIN_TRACKS개 미만이거나, 곡 제목/아티스트에도
+    아티스트 이름에도 검색어가 전혀 안 들어있으면(= 검색어와 무관한 결과뿐이면) 부실로 봄."""
+    if not HANGUL_PATTERN.search(q):
+        return False
+    if len(tracks) < AUX_MIN_TRACKS:
+        return True
+    relevant_track = any(_query_in_track(q, t) for t in tracks)
+    relevant_artist = any(_norm_key(q) in _norm_key(a.get("name", "")) for a in artists)
+    return not (relevant_track or relevant_artist)
+
+
+def _itunes_cooling_down() -> bool:
+    return get_cached(ITUNES_COOLDOWN_KEY) is not None
+
+
+def _itunes_search(params: dict) -> Optional[list]:
+    """iTunes 검색 1회. 실패(429/네트워크)면 None, 결과 없음이면 []."""
+    if _itunes_cooling_down():
+        return None
+    try:
+        res = requests.get("https://itunes.apple.com/search", params=params, timeout=4)
+    except Exception as e:
+        print(f"[aux-search] iTunes 예외 {params.get('term')!r}: {e}")
+        return None
+    if res.status_code != 200:
+        print(f"[aux-search] iTunes 상태코드 {res.status_code} {params.get('term')!r}")
+        if res.status_code in (403, 429):
+            set_cached(ITUNES_COOLDOWN_KEY, {"status": res.status_code}, ttl=ITUNES_COOLDOWN_SECONDS)
+        return None
+    try:
+        return res.json().get("results", [])
+    except ValueError:
+        return None
+
+
+def _deezer_aux_tracks(q: str) -> Optional[list]:
+    """iTunes가 막혔을 때만 쓰는 예비. Deezer는 발음 표기를 못 맞추니 검색어가 제목/아티스트에
+    그대로 들어있는 곡만 남김(엉뚱한 결과를 섞지 않기 위함)."""
+    try:
+        res = requests.get(DEEZER_TRACK_SEARCH_URL, params={"q": q, "limit": 15}, timeout=4)
+        if res.status_code != 200:
+            print(f"[aux-search] Deezer 상태코드 {res.status_code} {q!r}")
+            return None
+        items = res.json().get("data") or []
+    except Exception as e:
+        print(f"[aux-search] Deezer 예외 {q!r}: {e}")
+        return None
+    out = []
+    for item in items:
+        track = {
+            "name": item.get("title") or "",
+            "artist": _clean_artist_name((item.get("artist") or {}).get("name") or ""),
+            "listeners": None,
+            "url": item.get("link"),
+            "image": (item.get("album") or {}).get("cover_xl") or (item.get("album") or {}).get("cover_big"),
+        }
+        if (track["name"] and _query_in_track(q, track) and not AUX_JUNK_ARTIST_PATTERN.search(track["artist"])
+                and not AUX_JUNK_TITLE_PATTERN.search(track["name"])):
+            out.append(track)
+    return out
+
+
+def _aux_search(q: str) -> dict:
+    """보조 소스(iTunes, 막히면 Deezer)로 곡/아티스트를 찾음. 결과 형식은 /search의 tracks/artists와 동일.
+    반환: {"tracks": [...], "artists": [...], "source": "itunes"|"deezer"|None}. 검색어 단위 6시간 캐싱."""
+    cache_key = f"search-aux:v4:{q.lower().strip()}"
+    cached = get_cached(cache_key)
+    if cached is not None:
+        print(f"[aux-search] '{q}' -> 캐시 재사용 (source={cached.get('source')})")
+        return cached
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        song_future = executor.submit(_itunes_search, {"term": q, "entity": "song", "limit": 12})
+        artist_future = executor.submit(
+            _itunes_search, {"term": q, "country": "KR", "entity": "musicArtist", "lang": "ko_kr", "limit": 5}
+        )
+        songs, itunes_artists = song_future.result(), artist_future.result()
+
+    source = None
+    tracks: list = []
+    artists: list = []
+    if songs is not None:
+        source = "itunes"
+        for item in songs:
+            artist = _clean_artist_name(item.get("artistName") or "")
+            name = item.get("trackName") or ""
+            if not artist or not name or AUX_JUNK_ARTIST_PATTERN.search(artist) or AUX_JUNK_TITLE_PATTERN.search(name):
+                continue
+            artwork = item.get("artworkUrl100")
+            tracks.append({
+                "name": name,
+                "artist": artist,
+                "listeners": None,
+                "url": item.get("trackViewUrl"),
+                "image": artwork.replace("100x100bb", "600x600bb") if artwork else None,
+            })
+        tracks = _dedupe_tracks(tracks)
+        if tracks:
+            # 1위 곡과 관련된 곡만 남김(같은/피처링 아티스트이거나 검색어가 들어간 곡) — iTunes는 가사·별칭까지
+            # 느슨하게 매칭해서 뒤쪽엔 무관한 곡("빌었어" → San E "Road to Success")이 섞여 옴.
+            top_keys = {k for k in _artist_keys(tracks[0]["artist"]) if len(k) >= 2}
+            tracks = [tracks[0]] + [
+                t for t in tracks[1:]
+                if _query_in_track(q, t)
+                or any(k in _norm_key(t["artist"]) or k in _norm_key(t["name"]) for k in top_keys)
+            ]
+        tracks = tracks[:AUX_TRACK_LIMIT]
+        # 아티스트는 "곡 결과 상위 3개의 아티스트로도 나온" 경우만 채택 — KR musicArtist는 별칭 매칭이라
+        # 무관한 동명이인(메테오 → "Meteor Kim", "구창모")도 섞여 오기 때문. 곡 결과가 없으면 1위만 채택.
+        top_song_artist_keys = set()
+        for t in tracks[:3]:
+            for part in re.split(r"\s*(?:&|,|feat\.?)\s*", t["artist"]):
+                top_song_artist_keys |= _artist_keys(part)
+        for item in (itunes_artists or [])[:5]:
+            name = _clean_artist_name(item.get("artistName") or "")
+            if not name or _looks_like_video_title(name):
+                continue
+            if (tracks and _artist_keys(name) & top_song_artist_keys) or (not tracks and not artists):
+                artists.append({"name": name, "mbid": None, "image": None, "listeners": None})
+        artists = _dedupe_artists(artists)[:2]
+    else:
+        deezer_tracks = _deezer_aux_tracks(q)
+        if deezer_tracks is not None:
+            source = "deezer"
+            tracks = _dedupe_tracks(deezer_tracks)[:AUX_TRACK_LIMIT]
+
+    # 신뢰 여부(신뢰하면 AI 추측(§53)/유튜브 폴백을 건너뜀):
+    # - iTunes: 곡 검색이 가사·별칭까지 느슨하게 매칭해서 "댓댓" → Avril Lavigne "What the Hell"처럼 엉뚱한
+    #   1위가 오기도 함. KR 아티스트 검색 결과가 1위 곡의 아티스트와 일치할 때만 신뢰(메테오 → 곡도 아티스트도
+    #   CHANGMO). 아래 _aux_search_localized에서 한글 제목 보완 후 검색어가 제목에 들어가면 추가로 신뢰.
+    # - Deezer(iTunes가 막혔을 때의 예비): 검색어가 들어간 커버/리믹스("뉴진스 하입보이 x 트로트 Ver.")도 섞여
+    #   와서 제목이 검색어와 정확히 같은 곡이 있을 때만 신뢰.
+    q_exact = _norm_key(q)
+    if source == "itunes":
+        trusted = bool(tracks) and bool(artists)
+    else:
+        trusted = any(_norm_key(_strip_paren(t["name"])) == q_exact for t in tracks)
+    result = {"tracks": tracks, "artists": artists, "source": source, "trusted": trusted}
+    print(f"[aux-search] '{q}' -> source={source}, trusted={trusted}, tracks={[(t['artist'], t['name']) for t in tracks]}, "
+          f"artists={[a['name'] for a in artists]}")
+    if source is not None:  # 429/네트워크 실패는 캐싱 안 함(§51 원칙 — 일시 장애를 굳히지 않음)
+        # Deezer 결과는 iTunes가 일시적으로 막혀서 받은 대체값이라 짧게만(30분) 캐싱 — 곧 iTunes로 다시 시도
+        good = (tracks or artists) and source == "itunes"
+        set_cached(cache_key, result,
+                   ttl=AUX_SEARCH_CACHE_TTL_SECONDS if good else AUX_SEARCH_NEGATIVE_CACHE_TTL_SECONDS)
+    return result
+
+
+def _aux_search_localized(q: str) -> dict:
+    """_aux_search 결과에 아티스트명/제목 한글 보완을 적용("CHANGMO" -> "창모", "You're Under Arrest" ->
+    "체포하겠어 (You're Under Arrest)"). 보완 전 원본을 캐싱해두고 여기서 매번 적용하는 이유: 3초 안에
+    못 끝낸 한글 보완이 영문 그대로 6시간 캐시에 굳지 않게 하려고(보완 결과 자체는 ko-title/ko-artist에 캐싱됨)."""
+    raw = _aux_search(q)
+    tracks = _apply_korean_titles([dict(t) for t in raw["tracks"]], deadline=3.0) if raw["tracks"] else []
+    artists = []
+    for a in raw["artists"]:
+        ko = resolve_korean_artist_name(a["name"], assume_domestic=True)
+        artists.append({**a, "name": ko or a["name"]})
+    trusted = raw.get("trusted", False)
+    if not trusted and raw["source"] == "itunes" and tracks:
+        # 1위 곡 아티스트의 곡 중에 검색어가 제목에 들어간 게 있으면(한글 제목 보완 "Melted" → "얼음들 (Melted)"
+        # 포함) iTunes 매칭이 맞은 것. 다른 아티스트의 커버("뉴진스 하입보이 x 트로트 Ver.")는 근거로 안 씀.
+        top_keys = _artist_keys(tracks[0]["artist"])
+        trusted = any(_query_in_track(q, t) and _artist_keys(t["artist"]) & top_keys for t in tracks)
+    return {"tracks": tracks, "artists": artists, "source": raw["source"], "trusted": trusted}
+
+
+def _drop_title_as_artist(q: str, artists: list, tracks: list) -> tuple:
+    """검색어가 곡 제목인 게 분명할 때(검색어와 제목이 같은 곡이 있을 때), 그 제목이 아티스트 칸에 들어간
+    오염 데이터를 걸러냄 — "체포하겠어" 검색 시 아티스트 "체포하겠어", 곡 "체포하겠어 - 아일릿(ILLIT)"처럼
+    아티스트/제목이 뒤바뀐 스크로블. 셀프 타이틀 곡(아티스트명 = 곡명)은 그 아티스트 본인의 곡이라 남김."""
+    q_key = _norm_key(q)
+    if not q_key or not HANGUL_PATTERN.search(q):
+        return artists, tracks
+    title_owners = {
+        _norm_key(t.get("artist", "")) for t in tracks
+        if _norm_key(_strip_paren(t.get("name", ""))) == q_key and _norm_key(t.get("artist", "")) != q_key
+    }
+    if not title_owners:
+        return artists, tracks
+    artists = [a for a in artists if _norm_key(a.get("name", "")) != q_key]
+    tracks = [t for t in tracks if _norm_key(t.get("artist", "")) != q_key]
+    return artists, tracks
+
+
+def _rank_by_query(q: str, tracks: list) -> list:
+    """한글 검색어가 제목/아티스트에 들어있는 곡을 위로(안정 정렬이라 그 안의 기존 순서는 유지)."""
+    if not _norm_key(q) or not HANGUL_PATTERN.search(q):
+        return tracks
+    return sorted(tracks, key=lambda t: 0 if _query_in_track(q, t) else 1)
+
+
 @app.get("/search")
 def search(q: str, artist: Optional[str] = None, x_session_id: Optional[str] = Header(default=None)):
     if artist and artist.strip():
@@ -1192,7 +1502,9 @@ def _search_by_query(q: str, x_session_id: Optional[str] = None):
     # 등)로 남는 버그 발견 — _apply_korean_titles에 아티스트명 보완(resolve_korean_artist_name)
     # 추가했으니 과거 캐시 무효화를 위해 버전업(v23/v24 버전 번호는 실제로 안 쓰였음 — 직전
     # 중간 수정 때 혼선으로 건너뜀, 동작엔 영향 없음).
-    cache_key = f"search:v30:{q.lower().strip()}"
+    # v31: (2026-11-16) 영상 제목형 가짜 아티스트 필터, 정규화 중복 제거, 한글 검색어 보조 소스(iTunes)
+    # 추가 — 이 키를 안 올리면 "메테오"처럼 예전에 쓰레기 결과로 캐싱된 검색어가 새 로직을 안 탐.
+    cache_key = f"search:v31:{q.lower().strip()}"
     cached = get_cached(cache_key)
     if cached is not None:
         if x_session_id:
@@ -1312,6 +1624,33 @@ def _search_by_query(q: str, x_session_id: Optional[str] = None):
     # 트랙명에 그대로("...(feat...)"처럼 뒤에 뭔가 붙어도) 포함되는 진짜 정답엔 94~100점을 주고,
     # 글자 수는 비슷해도 핵심 단어(역 이름)가 다른 가짜엔 77.8~87.5점을 줘서 훨씬 잘 갈림 —
     # 90점을 기준으로 잡아 이 둘을 구분함.
+    # (한글 검색 개선, 2026-11-16) 표기만 다른 중복("창모"/"창모 (Changmo)"/"창모(Changmo)")을 먼저 정리하고,
+    # 한글 검색어인데 Last.fm 결과가 부실하면(_korean_results_poor) 보조 소스(iTunes, 막히면 Deezer)를
+    # 불러 합침. 이게 AI 추측(§53)/유튜브 폴백(§59)보다 먼저라서, 보조 소스가 곡을 찾으면 둘 다 안 부름
+    # (Claude/유튜브 쿼터 비용이 늘지 않음). 장르/연대 검색("2010년대 kpop")은 태그 모음용이라 제외.
+    # 부실 판단은 중복 제거 "전" 개수로 함 — 같은 곡의 표기 변형만 4개 온 경우("빌었어")는 Last.fm이 곡을
+    # 잘 찾은 것이라 보조 소스를 부를 필요가 없음.
+    lastfm_poor = _korean_results_poor(q, artists, tracks)
+    artists, tracks = _drop_title_as_artist(q, _dedupe_artists(artists), _dedupe_tracks(tracks))
+    aux_track_found = False
+    is_tag_like_query = bool(_extract_genre_tag(q) or _extract_decade_tag(q))
+    if not is_tag_like_query and lastfm_poor:
+        aux = _aux_search_localized(q)
+        if aux["tracks"] and aux["trusted"]:
+            aux_track_found = True
+            # Last.fm이 부실한 상황이니 보조 소스 곡을 앞에 두고, 검색어가 제목/아티스트에 들어간 곡을 위로.
+            # (Last.fm 결과가 멀쩡할 땐 순서를 건드리지 않음 — 커버/영상 제목이 검색어를 포함해서 위로 올라오는 걸 방지)
+            tracks = _rank_by_query(q, _dedupe_tracks(aux["tracks"] + tracks))
+        elif aux["tracks"]:
+            # 신뢰 못 하는 보조 결과는 뒤에만 붙임 — AI 추측이 그대로 돌고, 검증된 추측이 있으면 맨 앞에 옴
+            tracks = _dedupe_tracks(tracks + aux["tracks"])
+        if aux["artists"] and aux["trusted"]:
+            q_key = _norm_key(q)
+            lastfm_artist_relevant = any(q_key in _norm_key(a.get("name", "")) for a in artists)
+            # 기존 아티스트가 검색어와 무관하면 보조 소스 아티스트로 교체(프론트는 청취자 수 1위의 50% 미만을
+            # 숨기는데 보조 소스엔 청취자 수가 없어서, 섞어두면 정작 맞는 아티스트가 가려짐)
+            artists = _dedupe_artists(artists + aux["artists"]) if lastfm_artist_relevant else aux["artists"]
+
     TRACK_CONFIDENCE_LISTENER_THRESHOLD = 100
     TRACK_QUERY_SIMILARITY_THRESHOLD = 90
 
@@ -1321,6 +1660,10 @@ def _search_by_query(q: str, x_session_id: Optional[str] = None):
         return listeners_ok and similarity >= TRACK_QUERY_SIMILARITY_THRESHOLD
 
     tracks_low_confidence = not tracks or not any(_track_matches_query_well(t) for t in tracks)
+    if aux_track_found:
+        # 보조 소스는 청취자 수가 없어 위 기준으론 항상 "저신뢰"가 되지만, iTunes가 한글 별칭으로 매칭해준
+        # 정식 발매곡(또는 제목이 정확히 같은 Deezer 곡)이라 신뢰함 — 그래야 AI 추측/유튜브 폴백이 불필요하게 안 불림.
+        tracks_low_confidence = False
     print(f"[search-confidence] '{q}' -> tracks_low_confidence={tracks_low_confidence}, "
           f"tracks={[(t.get('artist'), t.get('name'), t.get('listeners')) for t in tracks]}")
 
@@ -1500,6 +1843,7 @@ def _search_by_query(q: str, x_session_id: Optional[str] = None):
               f"원본 후보 {len(candidates)}개 -> 가사 필터 통과 {len(tag_tracks)}개")
 
     _fill_artist_images(artists)
+    tracks = _dedupe_tracks(tracks)
 
     result = {
         "artists": artists,
@@ -2168,7 +2512,12 @@ def _filter_by_genre_gate(seed_artist: str, tracks: list) -> list:
 
 
 @app.get("/similar-tracks")
-def similar_tracks(artist: str, track: str, x_session_id: Optional[str] = Header(default=None)):
+def similar_tracks(
+    artist: str,
+    track: str,
+    allow_youtube: bool = True,
+    x_session_id: Optional[str] = Header(default=None),
+):
     """
     미니 플레이어 "다음 트랙" 자동 재생 큐용. "유튜브 뮤직처럼 지금 듣는 곡이랑 비슷한 곡을
     계속 이어서 틀어줬으면 좋겠다"는 피드백으로 추가 — 곡이 끝나면 프론트가 이 목록의
@@ -2375,6 +2724,10 @@ def similar_tracks(artist: str, track: str, x_session_id: Optional[str] = Header
     # 이지만, 완전히 빈 화면보단 재생 연속성 측면에서 나음. 이 폴백은 위 가사 필터를 일부러 안
     # 씀 — 그 필터는 "둘러보기" 목적의 목록에만 적용한다는 원칙(§44)인데, 애초에 Last.fm/LRCLIB에
     # 데이터가 없는 아티스트라 가사 필터를 걸면 무조건 다 걸러져서 필터 자체가 무의미해짐.
+    # allow_youtube=false: 보관함 "오늘의 믹스"가 후보 풀을 모을 때처럼 유튜브 쿼터를 쓰면 안 되는 호출.
+    # 이때 빈 결과는 캐싱하지 않음 — 캐싱하면 미니 플레이어(allow_youtube=true)가 같은 키로 빈 결과를 받게 됨.
+    if not tracks and not allow_youtube:
+        return {"tracks": [], "cached": False}
     if not tracks and YOUTUBE_API_KEY:
         try:
             res = requests.get(YOUTUBE_SEARCH_URL, params={
@@ -3668,6 +4021,133 @@ def _score_youtube_candidate(artist: str, track: str, video_title: str, channel_
     bad_hits = [k for k in _YT_BAD_TITLE_KEYWORDS if k in title and k not in want_track]
     score -= 4 * len(bad_hits)
     return score
+
+
+# ---------------------------------------------------------------------------------------------
+# (2026-11-16) 하이라이트(후렴) 힌트 — 유튜브 "가장 많이 다시 본 구간(most replayed)" 히트맵 사용.
+# 가사가 없는 곡(한국 곡 다수)은 기존 순서(싱크 가사 → 일반 가사 추정 → 곡 길이 28%)에서 결국 비율 규칙으로
+# 떨어져 엉뚱한 구간이 잡혔음. 오디오를 받아 분석하는 건 서버 부담/약관 문제가 있어서, yt-dlp로 영상
+# "메타데이터만"(download=False, process=False → 포맷 선택/다운로드 단계 자체를 안 탐) 읽어 info["heatmap"]
+# (구간별 start_time/end_time/value 0~1)에서 사람들이 가장 많이 다시 들은 구간을 후렴 후보로 씀.
+# YouTube Data API(쿼터)는 안 씀. Render 같은 데이터센터 IP는 유튜브가 막을 수 있어서, 실패/타임아웃은
+# 전부 {"start": None, "source": "none"}으로 응답(500 금지) — 프론트는 그때 기존 방식으로 진행.
+HIGHLIGHT_HINT_TIMEOUT_SECONDS = 6
+HIGHLIGHT_HINT_CACHE_TTL = 60 * 60 * 24 * 7          # 찾았으면 7일
+HIGHLIGHT_HINT_NEGATIVE_CACHE_TTL = 60 * 60 * 24      # 없음/실패도 1일 캐싱(재시도 폭주 방지)
+HIGHLIGHT_INTRO_FRACTION = 0.08                       # 곡 앞 8%는 인트로로 보고 제외(재생 시작 직후 값이 튐)
+HIGHLIGHT_SCAN_WINDOW_SECONDS = 30                    # 후렴 길이 ≈ 30~40초 가정
+HIGHLIGHT_MIN_SECONDS, HIGHLIGHT_MAX_SECONDS = 30, 40
+HIGHLIGHT_BASELINE_SECONDS = 45                       # 추세 제거용 기준선: ±45초 이웃 value의 중앙값
+HIGHLIGHT_MIN_PROMINENCE = 0.05                       # 기준선보다 평균 이만큼도 안 튀어나오면 봉우리 없음으로 봄
+YOUTUBE_VIDEO_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{11}$")
+# yt-dlp 호출은 수 초씩 걸려서 동시에 너무 많이 돌지 않게 전용 풀로 제한. 6초 안에 못 끝나도 작업은
+# 계속 돌아 결과를 캐시에 넣음 → 같은 곡 다음 요청부터 즉시 응답.
+_highlight_executor = ThreadPoolExecutor(max_workers=4)
+_HIGHLIGHT_NONE = {"start": None, "end": None, "source": "none"}
+
+
+def _highlight_from_heatmap(heatmap: list, duration: Optional[float]) -> Optional[dict]:
+    """히트맵에서 후렴 후보 구간을 고름. 히트맵 value는 영상 전체에 걸쳐 시청자 이탈로 점점 내려가는
+    추세가 있어서(실측: Shape of You/Uptown Funk는 봉우리 없이 단조 감소), 그냥 "가장 높은 곳"을 고르면
+    인트로 직후가 뽑힘. 그래서 ±45초 이웃의 중앙값을 기준선으로 빼서(추세 제거) "주변보다 튀어나온"
+    봉우리를 찾고, 그 봉우리가 충분히 뚜렷하지 않으면 None(→ 프론트가 기존 방식으로 진행)."""
+    segs = []
+    for h in heatmap or []:
+        try:
+            segs.append((float(h["start_time"]), float(h["end_time"]), float(h["value"])))
+        except (KeyError, TypeError, ValueError):
+            continue
+    if len(segs) < 10:
+        return None
+    segs.sort()
+    duration = float(duration or segs[-1][1])
+    # 인트로(앞 8%)와 아웃트로(뒤 8%, 영상 끝으로 갈수록 value가 0으로 떨어짐)는 후보에서 제외
+    cand = [s for s in segs if duration * HIGHLIGHT_INTRO_FRACTION <= s[0] <= duration * (1 - HIGHLIGHT_INTRO_FRACTION) - 10]
+    if len(cand) < 5:
+        return None
+
+    def baseline(i: int) -> float:
+        t = cand[i][0]
+        near = sorted(v for (s, _, v) in cand if abs(s - t) <= HIGHLIGHT_BASELINE_SECONDS)
+        return near[len(near) // 2]
+
+    resid = [v - baseline(i) for i, (_, _, v) in enumerate(cand)]
+
+    # 1) 30초 창의 평균 "튀어나온 정도"가 가장 큰 위치 = 후렴 근방(구간 하나짜리 튐보다 연속으로 높은 곳)
+    best_i, best_score = 0, float("-inf")
+    for i, (start, _, _) in enumerate(cand):
+        window = [resid[j] for j in range(i, len(cand)) if cand[j][0] < start + HIGHLIGHT_SCAN_WINDOW_SECONDS]
+        score = sum(window) / len(window)
+        if score > best_score:
+            best_i, best_score = i, score
+    if best_score < HIGHLIGHT_MIN_PROMINENCE:
+        return None  # 봉우리가 없거나 약함(단조 감소 곡선) — 아무 데나 고르느니 기존 방식에 맡김
+
+    # 2) 창 안 최고점 기준, 그 절반 이상 튀어나온 "연속 구간"의 시작을 후렴 시작으로(왼쪽으로 이어지면 확장)
+    window_idx = [j for j in range(best_i, len(cand)) if cand[j][0] < cand[best_i][0] + HIGHLIGHT_SCAN_WINDOW_SECONDS]
+    peak_j = max(window_idx, key=lambda j: resid[j])
+    threshold = resid[peak_j] * 0.5
+    lo = peak_j
+    while lo - 1 >= 0 and resid[lo - 1] >= threshold:
+        lo -= 1
+    hi = peak_j
+    while hi + 1 < len(cand) and resid[hi + 1] >= threshold * 0.8:
+        hi += 1
+    start = cand[lo][0]
+    length = min(max(cand[hi][1] - start, HIGHLIGHT_MIN_SECONDS), HIGHLIGHT_MAX_SECONDS)
+    end = min(start + length, duration)
+    return {"start": round(start, 1), "end": round(end, 1), "source": "heatmap"}
+
+
+def _compute_highlight_hint(video_id: str, cache_key: str) -> dict:
+    try:
+        import yt_dlp  # requirements에 없거나 설치 실패해도 서버 자체는 뜨도록 지연 임포트
+    except ImportError:
+        print("[highlight-hint] yt-dlp 미설치 — none 반환")
+        return dict(_HIGHLIGHT_NONE)
+    opts = {
+        "skip_download": True,          # 오디오/영상 다운로드 금지 — 메타데이터만
+        "quiet": True,
+        "no_warnings": True,
+        "noplaylist": True,
+        "socket_timeout": 5,
+        "ignore_no_formats_error": True,  # 포맷을 못 받아도(지역/연령 제한 등) 메타데이터는 계속 읽음
+        "extractor_args": {"youtube": {"skip": ["dash", "hls", "translated_subs"]}},
+    }
+    result = dict(_HIGHLIGHT_NONE)
+    try:
+        with yt_dlp.YoutubeDL(opts) as ydl:
+            info = ydl.extract_info(f"https://www.youtube.com/watch?v={video_id}", download=False, process=False)
+        found = _highlight_from_heatmap((info or {}).get("heatmap"), (info or {}).get("duration"))
+        if found:
+            result = found
+        print(f"[highlight-hint] {video_id}: heatmap={'있음' if (info or {}).get('heatmap') else '없음'} -> {result}")
+    except Exception as e:
+        # 데이터센터 IP 차단("Sign in to confirm you're not a bot"), 삭제된 영상 등 — 전부 none으로 처리
+        print(f"[highlight-hint] {video_id}: yt-dlp 실패 — {str(e)[:200]}")
+    set_cached(cache_key, result,
+               ttl=HIGHLIGHT_HINT_CACHE_TTL if result["source"] == "heatmap" else HIGHLIGHT_HINT_NEGATIVE_CACHE_TTL)
+    return result
+
+
+@app.get("/highlight-hint")
+def highlight_hint(video_id: str):
+    """유튜브 히트맵 기반 후렴 시작 힌트. 응답: {"start": 초, "end": 초, "source": "heatmap"} 또는
+    {"start": null, "end": null, "source": "none"}. 어떤 실패에도 500을 내지 않음."""
+    video_id = (video_id or "").strip()
+    if not YOUTUBE_VIDEO_ID_PATTERN.match(video_id):
+        return dict(_HIGHLIGHT_NONE)  # 임의 URL을 yt-dlp에 넘기지 않도록 형식 검증
+    cache_key = f"highlight-hint:v2:{video_id}"
+    cached = get_cached(cache_key)
+    if cached is not None:
+        return cached
+    try:
+        future = _highlight_executor.submit(_compute_highlight_hint, video_id, cache_key)
+        return future.result(timeout=HIGHLIGHT_HINT_TIMEOUT_SECONDS)
+    except Exception as e:
+        # 6초 타임아웃 포함 — 작업은 백그라운드에서 끝까지 돌아 캐시를 채움(다음 요청부터 즉시)
+        print(f"[highlight-hint] {video_id}: 응답 지연/실패로 none 반환 ({type(e).__name__})")
+        return dict(_HIGHLIGHT_NONE)
 
 
 @app.get("/youtube-search")

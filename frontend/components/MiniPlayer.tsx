@@ -60,6 +60,9 @@ type MiniPlayerProps = {
   // MiniPlayer가 이미 떠 있는 상태(다른 곡 재생 중)에서 믹스를 눌러도 동작해야 해서, 마운트
   // 시점이 아니라 이 prop 변화를 감지하는 방식으로 구현.
   mixRequest?: { id: number; highlight: boolean; keepCurrent?: boolean } | null;
+  // 사용자가 직접 "다음에 재생"/"대기열에 추가"한 곡들의 키("아티스트::제목" 소문자) — 다음 트랙 목록에서
+  // "내가 추가한 곡"과 "추천 곡"을 나눠 보여주려고 씀
+  userQueuedKeys?: string[];
   // 하이라이트 모드가 켜지고 꺼질 때마다 알려줌 — 하단 탭바의 "하이라이트" 버튼이 켜짐 표시를 하려고 씀
   onHighlightModeChange?: (on: boolean) => void;
   // 플레이어가 처음 뜰 때 하이라이트 모드를 켜진 상태로 시작할지(곡이 없을 때 미리 켜둔 경우)
@@ -337,6 +340,23 @@ function PreviewIcon() {
   );
 }
 
+// 즐겨찾기 별 아이콘 — 옆의 번개(하이라이트)·이전/다음 아이콘과 크기를 맞춤(글자 ★ 대신 SVG)
+function StarIcon({ filled }: { filled: boolean }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill={filled ? "currentColor" : "none"}
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinejoin="round"
+      className="h-4 w-4"
+      aria-hidden="true"
+    >
+      <path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2L12 17.3 6.4 20.2l1.1-6.2L3 9.6l6.2-.9z" />
+    </svg>
+  );
+}
+
 // 확장 화면을 접을 때 쓰는 아래쪽 화살표 아이콘 (유튜브 뮤직 확장 화면의 "접기" 버튼과 같은 위치/역할)
 function ChevronDownIcon() {
   return (
@@ -419,6 +439,7 @@ export default function MiniPlayer({
   onNativeAutoAdvance,
   mixRequest,
   onHighlightModeChange,
+  userQueuedKeys,
   initialHighlight,
   onNext,
   onPrevious,
@@ -428,6 +449,8 @@ export default function MiniPlayer({
   const playerRef = useRef<any>(null);
   // mediaSession 핸들러는 한 번만 등록되니, 최신 콜백/재생시간을 ref로 들고 있다가 호출 시점에 읽음
   const onNextRef = useRef(onNext);
+  // 영상 재생 오류로 연속해서 다음 곡으로 넘긴 횟수 — 정상 재생이 시작되면 0으로 되돌림
+  const errorSkipCountRef = useRef(0);
   const onPreviousRef = useRef(onPrevious);
   const currentTimeRef = useRef(0);
   onNextRef.current = onNext;
@@ -625,6 +648,14 @@ export default function MiniPlayer({
   useEffect(() => {
     let cancelled = false;
 
+    // 퍼가기 금지/삭제/지역 제한 등으로 영상이 재생되지 않으면(유튜브 오류 코드 2, 5, 100, 101, 150)
+    // 멈춰 있지 않고 다음 곡으로 자동으로 넘어감. 연속으로 계속 실패하면 5번까지만 넘김(무한 반복 방지).
+    function handleError() {
+      if (errorSkipCountRef.current >= 5) return;
+      errorSkipCountRef.current += 1;
+      setTimeout(() => onNextRef.current?.(), 400);
+    }
+
     function handleReady(e: any) {
       e.target.setVolume(volume);
       e.target.playVideo();
@@ -639,6 +670,7 @@ export default function MiniPlayer({
           hasFiredPlayingRef.current = true;
           onActuallyPlayingRef.current?.();
         }
+        errorSkipCountRef.current = 0;
         // (Task #44) 하이라이트 연속재생 모드 중 새 트랙이 막 재생을 시작했으면(곡이 바뀌어
         // 처음(0초)부터 들리기 시작한 직후), 바로 그 트랙의 하이라이트 지점으로 점프 — 같은
         // videoId에 대해 한 번만 적용(버퍼링 등으로 PLAYING이 여러 번 와도 중복 점프 방지).
@@ -681,7 +713,7 @@ export default function MiniPlayer({
           width: "1",
           videoId: track.videoId,
           playerVars: { autoplay: 1, controls: 0, modestbranding: 1, rel: 0 },
-          events: { onReady: handleReady, onStateChange: handleStateChange },
+          events: { onReady: handleReady, onStateChange: handleStateChange, onError: handleError },
         });
       });
     }
@@ -1097,10 +1129,25 @@ export default function MiniPlayer({
           안 맞는다"는 피드백). 모바일에선 음악 앱들처럼 얇은 진행바 + 한 줄(썸네일/곡정보/재생/닫기)만
           보여주고, 큐/볼륨은 확장 화면(터치하면 열림, "다음 트랙" 탭)에서 쓰도록 뺌. */}
       <div className="sm:hidden">
-        <div className="h-1 w-full bg-white/10">
-          <div
-            className="h-full bg-accent"
-            style={{ width: `${duration > 0 ? Math.min(100, (currentTime / duration) * 100) : 0}%` }}
+        {/* 얇은 진행바 위에 투명한 슬라이더를 겹쳐서, 확장 화면을 열지 않고 바로 드래그/탭으로 원하는
+            시간으로 이동할 수 있게 함(터치하기 쉽게 위아래로 넉넉한 영역). 이동은 손을 뗀 순간 한 번만 반영. */}
+        <div className="relative h-4 w-full">
+          <div className="absolute inset-x-0 top-0 h-1 bg-white/10">
+            <div
+              className="h-full bg-accent"
+              style={{ width: `${duration > 0 ? Math.min(100, (currentTime / duration) * 100) : 0}%` }}
+            />
+          </div>
+          <input
+            type="range"
+            min={0}
+            max={duration || 0}
+            value={Math.min(currentTime, duration || 0)}
+            onChange={handleSeekPreview}
+            onMouseUp={handleSeekCommit}
+            onTouchEnd={handleSeekCommit}
+            aria-label="재생 위치"
+            className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
           />
         </div>
         <div className="flex items-center gap-3 px-4 py-2.5">
@@ -1428,9 +1475,9 @@ export default function MiniPlayer({
                     type="button"
                     onClick={onToggleFavorite}
                     aria-label={isFavorite ? "즐겨찾기 해제" : "즐겨찾기 추가"}
-                    className="rounded-full p-2 text-2xl text-yellow-400 hover:bg-white/10"
+                    className="rounded-full p-2 text-yellow-400 hover:bg-white/10"
                   >
-                    {isFavorite ? "★" : "☆"}
+                    <StarIcon filled={!!isFavorite} />
                   </button>
                 )}
                 <button
@@ -1598,8 +1645,21 @@ export default function MiniPlayer({
                           )}
                         </div>
                       )}
-                      {queue.map((t, idx) => (
-                        <div key={`${t.artist}-${t.name}-${idx}`} className="flex items-center">
+                      {queue.map((t, idx) => {
+                        const keyOf = (x: Track) => `${x.artist.toLowerCase().trim()}::${x.name.toLowerCase().trim()}`;
+                        const userKeySet = new Set(userQueuedKeys ?? []);
+                        const isMine = userKeySet.has(keyOf(t));
+                        const showMineHeader = isMine && idx === 0;
+                        const showRecoHeader = !isMine && userKeySet.size > 0 && idx > 0 && userKeySet.has(keyOf(queue[idx - 1]));
+                        return (
+                        <div key={`${t.artist}-${t.name}-${idx}`}>
+                        {showMineHeader && (
+                          <p className="px-2 pb-1 pt-2 text-xs font-semibold text-white/50">다음 곡</p>
+                        )}
+                        {showRecoHeader && (
+                          <p className="px-2 pb-1 pt-4 text-xs font-semibold text-white/50">추천 곡</p>
+                        )}
+                        <div className="flex items-center">
                           {selectMode && (
                             <button
                               type="button"
@@ -1627,7 +1687,9 @@ export default function MiniPlayer({
                             />
                           </div>
                         </div>
-                      ))}
+                        </div>
+                        );
+                      })}
                     </>
                   ))}
 

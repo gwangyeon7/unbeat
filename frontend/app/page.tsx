@@ -1385,6 +1385,10 @@ export default function Home() {
       // 더 여유 있게 쓸 수 있음.
       const videoId = track.videoId ?? (await searchYoutubeVideo(track.artist, track.name)).videoId;
       if (videoId) {
+        // 지금 재생하는 곡은 "내가 넣어둔 대기 곡" 목록에서 뺌(재생 시작됨)
+        commitUserQueued(
+          userQueuedRef.current.filter((t) => !(t.name === track.name && t.artist === track.artist))
+        );
         const prev = nowPlayingRef.current;
         if (prev && !options?.skipHistory && prev.videoId !== videoId) {
           playHistoryRef.current = [...playHistoryRef.current, prev].slice(-30);
@@ -1394,6 +1398,8 @@ export default function Home() {
           // 재생목록에서 고른 곡들을 순서대로 재생 중 — 큐를 비슷한 곡으로 덮어쓰지 않고
           // 남은 목록을 그대로 "다음 트랙" 패널에 반영함.
           isManualQueueRef.current = true;
+          // 목록을 직접 골라 재생하는 경우엔 그 목록이 곧 대기열이라, 따로 넣어둔 곡은 비움
+          commitUserQueued([]);
           setQueue(options.manualNext);
         } else {
           // 평소처럼 카드/검색 결과를 직접 눌러서 재생한 경우 — 수동 큐 모드는 해제하고
@@ -1482,7 +1488,10 @@ export default function Home() {
     getSimilarTracks(artist, name)
       .then((data) => {
         if (!append) {
-          setQueue(data.tracks);
+          // 내가 직접 넣어둔 곡들을 맨 앞에 유지하고 그 뒤에 비슷한 곡을 이어붙임
+          const mine = userQueuedRef.current.filter((t) => trackKey(t) !== playedKey);
+          const mineKeys = new Set(mine.map(trackKey));
+          setQueue([...mine, ...data.tracks.filter((t) => !mineKeys.has(trackKey(t)))]);
           return;
         }
         setQueue((prev) => {
@@ -1501,7 +1510,7 @@ export default function Home() {
       .catch(() => {
         // append 모드가 아닐 때(=완전히 새 곡으로 전환)만 비움 — append 모드에서 API 하나
         // 실패했다고 이미 떠 있던 후보까지 지울 이유는 없음.
-        if (!append) setQueue([]);
+        if (!append) setQueue(userQueuedRef.current.filter((t) => trackKey(t) !== playedKey));
       });
   }
 
@@ -1522,11 +1531,26 @@ export default function Home() {
       handlePlay(track);
       return;
     }
-    setQueue((prev) => {
-      const rest = prev.filter((t) => !(t.name === track.name && t.artist === track.artist));
-      return position === "next" ? [track, ...rest] : [...rest, track];
-    });
+    // 내가 직접 넣은 곡은 따로도 기억해둠 — 비슷한 곡 추천이 늦게 도착해서 큐를 통째로 덮어써도
+    // 내가 넣은 곡이 사라지지 않게 함. 큐 맨 앞에 "내가 추가한 곡"이 모이고(방금 "다음에 재생"한
+    // 곡이 맨 처음, "대기열에 추가"한 곡은 내가 넣은 곡들 맨 뒤), 그 뒤에 추천 곡이 이어짐.
+    const sameTrack = (t: Track) => t.name === track.name && t.artist === track.artist;
+    const pending = userQueuedRef.current.filter((t) => !sameTrack(t));
+    const mine = position === "next" ? [track, ...pending] : [...pending, track];
+    commitUserQueued(mine);
+    const keyOf = (t: Track) => `${t.artist.toLowerCase().trim()}::${t.name.toLowerCase().trim()}`;
+    const mineKeys = new Set(mine.map(keyOf));
+    setQueue((prev) => [...mine, ...prev.filter((t) => !mineKeys.has(keyOf(t)))]);
     showToast(position === "next" ? "다음에 재생돼요" : "대기열에 추가했어요");
+  }
+
+  // 사용자가 "다음에 재생"/"대기열에 추가"로 직접 넣은 곡들(재생되면 목록에서 빠짐). ref는 비동기
+  // 콜백 안에서 최신 값을 읽으려고, state(키 목록)는 플레이어의 "내가 추가한 곡" 구분 표시용.
+  const userQueuedRef = useRef<Track[]>([]);
+  const [userQueuedKeys, setUserQueuedKeys] = useState<string[]>([]);
+  function commitUserQueued(list: Track[]) {
+    userQueuedRef.current = list;
+    setUserQueuedKeys(list.map((t) => `${t.artist.toLowerCase().trim()}::${t.name.toLowerCase().trim()}`));
   }
 
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -2934,6 +2958,7 @@ export default function Home() {
           handleTrackEnded({ videoId: data.videoId, name: data.title, artist: data.artist })
         }
         mixRequest={mixRequest}
+        userQueuedKeys={userQueuedKeys}
         onHighlightModeChange={setHighlightOn}
         initialHighlight={highlightOn}
         queue={queue}

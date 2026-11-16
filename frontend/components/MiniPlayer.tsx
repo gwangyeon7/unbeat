@@ -6,6 +6,23 @@ import type { Track, LyricsResult } from "@/lib/api";
 import { getLyrics, requestLyrics, searchYoutubeVideo } from "@/lib/api";
 import { isNativeAndroid, createNativePlayer } from "@/lib/nativePlayer";
 
+// 이모지(⏮ ⏭)는 기기마다 파란 네모 아이콘으로 보여서, 글자색을 따라가는 SVG로 대체
+function SkipPrevIcon({ className = "h-5 w-5" }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="currentColor" className={className} aria-hidden="true">
+      <path d="M6 6h2v12H6zM9.5 12 18 6v12z" />
+    </svg>
+  );
+}
+
+function SkipNextIcon({ className = "h-5 w-5" }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="currentColor" className={className} aria-hidden="true">
+      <path d="M16 6h2v12h-2zM6 18V6l8.5 6z" />
+    </svg>
+  );
+}
+
 export type NowPlayingTrack = {
   videoId: string;
   name: string;
@@ -956,7 +973,7 @@ export default function MiniPlayer({
             aria-label="이전 곡"
             className="shrink-0 rounded-full p-1.5 text-white/70 hover:bg-white/10 hover:text-white"
           >
-            ⏮
+            <SkipPrevIcon className="h-5 w-5" />
           </button>
           <button
             type="button"
@@ -972,7 +989,7 @@ export default function MiniPlayer({
             aria-label="다음 곡"
             className="shrink-0 rounded-full p-1.5 text-white/70 hover:bg-white/10 hover:text-white"
           >
-            ⏭
+            <SkipNextIcon className="h-5 w-5" />
           </button>
           <button
             type="button"
@@ -1043,7 +1060,7 @@ export default function MiniPlayer({
               aria-label="이전 곡"
               className="shrink-0 rounded-full p-1.5 text-white/70 hover:bg-white/10 hover:text-white"
             >
-              ⏮
+              <SkipPrevIcon className="h-5 w-5" />
             </button>
             <button
               type="button"
@@ -1059,7 +1076,7 @@ export default function MiniPlayer({
               aria-label="다음 곡"
               className="shrink-0 rounded-full p-1.5 text-white/70 hover:bg-white/10 hover:text-white"
             >
-              ⏭
+              <SkipNextIcon className="h-5 w-5" />
             </button>
             <button
               type="button"
@@ -1264,7 +1281,7 @@ export default function MiniPlayer({
                   aria-label="이전 곡"
                   className="rounded-full p-2 text-2xl text-white/80 hover:bg-white/10 hover:text-white"
                 >
-                  ⏮
+                  <SkipPrevIcon className="h-7 w-7" />
                 </button>
                 <button
                   type="button"
@@ -1280,7 +1297,7 @@ export default function MiniPlayer({
                   aria-label="다음 곡"
                   className="rounded-full p-2 text-2xl text-white/80 hover:bg-white/10 hover:text-white"
                 >
-                  ⏭
+                  <SkipNextIcon className="h-7 w-7" />
                 </button>
                 <button
                   type="button"

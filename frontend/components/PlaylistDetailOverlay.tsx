@@ -104,13 +104,18 @@ export default function PlaylistDetailOverlay({
           onClick={onToggleVisibility}
           disabled={isTogglingVisibility}
           title={playlist.isPublic ? "공개 중 — 눌러서 비공개로 전환" : "비공개 — 눌러서 다른 사람에게 공개"}
-          className={`shrink-0 rounded-full px-2 py-1 text-[11px] disabled:opacity-40 ${
+          className={`flex shrink-0 items-center gap-1 rounded-full px-2 py-1 text-[11px] disabled:opacity-40 ${
             playlist.isPublic
               ? "bg-accent/20 text-accent"
               : "text-white/40 hover:bg-white/10 hover:text-white/70"
           }`}
         >
-          {playlist.isPublic ? "🌐 공개" : "🔒 비공개"}
+          {/* 이모티콘 느낌이 나지 않게 아이콘 대신 상태 점 + 글자만 사용 */}
+          <span
+            className={`h-1.5 w-1.5 rounded-full ${playlist.isPublic ? "bg-accent" : "bg-white/30"}`}
+            aria-hidden="true"
+          />
+          {playlist.isPublic ? "공개" : "비공개"}
         </button>
       </div>
 

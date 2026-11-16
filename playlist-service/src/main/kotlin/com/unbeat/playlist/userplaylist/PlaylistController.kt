@@ -1,6 +1,7 @@
 package com.unbeat.playlist.userplaylist
 
 import com.unbeat.playlist.auth.SupabaseAuth
+import com.unbeat.playlist.userplaylist.dto.AutoMixRequest
 import com.unbeat.playlist.userplaylist.dto.PlaylistRequest
 import com.unbeat.playlist.userplaylist.dto.PlaylistRenameRequest
 import com.unbeat.playlist.userplaylist.dto.PlaylistTrackImageRequest
@@ -29,11 +30,31 @@ class PlaylistController(
     @GetMapping
     fun list(@RequestHeader("X-Session-Id") sessionId: String) = playlistService.list(sessionId)
 
-    // 즐겨찾기한 곡을 장르별로 분석해서 재생목록을 자동 생성 — "직접 이름 짓고 곡을 일일이 넣는 게
-    // 뻔하다"는 피드백으로 추가. 매번 눌러도 중복이 안 쌓이게 이전 자동 생성 결과는 지우고 다시 만듦.
+    // 즐겨찾기만 섞어서 "오늘의 믹스"를 만듦 — 프론트가 후보 풀(비슷한 곡/인기곡) 조회에 전부
+    // 실패했을 때의 폴백. 매번 눌러도 중복이 안 쌓이게 이전 자동 생성 결과는 지우고 다시 만듦.
     @PostMapping("/auto-generate")
     fun generateAuto(@RequestHeader("X-Session-Id") sessionId: String) =
         autoPlaylistService.generate(sessionId)
+
+    // 프론트가 고른 곡(즐겨찾기 + 비슷한 곡 + 인기곡)으로 "오늘의 믹스"를 저장 — 이전 자동 재생목록은
+    // 지우고 교체. 곡은 1~50개, 아티스트/곡명은 비어 있으면 안 되고 컬럼 길이(255) 안이어야 함(아니면 400).
+    @PostMapping("/auto-mix")
+    fun createAutoMix(
+        @RequestHeader("X-Session-Id") sessionId: String,
+        @RequestBody request: AutoMixRequest
+    ): ResponseEntity<Any> {
+        val tracks = request.tracks
+        val invalid = tracks.isEmpty() || tracks.size > 50 || tracks.any {
+            it.artistName.isBlank() || it.trackName.isBlank() ||
+                it.artistName.length > 255 || it.trackName.length > 255 ||
+                (it.url?.length ?: 0) > 500 || (it.imageUrl?.length ?: 0) > 500
+        }
+        if (invalid) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(mapOf("error" to "믹스에 담을 곡은 1~50곡이어야 해요."))
+        }
+        return ResponseEntity.ok(autoPlaylistService.createMix(sessionId, tracks))
+    }
 
     // (게이미피케이션 2단계, 3단계에서 authHeader 추가) 다른 사용자가 공개한 재생목록 둘러보기
     // 피드 — 로그인/세션 여부와 무관하게 누구나 볼 수 있음(공개로 설정한 쪽이 동의한 공개 범위).

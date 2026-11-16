@@ -258,6 +258,22 @@ export function generateAutoPlaylists(): Promise<Playlist[]> {
   return playlistFetch<Playlist[]>("/playlists/auto-generate", { method: "POST" });
 }
 
+export type AutoMixTrack = {
+  artistName: string;
+  trackName: string;
+  url: string | null;
+  imageUrl: string | null;
+};
+
+// 프론트가 후보 풀(즐겨찾기 + 비슷한 곡 + 인기곡)에서 고른 곡으로 "오늘의 믹스"를 저장 —
+// 이전 자동 재생목록은 서버가 지우고 교체함. 곡은 1~50개(아니면 400).
+export function createAutoMix(tracks: AutoMixTrack[]): Promise<Playlist> {
+  return playlistFetch<Playlist>("/playlists/auto-mix", {
+    method: "POST",
+    body: JSON.stringify({ tracks }),
+  });
+}
+
 // (게이미피케이션 2.5단계) 재생목록을 처음 공개로 전환하려 할 때(setPlaylistVisibility가 428을
 // 던지면) page.tsx가 이걸 호출해서 닉네임을 받음. 이미 닉네임이 있으면 변경으로 처리됨.
 // 중복(409)/형식 오류(400)는 PlaylistApiError로 그대로 올라가서 호출하는 쪽이 메시지를 구분함.

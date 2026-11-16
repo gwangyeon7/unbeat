@@ -239,8 +239,14 @@ export async function searchYoutubeVideo(
 
 // 미니 플레이어 "다음 트랙" 큐용 — 지금 재생 중인 곡과 비슷한 곡 목록.
 // 유튜브 뮤직처럼 곡이 끝나면 자동으로 비슷한 곡이 이어 재생되게 하려고 추가.
-export function getSimilarTracks(artist: string, track: string): Promise<{ tracks: Track[] }> {
+// allowYoutube=false: Last.fm/AI 결과가 비어도 유튜브 검색 폴백(쿼터 사용)을 하지 않음 — 오늘의 믹스 후보 풀용
+export function getSimilarTracks(
+  artist: string,
+  track: string,
+  opts?: { allowYoutube?: boolean }
+): Promise<{ tracks: Track[] }> {
   const params = new URLSearchParams({ artist, track });
+  if (opts?.allowYoutube === false) params.set("allow_youtube", "false");
   return fetchJson(`/similar-tracks?${params.toString()}`);
 }
 
@@ -258,6 +264,19 @@ export type LyricsResult = {
 export function getLyrics(artist: string, track: string): Promise<LyricsResult> {
   const params = new URLSearchParams({ artist, track });
   return fetchJson(`/lyrics?${params.toString()}`);
+}
+
+// 하이라이트(후렴) 시작 힌트 — 백엔드가 유튜브 "가장 많이 다시 본 구간" 히트맵에서 계산(오디오 다운로드 없음).
+// 히트맵이 없거나 서버에서 막히면 source="none", start=null.
+export type HighlightHint = {
+  start: number | null;
+  end?: number | null;
+  source: "heatmap" | "none";
+};
+
+export function getHighlightHint(videoId: string): Promise<HighlightHint> {
+  const params = new URLSearchParams({ video_id: videoId });
+  return fetchJson(`/highlight-hint?${params.toString()}`);
 }
 
 // 가사 탭에서 가사를 못 찾았을 때 "가사 올려주세요" 버튼용. 즉시 가사가 생기진 않고,

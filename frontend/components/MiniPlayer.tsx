@@ -2,8 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import type { Track, LyricsResult } from "@/lib/api";
-import { getLyrics, requestLyrics, searchYoutubeVideo } from "@/lib/api";
+import type { Track, LyricsResult, HighlightHint } from "@/lib/api";
+import { getHighlightHint, getLyrics, requestLyrics, searchYoutubeVideo } from "@/lib/api";
 import { isNativeAndroid, createNativePlayer } from "@/lib/nativePlayer";
 
 // 이모지(⏮ ⏭)는 기기마다 파란 네모 아이콘으로 보여서, 글자색을 따라가는 SVG로 대체
@@ -59,7 +59,11 @@ type MiniPlayerProps = {
   // "새 신호가 왔다"고 판단해서 하이라이트 연속재생 모드를 강제로 켜거나(highlight: true) 끔.
   // MiniPlayer가 이미 떠 있는 상태(다른 곡 재생 중)에서 믹스를 눌러도 동작해야 해서, 마운트
   // 시점이 아니라 이 prop 변화를 감지하는 방식으로 구현.
-  mixRequest?: { id: number; highlight: boolean } | null;
+  mixRequest?: { id: number; highlight: boolean; keepCurrent?: boolean } | null;
+  // 하이라이트 모드가 켜지고 꺼질 때마다 알려줌 — 하단 탭바의 "하이라이트" 버튼이 켜짐 표시를 하려고 씀
+  onHighlightModeChange?: (on: boolean) => void;
+  // 플레이어가 처음 뜰 때 하이라이트 모드를 켜진 상태로 시작할지(곡이 없을 때 미리 켜둔 경우)
+  initialHighlight?: boolean;
   // 다음곡 / 이전곡 버튼 (친구 피드백 #1) — 재생바 버튼과 잠금화면/알림창 미디어 컨트롤이 같이 씀.
   onNext?: () => void;
   onPrevious?: () => void;
@@ -135,7 +139,9 @@ function parseSyncedLyrics(synced: string): LyricLine[] {
 // 센다(= 후렴 블록 길이). 그 블록이 끝나는(다음 줄부터 가사가 달라지는) 시점의 타임스탬프를
 // endTime으로 반환 — 못 찾으면(후렴이 곡의 마지막 블록이라 비교할 "다음 줄" 자체가 없는 경우
 // 등) null이라 호출부가 고정 길이로 폴백.
-type ChorusWindow = { chorusTime: number; leadInTime: number; endTime: number | null };
+// confident: 반복 구조가 뚜렷한지(3줄 이상이 통째로 반복). 2줄만 겹친 경우는 우연일 수 있어서, 호출부가
+// 유튜브 히트맵 힌트가 있으면 그쪽을 우선함(2026-11-16).
+type ChorusWindow = { chorusTime: number; leadInTime: number; endTime: number | null; confident: boolean };
 
 // (버그 수정, 2026-10-04) "하이라이트 누르면 노래가 바로바로(몇 초 만에) 다음 곡으로 넘어간다"는
 // 제보 — 원인은 "oh"/"yeah" 같은 한두 글자짜리 추임새가 노래 초반에 우연히 한 번 더 나오는 걸
@@ -206,7 +212,37 @@ function findChorusWindow(syncedLyrics: string): ChorusWindow | null {
       // 단락 마지막 줄을 부르는 시간 ≈ 평소 줄 길이(중앙값). 간주가 길면 거기까지만, 짧으면 다음 줄 직전.
       endTime = lines[lastIdx].time + Math.min(gapToNext - 0.3, medianGap * 1.1);
     }
-    return { chorusTime, leadInTime, endTime };
+    return { chorusTime, leadInTime, endTime, confident: blockLen >= 3 };
+  }
+  return null;
+}
+
+// 시간이 안 붙은 일반 가사(plainLyrics)만 있을 때의 후렴 시작 추정 — 한국 곡은 동기화 가사가 없고
+// 일반 가사만 있는 경우가 많아서 추가. 줄마다 시각은 모르니, "처음 반복되는 줄(2줄 이상 이어서 반복)이
+// 몇 번째 줄인가"를 비율로 보고, 보컬이 곡 길이의 8%~92% 사이에 고르게 퍼져 있다고 가정해서 시각으로
+// 환산함. 정확하진 않지만 곡 길이 비율 고정(35%)보다는 가사 구조를 반영해서 후렴에 더 가깝게 맞음.
+function estimateChorusStartFromPlain(plain: string, durationSec: number): number | null {
+  const norm = plain
+    .split("\n")
+    .map((l) => l.trim().toLowerCase())
+    .filter(Boolean);
+  if (norm.length < 8 || durationSec <= 0) return null;
+  const firstSeen = new Map<string, number>();
+  for (let i = 0; i < norm.length; i++) {
+    const prev = firstSeen.get(norm[i]);
+    if (prev === undefined) {
+      firstSeen.set(norm[i], i);
+      continue;
+    }
+    if (norm[i].length < MIN_CHORUS_LINE_LENGTH) continue;
+    let block = 1;
+    while (prev + block < norm.length && i + block < norm.length && norm[prev + block] === norm[i + block]) {
+      block++;
+    }
+    if (block < 2) continue;
+    const fraction = prev / norm.length;
+    const est = durationSec * 0.08 + fraction * durationSec * 0.84;
+    return Math.max(0, est - HIGHLIGHT_LEAD_IN_SECONDS);
   }
   return null;
 }
@@ -227,6 +263,8 @@ const HIGHLIGHT_MIN_WINDOW_MS = 12_000;
 const HIGHLIGHT_MAX_WINDOW_MS = 90_000;
 // 가사가 없어 35% 규칙으로 폴백할 때만 쓰는 고정 리드인(간주 구간을 알 방법이 없어서 그냥 고정값).
 const HIGHLIGHT_LEAD_IN_SECONDS = 4;
+// 유튜브 히트맵 힌트를 기다리는 최대 시간 — 넘으면 힌트 없이 기존 방식으로 진행.
+const HIGHLIGHT_HINT_WAIT_MS = 2_000;
 // 가사 기반 리드인의 최대 길이 — 두 가사 줄 사이 간격이 아무리 넓어도 이보다 멀리는 안 당김.
 const HIGHLIGHT_LEAD_IN_MAX_SECONDS = 6;
 
@@ -380,6 +418,8 @@ export default function MiniPlayer({
   onSaveQueueToPlaylist,
   onNativeAutoAdvance,
   mixRequest,
+  onHighlightModeChange,
+  initialHighlight,
   onNext,
   onPrevious,
   onAddCurrentToPlaylist,
@@ -435,15 +475,42 @@ export default function MiniPlayer({
   const [duration, setDuration] = useState(0);
   const [volume, setVolume] = useState(70);
   const [isMuted, setIsMuted] = useState(false);
+  const isMutedRef = useRef(false);
+  isMutedRef.current = isMuted;
+  // 하이라이트로 점프하기 전까지 임시로 소리를 꺼둔 상태(사용자가 직접 음소거한 것과 구분)
+  const tempMutedRef = useRef(false);
+  const tempMuteTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  function releaseTempMute() {
+    if (tempMuteTimerRef.current) {
+      clearTimeout(tempMuteTimerRef.current);
+      tempMuteTimerRef.current = null;
+    }
+    if (!tempMutedRef.current) return;
+    tempMutedRef.current = false;
+    if (!isMutedRef.current) playerRef.current?.unMute?.();
+  }
   const [isQueueOpen, setIsQueueOpen] = useState(false);
   // (Task #44) 하이라이트 연속 미리듣기 — 가사 기반(없으면 곡 길이 35% 규칙 폴백)으로 찾은
   // 후렴 시작점 조금 전부터 60초 재생 후, 켜져 있는 동안엔 다음 곡의 하이라이트로 자연스럽게
   // 이어짐(애플뮤직의 "하이라이트만 이어듣기" 참고 — 단, 진짜 오디오 크로스페이드는 유튜브
   // iframe 구조상 범위 밖이라 하드컷으로 전환).
-  const [isPreviewing, setIsPreviewing] = useState(false);
+  const [isPreviewing, setIsPreviewing] = useState(!!initialHighlight);
   isPreviewingRef.current = isPreviewing;
   const previewTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const startHighlightPlaybackRef = useRef<() => void>(() => {});
+  // (2026-11-16) 유튜브 히트맵 하이라이트 힌트 — videoId별 요청 Promise를 보관해서, 곡이 시작될 때 미리
+  // 보낸 요청을 startHighlightPlayback이 그대로 이어받음(중복 요청 없음). 실패는 null로 흡수.
+  const highlightHintRef = useRef<Map<string, Promise<HighlightHint | null>>>(new Map());
+  function prefetchHighlightHint(videoId: string): Promise<HighlightHint | null> {
+    const cache = highlightHintRef.current;
+    let pending = cache.get(videoId);
+    if (!pending) {
+      if (cache.size > 50) cache.clear();
+      pending = getHighlightHint(videoId).catch(() => null);
+      cache.set(videoId, pending);
+    }
+    return pending;
+  }
   // 유튜브 뮤직의 확장 재생 화면(앨범아트 크게 + 다음 트랙/관련 항목/가사 탭)을 참고해서 추가.
   // 미니 플레이어 하단 바의 앨범아트나 곡 정보를 누르면 이 전체화면 오버레이가 열림.
   const [isExpanded, setIsExpanded] = useState(false);
@@ -655,6 +722,14 @@ export default function MiniPlayer({
       clearTimeout(previewTimeoutRef.current);
       previewTimeoutRef.current = null;
     }
+    // 하이라이트 모드에서 곡이 넘어오면 후렴 위치를 찾아 점프할 때까지 잠깐 소리를 꺼서, 곡 첫 부분이
+    // 살짝 들렸다가 점프하는 걸 막음. 점프(startHighlightPlayback)나 안전 타이머(4초)에서 다시 켬.
+    if (isPreviewingRef.current && !isMutedRef.current) {
+      playerRef.current.mute?.();
+      tempMutedRef.current = true;
+      if (tempMuteTimerRef.current) clearTimeout(tempMuteTimerRef.current);
+      tempMuteTimerRef.current = setTimeout(releaseTempMute, 4000);
+    }
     playerRef.current.loadVideoById(track.videoId, track.name, track.artist);
   }, [track.videoId]);
 
@@ -713,6 +788,20 @@ export default function MiniPlayer({
   // 하이라이트 지점 점프는 여기서 바로 하지 않고 isPreviewing만 세팅 — page.tsx가 이 신호와
   // 동시에 새 트랙도 재생시키므로, 그 트랙이 재생을 시작하는 시점(위 handleStateChange)에
   // 기존 연속재생 로직이 자연스럽게 이어받아 하이라이트로 점프함.
+  // 하이라이트 모드에서 새 곡이 잡히면 히트맵 힌트를 미리 요청(재생은 기다리지 않음). keepCurrent로
+  // "이 곡은 끝까지 듣기"가 표시된 현재 곡은 하이라이트로 점프하지 않으니 요청하지 않음.
+  useEffect(() => {
+    if (!isPreviewing || !track.videoId) return;
+    if (highlightAppliedForVideoIdRef.current === track.videoId) return;
+    prefetchHighlightHint(track.videoId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isPreviewing, track.videoId]);
+
+  useEffect(() => {
+    onHighlightModeChange?.(isPreviewing);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isPreviewing]);
+
   const lastMixRequestIdRef = useRef<number | null>(null);
   useEffect(() => {
     if (!mixRequest || lastMixRequestIdRef.current === mixRequest.id) return;
@@ -722,6 +811,12 @@ export default function MiniPlayer({
       previewTimeoutRef.current = null;
     }
     setIsPreviewing(mixRequest.highlight);
+    // 지금 듣던 곡은 그대로 두고 다음 곡부터 하이라이트 — 이 곡은 이미 적용된 것으로 표시해서
+    // handleStateChange가 이 곡을 하이라이트 지점으로 점프시키지 않게 함. 화면도 펼치지 않음.
+    if (mixRequest.keepCurrent) {
+      highlightAppliedForVideoIdRef.current = trackVideoIdRef.current;
+      return;
+    }
     // (B단계 3-4, 2026-10-25) 하단 탭 "하이라이트"/"모두 재생"은 화면을 바꾸지 않고 바로 재생만
     // 시작해서, 눌러도 뭔가 일어났는지 잘 안 보인다는 피드백 — 믹스를 시작하면 확장 플레이어를
     // 바로 펼쳐서 어떤 곡이 재생되는지 보여줌(이후 곡이 자동으로 넘어갈 땐 펼치지 않음).
@@ -756,31 +851,74 @@ export default function MiniPlayer({
     const nameAtRequest = track.name;
 
     const dur = playerRef.current.getDuration?.() || duration || 0;
-    let start = dur ? dur * 0.35 : 0;
+    // 가사로 못 찾을 때의 폴백 위치 — 보통 첫 후렴이 곡의 25~30% 지점쯤에 시작해서(35%는 2절/브릿지에
+    // 걸리는 경우가 많았음) 28%로 앞당김.
+    let start = dur ? dur * 0.28 : 0;
     let usedLyricsBasedStart = false;
     // 하이라이트 재생 길이 — 가사로 "블록이 끝나는 지점"을 찾으면 그 자연스러운 길이를 쓰고,
     // 못 찾으면 고정 길이(HIGHLIGHT_WINDOW_MS)로 폴백.
     let windowMs = HIGHLIGHT_WINDOW_MS;
+    // (2026-11-16) 시작 위치 결정 순서:
+    //   (1) 싱크 가사 후렴 검출(반복 구조가 뚜렷할 때) → (2) 유튜브 히트맵 힌트 → (1') 싱크 가사 검출(반복이
+    //   약한 경우) → (3) 일반 가사 추정 → (4) 곡 길이 28%.
+    // 히트맵 힌트는 가사 조회와 병렬로 기다리되 최대 2초 — 늦으면 없는 것으로 보고 기존 방식으로 진행.
+    // (재생 자체는 이미 0초부터 진행 중이라 이 대기가 재생을 멈추게 하진 않음)
+    const hintPromise = videoIdAtRequest
+      ? Promise.race<HighlightHint | null>([
+          prefetchHighlightHint(videoIdAtRequest),
+          new Promise<null>((resolve) => setTimeout(() => resolve(null), HIGHLIGHT_HINT_WAIT_MS)),
+        ])
+      : Promise.resolve(null);
     try {
-      const result = await getLyrics(artistAtRequest, nameAtRequest);
+      const [result, hint] = await Promise.all([
+        getLyrics(artistAtRequest, nameAtRequest).catch(() => null),
+        hintPromise,
+      ]);
       // 가사 조회하는 동안 트랙이 바뀌었거나(연속재생 중 또 넘어감) 플레이어가 사라졌으면
       // 늦게 도착한 이 응답으로 엉뚱한(새) 트랙을 건드리지 않도록 중단.
       if (trackVideoIdRef.current !== videoIdAtRequest || !playerRef.current) return;
-      if (result?.syncedLyrics) {
-        const chorus = findChorusWindow(result.syncedLyrics);
-        if (chorus && chorus.chorusTime > 0 && (!dur || chorus.chorusTime < dur)) {
-          // leadInTime은 이미 "바로 앞 가사 줄과 후렴 사이 간주 구간"을 고려해 계산된 값이라,
-          // 아래 35% 폴백 전용 고정 리드인은 여기선 또 빼지 않음.
-          start = chorus.leadInTime;
+
+      const chorus = result?.syncedLyrics ? findChorusWindow(result.syncedLyrics) : null;
+      const chorusValid = !!chorus && chorus.chorusTime > 0 && (!dur || chorus.chorusTime < dur);
+      // 곡 앞 8% 이내나 너무 뒤쪽(75% 이후)에 잡힌 후렴은 오탐일 가능성이 커서 신뢰도 낮음으로 취급
+      const chorusConfident =
+        chorusValid && chorus!.confident && (!dur || (chorus!.chorusTime >= dur * 0.08 && chorus!.chorusTime <= dur * 0.75));
+      const hintValid =
+        hint?.source === "heatmap" && typeof hint.start === "number" && hint.start >= 0 && (!dur || hint.start < dur);
+
+      const applyChorus = (c: ChorusWindow) => {
+        // leadInTime은 이미 "바로 앞 가사 줄과 후렴 사이 간주 구간"을 고려해 계산된 값이라,
+        // 아래 28% 폴백 전용 고정 리드인은 여기선 또 빼지 않음.
+        start = c.leadInTime;
+        usedLyricsBasedStart = true;
+        if (c.endTime != null && c.endTime > start) {
+          const naturalMs = (c.endTime - start) * 1000;
+          windowMs = Math.min(Math.max(naturalMs, HIGHLIGHT_MIN_WINDOW_MS), HIGHLIGHT_MAX_WINDOW_MS);
+        }
+      };
+
+      if (chorusConfident) {
+        applyChorus(chorus!);
+      } else if (hintValid) {
+        // 히트맵 구간 시작 = 사람들이 가장 많이 다시 들은 지점이라 그대로 씀(고정 리드인 안 뺌)
+        start = hint!.start as number;
+        usedLyricsBasedStart = true;
+        const hintEnd = typeof hint!.end === "number" && hint!.end > start ? hint!.end : start + 35;
+        windowMs = Math.min(Math.max((hintEnd - start) * 1000, HIGHLIGHT_MIN_WINDOW_MS), HIGHLIGHT_MAX_WINDOW_MS);
+      } else if (chorusValid) {
+        applyChorus(chorus!);
+      }
+      // 동기화 가사로 못 찾았지만 일반 가사가 있으면 줄 위치 비율로 후렴 시작을 추정(길이는 40초 고정)
+      if (!usedLyricsBasedStart && result?.plainLyrics && dur > 0) {
+        const est = estimateChorusStartFromPlain(result.plainLyrics, dur);
+        if (est !== null && est < dur) {
+          start = est;
           usedLyricsBasedStart = true;
-          if (chorus.endTime != null && chorus.endTime > start) {
-            const naturalMs = (chorus.endTime - start) * 1000;
-            windowMs = Math.min(Math.max(naturalMs, HIGHLIGHT_MIN_WINDOW_MS), HIGHLIGHT_MAX_WINDOW_MS);
-          }
+          windowMs = 40_000;
         }
       }
     } catch {
-      // 가사 조회 실패 — 조용히 35% 규칙 폴백 유지.
+      // 가사/힌트 조회 실패 — 조용히 28% 규칙 폴백 유지.
     }
     if (trackVideoIdRef.current !== videoIdAtRequest || !playerRef.current) return;
 
@@ -793,6 +931,8 @@ export default function MiniPlayer({
     playerRef.current.seekTo?.(start, true);
     setCurrentTime(start);
     playerRef.current.playVideo?.();
+    // 점프가 반영될 시간을 잠깐 주고 소리를 다시 켬
+    if (tempMutedRef.current) setTimeout(releaseTempMute, 300);
     previewTimeoutRef.current = setTimeout(() => {
       if (isPreviewingRef.current) {
         // (Task #44-2) 연속 하이라이트 모드 — "곡이 자연스럽게 끝났을 때" 쓰던 기존 다음 곡
@@ -841,6 +981,24 @@ export default function MiniPlayer({
     if (typeof navigator === "undefined" || !("mediaSession" in navigator)) return;
     navigator.mediaSession.playbackState = isPlaying ? "playing" : "paused";
   }, [isPlaying]);
+
+  // 화면을 끄면(탭이 숨겨지면) 유튜브 플레이어가 스스로 일시정지되는 경우가 있어서, 듣던 중이었으면
+  // 잠깐 뒤에 다시 재생을 시도함. 브라우저가 막으면 어쩔 수 없지만(그땐 잠금화면 ▶를 한 번 눌러야 함)
+  // 막지 않는 안드로이드 크롬에서는 끊김 없이 이어짐. 직접 일시정지해둔 경우엔 건드리지 않음.
+  const isPlayingRef = useRef(false);
+  isPlayingRef.current = isPlaying;
+  useEffect(() => {
+    function handleVisibility() {
+      if (!document.hidden || !isPlayingRef.current) return;
+      const resume = () => {
+        if (document.hidden) playerRef.current?.playVideo?.();
+      };
+      setTimeout(resume, 300);
+      setTimeout(resume, 1200);
+    }
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => document.removeEventListener("visibilitychange", handleVisibility);
+  }, []);
 
   useEffect(() => {
     if (typeof navigator === "undefined" || !("mediaSession" in navigator)) return;

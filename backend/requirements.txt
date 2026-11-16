@@ -23,3 +23,7 @@ git+https://github.com/haven-jeon/PyKoSpacing.git
 # 띄어쓰기 없는 영문 검색어 교정용(§52) — 위 PyKoSpacing의 영문 버전. PyPI에 있고 순수 파이썬
 # (영어 단어 빈도 목록 하나만 내장, TensorFlow 같은 무거운 의존성 없음)이라 설치가 훨씬 가벼움.
 wordninja
+
+# 하이라이트(후렴) 힌트용(/highlight-hint) — 유튜브 영상 메타데이터의 "가장 많이 다시 본 구간" 히트맵만
+# 읽음(download=False). 오디오/영상은 절대 받지 않음. 서버(Render)에서 막혀도 none으로 graceful fallback.
+yt-dlp

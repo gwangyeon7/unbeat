@@ -14,6 +14,7 @@ import StaleTracksModal from "@/components/StaleTracksModal";
 import AuthModal from "@/components/AuthModal";
 import RankingPage from "@/components/RankingPage";
 import ArtistPage from "@/components/ArtistPage";
+import MobileSearchResults, { type SearchFilter } from "@/components/MobileSearchResults";
 import { supabase } from "@/lib/supabase";
 import {
   search,
@@ -55,6 +56,7 @@ import {
   addTrackToPlaylist,
   removeTrackFromPlaylist,
   generateAutoPlaylists,
+  createAutoMix,
   getStaleFavoriteTracks,
   setPlaylistVisibility,
   getPublicPlaylists,
@@ -76,6 +78,7 @@ import {
 } from "@/lib/playlistApi";
 import { MUSIC_CATEGORIES } from "@/lib/categories";
 import { fillMissingTrackImages } from "@/lib/fillTrackImages";
+import { buildAutoMix } from "@/lib/autoMix";
 
 // "빠른 선곡" 섹션에서, 같은 후보 목록이라도 새로고침마다 다르게 보이도록 순서를 섞는 데 씀.
 // (Fisher-Yates) — 진짜 개인화 추천 AI는 이 프로젝트 범위 밖(ROADMAP 목표에 명시)이라, 최소한
@@ -111,6 +114,10 @@ export default function Home() {
   // 검색 중엔 검색과 무관한 "지금 인기 있는 곡"/"인기 아티스트" 대신 이 섹션을 보여줌.
   const [searchArtistTracks, setSearchArtistTracks] = useState<Track[]>([]);
   const [searchContextArtist, setSearchContextArtist] = useState<string | null>(null);
+  // 곡 제목으로 검색했을 때, 맨 위 곡과 비슷한 곡(Last.fm) — 결과 화면 아래 "비슷한 곡"으로 채움
+  const [similarSearchTracks, setSimilarSearchTracks] = useState<Track[]>([]);
+  // 모바일 검색 결과 맨 위 필터 칩(전체/노래/아티스트) — 새 검색을 하거나 결과를 닫으면 "전체"로 돌아감
+  const [searchFilter, setSearchFilter] = useState<SearchFilter>("all");
   const [tracks, setTracks] = useState<Track[]>([]);
   const [selectedArtist, setSelectedArtist] = useState<string | null>(null);
   const [isSearching, setIsSearching] = useState(false);
@@ -217,7 +224,12 @@ export default function Home() {
   // id를 매번 올려서 MiniPlayer에 내려주면, 그 안의 전용 effect가 반응해 하이라이트 모드를
   // 켜거나(highlight: true) 끔(false, 평소 전곡 재생).
   const mixRequestIdRef = useRef(0);
-  const [mixRequest, setMixRequest] = useState<{ id: number; highlight: boolean } | null>(null);
+  const [mixRequest, setMixRequest] = useState<{
+    id: number;
+    highlight: boolean;
+    // true면 지금 재생 중인 곡은 그대로 두고 "다음 곡부터" 하이라이트 이어듣기를 켬
+    keepCurrent?: boolean;
+  } | null>(null);
 
   // "다음 트랙" 큐 — 유튜브 뮤직처럼 곡이 끝나면 비슷한 곡으로 자동으로 이어졌으면 좋겠다는
   // 피드백으로 추가. 항상 "지금 재생 중인 곡과 비슷한 곡" 목록이라, 곡이 바뀔 때마다 다시 채움
@@ -258,6 +270,8 @@ export default function Home() {
   const [isCreatingPlaylist, setIsCreatingPlaylist] = useState(false);
   const [newPlaylistName, setNewPlaylistName] = useState("");
   const [isGeneratingPlaylists, setIsGeneratingPlaylists] = useState(false);
+  // 오늘의 믹스는 후보 조회 때문에 몇 초 걸릴 수 있어서, state 반영 전에 빠르게 두 번 눌러도 한 번만 돌게 막음
+  const generatingPlaylistsRef = useRef(false);
   // ✨ 자동 생성 결과가 비었을 때 보관함 안에 보여줄 안내(에러가 아니라 안내라서 setError와 분리)
   const [autoPlaylistNotice, setAutoPlaylistNotice] = useState<string | null>(null);
   // (게이미피케이션 2단계, 2026-10-10) 공개/비공개 전환 + 다른 사람 재생목록 둘러보기 피드.
@@ -284,6 +298,8 @@ export default function Home() {
   // 띄움 — 어느 재생목록을 공개하려던 시도였는지 기억해뒀다가, 닉네임 저장에 성공하면 그
   // 재생목록 공개 전환을 자동으로 다시 시도함(사용자가 "공개" 버튼을 두 번 누르지 않게).
   const [isNicknameModalOpen, setIsNicknameModalOpen] = useState(false);
+  // "내 프로필"을 눌렀는데 닉네임이 없어서 닉네임 모달이 뜬 경우(공개 전환 흐름과 구분)
+  const [nicknameForProfile, setNicknameForProfile] = useState(false);
   const [pendingVisibilityPlaylist, setPendingVisibilityPlaylist] = useState<Playlist | null>(null);
   const [nicknameInput, setNicknameInput] = useState("");
   const [nicknameError, setNicknameError] = useState<string | null>(null);
@@ -484,22 +500,60 @@ export default function Home() {
   // 누를 때마다 구성/순서가 바뀌고, 이전 자동 재생목록은 새 믹스로 교체됨.
   // (원래는 Last.fm 태그로 장르별 재생목록을 만들었는데 태그가 비거나 장르별 곡 수가 모자라 결과가 빈약했음)
   async function handleGenerateAutoPlaylists() {
+    if (generatingPlaylistsRef.current) return;
+    generatingPlaylistsRef.current = true;
     setIsGeneratingPlaylists(true);
     setError(null);
     setAutoPlaylistNotice(null);
     try {
+      // 즐겨찾기 + 즐겨찾기 아티스트 인기곡 + 국내/글로벌 인기 차트에서 30곡을 골라 저장(6초 안에 온 결과만 씀)
+      const mix = await buildAutoMix(favoriteTracks);
+      if (mix && mix.tracks.length > 0) {
+        const created = await createAutoMix(mix.tracks);
+        setAutoPlaylistNotice(
+          mix.fromFavorites
+            ? `${created.trackCount}곡 '오늘의 믹스'를 만들었어요.`
+            : `인기곡으로 ${created.trackCount}곡 '오늘의 믹스'를 만들었어요. 즐겨찾기를 추가하면 취향에 맞춰 바뀌어요.`
+        );
+        refreshPlaylists();
+        // 인기곡/차트 곡은 이미지가 빈 경우가 있어서, 저장된 곡을 받아 와 빈 이미지만 채움(이미 있으면 건너뜀).
+        // "만드는 중…"이 더 길어지지 않게 기다리지 않음 — 상세를 열면 같은 캐시를 써서 채워진 상태로 보임.
+        getPlaylistTracks(created.id)
+          .then((tracks) => {
+            setPlaylistTracksById((prev) => ({ ...prev, [created.id]: tracks }));
+            fillMissingTrackImages(
+              tracks.filter((t) => !t.imageUrl),
+              {
+                keyOf: (t) => `pl:${t.id}`,
+                artistOf: (t) => t.artistName,
+                trackOf: (t) => t.trackName,
+                onFound: (t, imageUrl) => {
+                  setPlaylistTracksById((prev) => ({
+                    ...prev,
+                    [created.id]: (prev[created.id] ?? []).map((p) => (p.id === t.id ? { ...p, imageUrl } : p)),
+                  }));
+                  setPlaylistTrackImage(created.id, t.id, imageUrl).catch(() => {});
+                },
+              }
+            );
+          })
+          .catch(() => {});
+        return;
+      }
+
+      // 6초 안에 모인 후보가 10곡 미만일 때만 서버의 "즐겨찾기만 섞기"로 폴백
       const created = await generateAutoPlaylists();
       // 빈 결과는 실패가 아니라 "즐겨찾기가 없음" — 서버는 기존 자동 재생목록을 그대로 둠
       if (created.length === 0) {
         setAutoPlaylistNotice("즐겨찾기한 곡이 있어야 만들어져요.");
       } else {
-        // 두 번째부터도 새로 만들어졌다는 걸 알 수 있게 매번 안내를 보여줌
         setAutoPlaylistNotice(`즐겨찾기에서 ${created[0].trackCount}곡을 골라 '오늘의 믹스'를 만들었어요.`);
       }
       refreshPlaylists();
     } catch (err) {
       setError("오늘의 믹스를 만들지 못했어요. 잠시 후 다시 시도해주세요.");
     } finally {
+      generatingPlaylistsRef.current = false;
       setIsGeneratingPlaylists(false);
     }
   }
@@ -577,6 +631,30 @@ export default function Home() {
   // pendingVisibilityCategory)을 바로 이어서 시도함. 중복 닉네임(409)/형식 오류(400)는
   // 모달 안에 인라인 에러로 보여주고 모달은 닫지 않음(다시 입력할 수 있게).
   async function handleSetNickname() {
+    // 헤더의 "내 프로필"에서 닉네임이 없어 들어온 경우 — 저장 후 바로 내 프로필을 엶
+    if (nicknameForProfile) {
+      setIsSavingNickname(true);
+      setNicknameError(null);
+      try {
+        const res = await setNickname(nicknameInput);
+        setIsNicknameModalOpen(false);
+        setNicknameForProfile(false);
+        setNicknameInput("");
+        handleOpenPublicFeed();
+        handleViewProfile(res.nickname ?? nicknameInput.trim());
+      } catch (err) {
+        if (err instanceof PlaylistApiError && err.status === 409) {
+          setNicknameError("이미 사용 중인 닉네임이에요.");
+        } else if (err instanceof PlaylistApiError && err.status === 400) {
+          setNicknameError("닉네임은 2~20자로 입력해주세요.");
+        } else {
+          setNicknameError("닉네임을 저장하지 못했어요.");
+        }
+      } finally {
+        setIsSavingNickname(false);
+      }
+      return;
+    }
     if (!pendingVisibilityPlaylist || !pendingVisibilityCategory) return;
     setIsSavingNickname(true);
     setNicknameError(null);
@@ -635,7 +713,11 @@ export default function Home() {
     try {
       const { nickname } = await getMyNickname();
       if (!nickname) {
-        setError("아직 닉네임이 없어요. 재생목록을 공개하면 닉네임을 정할 수 있어요.");
+        // 닉네임이 없으면 안내만 하지 않고 바로 닉네임을 정하게 함 — 그래야 내 프로필(팔로잉 목록 등)을 볼 수 있음
+        setNicknameForProfile(true);
+        setNicknameError(null);
+        setNicknameInput("");
+        setIsNicknameModalOpen(true);
         return;
       }
       handleOpenPublicFeed();
@@ -902,6 +984,62 @@ export default function Home() {
     handleSearch(track.artist);
   }
 
+  // 모바일 검색 결과의 곡 섹션 구성.
+  // - 아티스트 이름으로 검색한 경우(검색된 곡의 대부분이 그 아티스트 곡): "검색된 곡"과
+  //   "OO의 다른 곡"이 전부 같은 아티스트 곡이라 구분이 의미 없어서, 중복을 빼고 하나의 긴 목록으로 합침.
+  // - 곡 제목으로 검색한 경우: 기존처럼 "검색된 곡" + "OO의 다른 곡"을 따로 보여줌.
+  function buildMobileSongSections() {
+    const norm = (s: string) => s.trim().toLowerCase();
+    const searchNote = youtubeFallbackUsed
+      ? "Last.fm에 없어서 유튜브에서 찾았어요"
+      : aiGuessedQuery
+        ? `AI 추측: ${aiGuessedQuery}로 검색됨`
+        : null;
+    const artistNames = new Set(cleanSearchArtists(artists).map((a) => norm(a.name)));
+    const matched = searchTracks.filter((t) => artistNames.has(norm(t.artist))).length;
+    const isArtistSearch =
+      artistNames.size > 0 && searchTracks.length > 0 && matched / searchTracks.length >= 0.6;
+
+    if (isArtistSearch) {
+      const seen = new Set<string>();
+      const merged: Track[] = [];
+      for (const t of [...searchTracks, ...(searchContextArtist ? searchArtistTracks : [])]) {
+        const key = `${norm(t.artist)}|${norm(t.name)}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        merged.push(t);
+      }
+      return [
+        { key: "artist-songs", title: "노래", note: searchNote, tracks: merged, initialVisible: 30 },
+        { key: "tag", title: "관련 곡 (장르/연대)", tracks: tagSearchTracks },
+        { key: "selected", title: `"${selectedArtist}"의 인기곡`, tracks: tracks },
+      ];
+    }
+
+    // 곡 검색: 아래 두 섹션은 이미 위에 나온 곡을 빼고 보여줌(같은 곡이 반복돼 보이지 않게)
+    const shownKeys = new Set(searchTracks.map((t) => `${norm(t.artist)}|${norm(t.name)}`));
+    const withoutShown = (list: Track[]) =>
+      list.filter((t) => !shownKeys.has(`${norm(t.artist)}|${norm(t.name)}`));
+    return [
+      { key: "search", title: "검색된 곡", note: searchNote, tracks: searchTracks },
+      { key: "tag", title: "관련 곡 (장르/연대)", tracks: tagSearchTracks },
+      { key: "selected", title: `"${selectedArtist}"의 인기곡`, tracks: tracks },
+      {
+        key: "artist-more",
+        title: `"${searchContextArtist}"의 다른 곡`,
+        tracks: searchContextArtist ? withoutShown(searchArtistTracks) : [],
+      },
+      { key: "similar", title: "비슷한 곡", tracks: withoutShown(similarSearchTracks) },
+    ];
+  }
+
+  // 검색 결과 화면에서 뒤로 가기 — 홈이 아니라 검색창(최근 검색 목록)으로 돌아감(유튜브 뮤직과 같은 흐름).
+  // 검색창에서 한 번 더 뒤로 가면 그때 홈으로 감.
+  function closeResultsToSearch() {
+    clearSearchResults();
+    searchBarRef.current?.openMobileSearch();
+  }
+
   function clearSearchResults() {
     searchBarRef.current?.clear();
     setArtists([]);
@@ -912,8 +1050,10 @@ export default function Home() {
     setYoutubeFallbackUsed(false);
     setSearchContextArtist(null);
     setSearchArtistTracks([]);
+    setSimilarSearchTracks([]);
     setSelectedArtist(null);
     setTracks([]);
+    setSearchFilter("all");
   }
 
   // 갤럭시 뒤로가기(제스처/버튼)도 검색 결과 화면을 닫도록: 결과 화면이 뜰 때 history 항목을 하나
@@ -934,7 +1074,7 @@ export default function Home() {
     function onPopState() {
       if (searchHistoryPushedRef.current) {
         searchHistoryPushedRef.current = false;
-        clearSearchResults();
+        closeResultsToSearch();
       }
     }
     window.addEventListener("popstate", onPopState);
@@ -944,6 +1084,7 @@ export default function Home() {
 
   async function handleSearch(query: string, artist?: string) {
     setError(null);
+    setSearchFilter("all");
     setSearchingQuery(query);
     setIsSearching(true);
     setSelectedArtist(null);
@@ -970,13 +1111,31 @@ export default function Home() {
       // 검색(예: "싸이")의 곡이 그대로 보이는 순간이 실제로 눈에 띔("아이유" 쳤는데 강남스타일이
       // 뜬 것처럼 보임). 새 fetch를 시작하기 전에 먼저 비워서, 로딩 중엔 섹션이 잠깐 안 보이는
       // 쪽을 택함(틀린 아티스트의 곡을 보여주는 것보단 나음).
-      const contextArtist = data.artists[0]?.name ?? data.tracks[0]?.artist ?? null;
+      //
+      // (곡 제목 검색 보완) "neon"처럼 곡 제목으로 검색하면 아티스트 후보에 이름이 비슷한 엉뚱한
+      // 아티스트(Neon Trees)가 먼저 와서 "그 아티스트의 다른 곡"이 검색한 곡과 상관없어졌음. 검색된 곡의
+      // 대부분이 그 아티스트 곡이면 아티스트 검색, 아니면 곡 검색으로 보고 첫 곡의 아티스트를 맥락으로 씀.
+      const normName = (s: string) => s.trim().toLowerCase();
+      const artistNameSet = new Set(cleanSearchArtists(data.artists).map((a) => normName(a.name)));
+      const matchedCount = data.tracks.filter((t) => artistNameSet.has(normName(t.artist))).length;
+      const isArtistSearch =
+        artistNameSet.size > 0 && data.tracks.length > 0 && matchedCount / data.tracks.length >= 0.6;
+      const contextArtist = isArtistSearch
+        ? data.artists[0]?.name ?? null
+        : data.tracks[0]?.artist ?? data.artists[0]?.name ?? null;
       setSearchContextArtist(contextArtist);
       setSearchArtistTracks([]);
+      setSimilarSearchTracks([]);
       if (contextArtist) {
         getArtistTopTracks(contextArtist)
           .then((res) => setSearchArtistTracks(res.tracks))
           .catch(() => setSearchArtistTracks([]));
+      }
+      // 곡 검색이면 맨 위 곡과 비슷한 곡도 같이 가져옴(믹스 때와 달리 유튜브 쿼터는 안 쓰게 막아둠)
+      if (!isArtistSearch && data.tracks[0]) {
+        getSimilarTracks(data.tracks[0].artist, data.tracks[0].name, { allowYoutube: false })
+          .then((res) => setSimilarSearchTracks(res.tracks))
+          .catch(() => setSimilarSearchTracks([]));
       }
     } catch (err) {
       setError("검색에 실패했어요. 백엔드 서버가 켜져있는지 확인해주세요.");
@@ -1257,7 +1416,27 @@ export default function Home() {
   // 풀(없으면 글로벌 차트)에서 무작위 시작 + 평소의 유사곡 라디오 큐로 이어짐.
   // highlight가 true면 재생 시작과 동시에 MiniPlayer의 연속 하이라이트 모드도 같이 켜서, 그
   // 뒤로는 하이라이트만 이어서 계속 재생됨 — false면 평소처럼 전곡이 이어짐.
+  const [highlightOn, setHighlightOn] = useState(false);
+
   function handleStartMix(highlight: boolean) {
+    // 이미 곡을 듣고 있는데 하이라이트를 켜면 그 곡이 끊기고 새 곡으로 넘어가서 어색했음 —
+    // 지금 곡은 끝까지 듣고, 다음 곡부터 하이라이트로 이어지게 모드만 켬.
+    // 재생 중인 곡이 없으면 노래를 새로 틀지 않고 모드만 켜고 끔 — 다음에 재생하는 곡부터 적용됨
+    if (highlight && !nowPlaying) {
+      setHighlightOn((prev) => !prev);
+      return;
+    }
+    // 이미 켜져 있는데 또 누르면 끄기(토글)
+    if (highlight && highlightOn && nowPlaying) {
+      mixRequestIdRef.current += 1;
+      setMixRequest({ id: mixRequestIdRef.current, highlight: false, keepCurrent: true });
+      return;
+    }
+    if (highlight && nowPlaying) {
+      mixRequestIdRef.current += 1;
+      setMixRequest({ id: mixRequestIdRef.current, highlight: true, keepCurrent: true });
+      return;
+    }
     const moodPool = [...domesticMoodTracks, ...internationalMoodTracks];
     if (selectedMood && moodPool.length > 0) {
       const [first, ...rest] = shuffleArray(moodPool);
@@ -2297,20 +2476,57 @@ export default function Home() {
             if (!start) return;
             const t = e.changedTouches[0];
             if (t.clientX - start.x > 70 && Math.abs(t.clientY - start.y) < 60) {
-              clearSearchResults();
+              closeResultsToSearch();
             }
           }}
         >
-          <button
-            type="button"
-            onClick={clearSearchResults}
-            className="sticky top-0 z-10 -mx-4 -mt-4 flex items-center gap-1 bg-black/95 px-4 py-4 text-base text-white/80 hover:text-white sm:hidden"
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-4 w-4">
-              <path d="m15 18-6-6 6-6" />
-            </svg>
-            뒤로
-          </button>
+          {/* 결과 화면 맨 위: 뒤로 + 검색창(현재 검색어). 검색창을 누르면 전체화면 검색이 열려서
+              바로 다른 검색어로 다시 검색할 수 있음(유튜브 뮤직 결과 화면과 같은 구조) */}
+          <div className="sticky top-0 z-10 -mx-4 -mt-4 flex items-center gap-1 bg-black px-3 py-3 sm:hidden">
+            <button
+              type="button"
+              onClick={closeResultsToSearch}
+              aria-label="뒤로"
+              className="shrink-0 rounded-full p-2 text-white/80 hover:bg-white/10 hover:text-white"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5">
+                <path d="m15 18-6-6 6-6" />
+              </svg>
+            </button>
+            <button
+              type="button"
+              onClick={() => searchBarRef.current?.openMobileSearch()}
+              aria-label="검색어 수정"
+              className="flex min-w-0 flex-1 items-center rounded-full bg-white/10 px-4 py-2.5 text-left text-sm text-white"
+            >
+              <span className="truncate">{searchingQuery || "아티스트 또는 곡 제목을 검색해보세요"}</span>
+            </button>
+          </div>
+          {/* 모바일(sm 미만): 필터 칩 + 세로 한 줄 목록. key가 바뀌면(새 검색) "더보기" 펼침 상태도 초기화 */}
+          <MobileSearchResults
+            key={`${searchTracks[0]?.artist}|${searchTracks[0]?.name}|${artists[0]?.name}|${searchContextArtist}`}
+            filter={searchFilter}
+            onFilterChange={setSearchFilter}
+            artists={cleanSearchArtists(artists)}
+            artistNote={
+              correctedArtistName
+                ? `오타 교정: ${correctedArtistName}로 검색됨`
+                : aiGuessedQuery
+                  ? `AI 추측: ${aiGuessedQuery}로 검색됨`
+                  : null
+            }
+            isArtistFavorite={(artist) => favorites.some((f) => f.artistName === artist.name)}
+            onSelectArtist={handleSelectArtist}
+            onToggleFavoriteArtist={handleToggleFavorite}
+            songSections={buildMobileSongSections()}
+            isTrackFavorite={isTrackFavorite}
+            onToggleFavoriteTrack={handleToggleFavoriteTrack}
+            onPlay={handlePlay}
+            onAddToPlaylist={handleOpenAddToPlaylist}
+            onViewArtist={handleViewArtist}
+          />
+          {/* 데스크톱(sm 이상): 기존 가로 카드 섹션 그대로 — sm:contents라 부모 flex 배치도 예전과 같음 */}
+          <div className="hidden sm:contents">
       {searchTracks.length > 0 && (
         <div className="w-full max-w-xl">
           <p className="mb-2 text-xl font-bold text-white">
@@ -2413,6 +2629,7 @@ export default function Home() {
           />
         </div>
       )}
+          </div>
         </div>
       )}
 
@@ -2614,9 +2831,17 @@ export default function Home() {
       <button
         type="button"
         onClick={() => handleStartMix(true)}
-        className="flex flex-1 flex-col items-center justify-center gap-1 text-[11px] text-white/70"
+        aria-pressed={highlightOn}
+        className="flex flex-1 flex-col items-center justify-center gap-1 text-[11px]"
+        style={{ color: highlightOn ? "#ff3b5c" : "rgba(255,255,255,0.7)" }}
       >
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-5 w-5">
+        <svg
+          viewBox="0 0 24 24"
+          fill={highlightOn ? "currentColor" : "none"}
+          stroke="currentColor"
+          strokeWidth="2"
+          className="h-5 w-5"
+        >
           <path d="M13 2 4 14h6l-1 8 9-12h-6l1-8Z" strokeLinejoin="round" />
         </svg>
         하이라이트
@@ -2681,6 +2906,8 @@ export default function Home() {
           handleTrackEnded({ videoId: data.videoId, name: data.title, artist: data.artist })
         }
         mixRequest={mixRequest}
+        onHighlightModeChange={setHighlightOn}
+        initialHighlight={highlightOn}
         queue={queue}
         onSelectQueueTrack={(t) => handlePlay(t, { fromQueue: true })}
         onSaveQueueToPlaylist={(tracks) =>
@@ -2745,6 +2972,14 @@ export default function Home() {
               setOpenPlaylistId(null);
             }}
             onPlaySelected={handlePlaySelectedPlaylistTracks}
+            onAddSongs={() => {
+              // 빈 재생목록에서 "노래 추가" → 상세 화면을 닫고 검색 화면을 바로 열어줌.
+              // 보관함으로 되돌아가지 않도록 ref는 내리고, 검색해서 곡을 담는 건 기존 "+ 담기" 흐름 사용.
+              playlistOpenedFromLibraryRef.current = false;
+              setOpenPlaylistId(null);
+              setIsLibraryOpen(false);
+              searchBarRef.current?.openMobileSearch();
+            }}
             onAddSelectedToPlaylist={(tracks) =>
               handleOpenBulkAddToPlaylist(
                 tracks.map((t) => ({ name: t.trackName, artist: t.artistName, image: t.imageUrl }))
@@ -2929,7 +3164,20 @@ export default function Home() {
         }}
         isFavorite={isTrackFavorite}
         onToggleFavorite={handleToggleFavoriteTrack}
-        onPlay={handlePlay}
+        // 아티스트 페이지(z-40)가 하단 미니 플레이어(z-30)를 가려서, 재생이 시작돼도 화면엔 변화가
+        // 없어 보였음 — 재생목록 상세와 같이 재생을 시작하면 이 화면을 닫아 미니 플레이어가 보이게 함.
+        onPlay={(track) => {
+          artistOpenedFromLibraryRef.current = false;
+          setArtistPageName(null);
+          handlePlay(track);
+        }}
+        onPlayAll={(list) => {
+          if (list.length === 0) return;
+          artistOpenedFromLibraryRef.current = false;
+          setArtistPageName(null);
+          const [first, ...rest] = list;
+          handlePlay(first, { manualNext: rest });
+        }}
         onAddToPlaylist={handleOpenAddToPlaylist}
       />
     )}
@@ -3039,6 +3287,7 @@ export default function Home() {
         onClick={() => {
           if (!isSavingNickname) {
             setIsNicknameModalOpen(false);
+            setNicknameForProfile(false);
             setPendingVisibilityPlaylist(null);
             setPendingVisibilityCategory(null);
           }
@@ -3050,7 +3299,7 @@ export default function Home() {
         >
           <p className="mb-1 text-sm font-medium text-white/90">닉네임을 정해주세요</p>
           <p className="mb-3 text-xs text-white/40">
-            공개한 재생목록은 이 닉네임으로 랭킹 피드에 표시돼요. 나중에 다시 정해서 바꿀 수도 있어요.
+            공개한 재생목록과 프로필은 이 닉네임으로 표시돼요. 나중에 다시 정해서 바꿀 수도 있어요.
           </p>
           <input
             autoFocus
@@ -3070,6 +3319,7 @@ export default function Home() {
               disabled={isSavingNickname}
               onClick={() => {
                 setIsNicknameModalOpen(false);
+                setNicknameForProfile(false);
                 setPendingVisibilityPlaylist(null);
                 setPendingVisibilityCategory(null);
               }}
@@ -3083,7 +3333,7 @@ export default function Home() {
               onClick={handleSetNickname}
               className="rounded-md bg-accent px-3 py-1.5 text-sm text-black disabled:opacity-40"
             >
-              {isSavingNickname ? "저장 중..." : "설정하고 공개하기"}
+              {isSavingNickname ? "저장 중..." : nicknameForProfile ? "설정하기" : "설정하고 공개하기"}
             </button>
           </div>
         </div>

@@ -10,6 +10,8 @@ type ArtistPageProps = {
   isFavorite: (track: Track) => boolean;
   onToggleFavorite: (track: Track) => void;
   onPlay: (track: Track) => void;
+  // "▶ 재생" 버튼 — 맨 위 곡만이 아니라 목록 전체를 순서대로 이어서 재생
+  onPlayAll?: (tracks: Track[]) => void;
   onAddToPlaylist?: (track: Track) => void;
 };
 
@@ -21,6 +23,7 @@ export default function ArtistPage({
   isFavorite,
   onToggleFavorite,
   onPlay,
+  onPlayAll,
   onAddToPlaylist,
 }: ArtistPageProps) {
   const [tracks, setTracks] = useState<Track[] | null>(null);
@@ -68,7 +71,7 @@ export default function ArtistPage({
             </div>
             {tracks && tracks.length > 0 && (
               <button
-                onClick={() => onPlay(tracks[0])}
+                onClick={() => (onPlayAll ? onPlayAll(tracks) : onPlay(tracks[0]))}
                 className="rounded-full bg-accent px-4 py-2 text-sm font-bold text-white"
               >
                 ▶ 재생

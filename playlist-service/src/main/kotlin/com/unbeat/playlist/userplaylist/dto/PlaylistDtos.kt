@@ -81,6 +81,19 @@ data class PlaylistTrackRequest(
     val imageUrl: String? = null
 )
 
+// 오늘의 믹스 저장(POST /playlists/auto-mix) — 곡 고르기(즐겨찾기 + 비슷한 곡 + 인기곡)는 프론트가
+// 기존 FastAPI 엔드포인트로 하고, 여기서는 고른 곡을 "오늘의 믹스"로 저장만 함.
+data class AutoMixTrack(
+    val artistName: String,
+    val trackName: String,
+    val url: String? = null,
+    val imageUrl: String? = null
+)
+
+data class AutoMixRequest(
+    val tracks: List<AutoMixTrack> = emptyList()
+)
+
 // 재생목록 이름 수정(PATCH /playlists/{id}/name). 필드가 하나뿐이지만 String이라 위
 // PlaylistVisibilityRequest의 isPublic 이름 충돌 문제는 없음(FavoriteTrackImageRequest와 같은 형태).
 data class PlaylistRenameRequest(

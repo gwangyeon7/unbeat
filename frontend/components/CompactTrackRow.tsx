@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import { useState } from "react";
+import { useQueueActions } from "@/lib/queueContext";
 
 type CompactTrackRowProps = {
   title: string;
@@ -13,6 +14,9 @@ type CompactTrackRowProps = {
   onAddToPlaylist?: () => void;
   // 있으면 ⋮ 메뉴에 "이 아티스트 곡 보기"가 생김
   onViewArtist?: () => void;
+  // 있으면 ⋮ 메뉴에 "다음에 재생" / "대기열에 추가"가 생김 — 듣고 싶은 곡을 미리 넣어두는 용도
+  onPlayNext?: () => void;
+  onAddToQueue?: () => void;
 };
 
 // 유튜브 뮤직 "빠른 선곡"/"다시 듣기"처럼 작은 정사각 썸네일 + 2줄 텍스트로 된 가로 한 줄.
@@ -29,8 +33,15 @@ export default function CompactTrackRow({
   onToggleFavorite,
   onAddToPlaylist,
   onViewArtist,
+  onPlayNext,
+  onAddToQueue,
 }: CompactTrackRowProps) {
   const [menuOpen, setMenuOpen] = useState(false);
+  // props로 직접 안 받았으면 page.tsx가 제공한 대기열 기능을 씀(모든 곡 목록에 같은 메뉴가 생김)
+  const queueActions = useQueueActions();
+  const trackInfo = { name: title, artist: subtitle, image };
+  const playNext = onPlayNext ?? (queueActions ? () => queueActions.playNext(trackInfo) : undefined);
+  const addToQueue = onAddToQueue ?? (queueActions ? () => queueActions.addToQueue(trackInfo) : undefined);
 
   function runAndClose(action?: () => void) {
     setMenuOpen(false);
@@ -124,6 +135,26 @@ export default function CompactTrackRow({
                 ✕
               </button>
             </div>
+            {playNext && (
+              <button
+                type="button"
+                onClick={() => runAndClose(playNext)}
+                className="flex w-full items-center gap-4 px-5 py-3.5 text-left text-sm hover:bg-white/5"
+              >
+                <span className="w-5 text-center text-base">▶</span>
+                다음에 재생
+              </button>
+            )}
+            {addToQueue && (
+              <button
+                type="button"
+                onClick={() => runAndClose(addToQueue)}
+                className="flex w-full items-center gap-4 px-5 py-3.5 text-left text-sm hover:bg-white/5"
+              >
+                <span className="w-5 text-center text-base">≡</span>
+                대기열에 추가
+              </button>
+            )}
             {onAddToPlaylist && (
               <button
                 type="button"

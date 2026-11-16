@@ -5,6 +5,7 @@ import SearchBar, { type SearchBarHandle, type RecentSearchEntry } from "@/compo
 import ArtistCard from "@/components/ArtistCard";
 import TrackList from "@/components/TrackList";
 import CompactTrackGrid from "@/components/CompactTrackGrid";
+import { QueueActionsContext } from "@/lib/queueContext";
 import MoodChips, { MOODS } from "@/components/MoodChips";
 import MiniPlayer, { type NowPlayingTrack } from "@/components/MiniPlayer";
 import FavoriteTrackRow from "@/components/FavoriteTrackRow";
@@ -1514,6 +1515,28 @@ export default function Home() {
   // 지금 재생 중인 곡의 videoId/제목/아티스트로 확실히 덮어써서, 혹시 모를 큐 상태 불일치가
   // 있어도 화면에 보이는 정보가 실제 재생과 어긋나지 않게 함(이미지 등 나머지 필드는 로컬
   // 큐에 있던 값을 그대로 재사용).
+  // 곡 메뉴의 "다음에 재생"(큐 맨 앞) / "대기열에 추가"(큐 맨 뒤) — 듣고 싶은 곡을 미리 넣어둠.
+  // 재생 중인 곡이 없으면 대기열이 의미 없어서 그냥 바로 재생함. 같은 곡이 이미 큐에 있으면 옮김.
+  function handleQueueTrack(track: Track, position: "next" | "last") {
+    if (!nowPlaying) {
+      handlePlay(track);
+      return;
+    }
+    setQueue((prev) => {
+      const rest = prev.filter((t) => !(t.name === track.name && t.artist === track.artist));
+      return position === "next" ? [track, ...rest] : [...rest, track];
+    });
+    showToast(position === "next" ? "다음에 재생돼요" : "대기열에 추가했어요");
+  }
+
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  function showToast(message: string) {
+    setToastMessage(message);
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    toastTimerRef.current = setTimeout(() => setToastMessage(null), 1800);
+  }
+
   function handleTrackEnded(nativeOverride?: { videoId: string; name: string; artist: string }) {
     function withOverride(base: Track | undefined): Track | undefined {
       if (!nativeOverride) return base;
@@ -2119,7 +2142,12 @@ export default function Home() {
   }
 
   return (
-    <>
+    <QueueActionsContext.Provider
+      value={{
+        playNext: (t) => handleQueueTrack({ ...t, listeners: null, url: "", image: t.image ?? null }, "next"),
+        addToQueue: (t) => handleQueueTrack({ ...t, listeners: null, url: "", image: t.image ?? null }, "last"),
+      }}
+    >
       {/* 상단 고정 헤더 — 멜론/유튜브 뮤직처럼 로고 + 검색창을 맨 위에 나란히 둠.
           기존엔 로고가 화면 중앙에 크게 있고 검색창은 본문 중간에 묻혀 있었는데,
           실제 음악 서비스들은 다 검색을 최상단에 상시 노출한다는 본인 피드백 반영. */}
@@ -3179,7 +3207,18 @@ export default function Home() {
           handlePlay(first, { manualNext: rest });
         }}
         onAddToPlaylist={handleOpenAddToPlaylist}
+        onPlayNext={(t) => handleQueueTrack(t, "next")}
+        onAddToQueue={(t) => handleQueueTrack(t, "last")}
       />
+    )}
+
+    {/* 대기열 추가 안내 — 잠깐 떴다 사라지는 작은 알림 */}
+    {toastMessage && (
+      <div className="pointer-events-none fixed inset-x-0 bottom-28 z-[80] flex justify-center px-4">
+        <div className="rounded-full bg-neutral-800 px-4 py-2 text-sm text-white shadow-lg ring-1 ring-white/10">
+          {toastMessage}
+        </div>
+      </div>
     )}
 
     {/* (게이미피케이션, UI 재구조화) 다른 사용자가 공개한 재생목록 둘러보기 — 전용 전체화면
@@ -3339,6 +3378,6 @@ export default function Home() {
         </div>
       </div>
     )}
-    </>
+    </QueueActionsContext.Provider>
   );
 }

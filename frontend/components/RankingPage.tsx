@@ -414,7 +414,7 @@ export default function RankingPage({
   const [selectedFilterCategory, setSelectedFilterCategory] = useState<string | null>(null);
   // (랭킹 탭, 2026-10-29) "전체"(누적 좋아요 순) / "이번 주"(최근 7일 좋아요 순). 팔로우 탭은
   // 팔로우 기능을 만든 뒤 추가 예정. 이것도 이미 받아온 목록을 클라이언트에서 정렬만 함.
-  const [rankTab, setRankTab] = useState<"all" | "week" | "liked">("all");
+  const [rankTab, setRankTab] = useState<"all" | "week" | "new" | "liked">("all");
 
   if (typeof document === "undefined") return null;
 
@@ -440,7 +440,9 @@ export default function RankingPage({
           .sort((a, b) => b.weeklyLikeCount - a.weeklyLikeCount)
       : rankTab === "liked"
         ? categoryFiltered.filter((p) => p.likedByMe)
-        : categoryFiltered;
+        : rankTab === "new"
+          ? [...categoryFiltered].sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+          : categoryFiltered;
   const overallRank = (id: number) => publicPlaylists.findIndex((p) => p.id === id) + 1;
 
   const title =
@@ -595,6 +597,7 @@ export default function RankingPage({
               {([
                 ["all", "전체"],
                 ["week", "이번 주"],
+                ["new", "최신"],
                 ["liked", "좋아요한"],
               ] as const).map(([value, label]) => (
                 <button
@@ -651,7 +654,7 @@ export default function RankingPage({
                 {filteredFeedPlaylists.map((p, i) => (
                   <PlaylistCard
                     key={p.id}
-                    rank={rankTab === "liked" ? overallRank(p.id) : i + 1}
+                    rank={rankTab === "liked" || rankTab === "new" ? overallRank(p.id) : i + 1}
                     playlist={p}
                     onSelectPlaylist={onSelectPlaylist}
                     onViewProfile={onViewProfile}

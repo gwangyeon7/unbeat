@@ -5,6 +5,7 @@ import SearchBar, { type SearchBarHandle, type RecentSearchEntry } from "@/compo
 import ArtistCard from "@/components/ArtistCard";
 import TrackList from "@/components/TrackList";
 import CompactTrackGrid from "@/components/CompactTrackGrid";
+import { QueueActionsContext } from "@/lib/queueContext";
 import MoodChips, { MOODS } from "@/components/MoodChips";
 import MiniPlayer, { type NowPlayingTrack } from "@/components/MiniPlayer";
 import FavoriteTrackRow from "@/components/FavoriteTrackRow";
@@ -281,6 +282,26 @@ export default function Home() {
   const [isTogglingVisibility, setIsTogglingVisibility] = useState(false);
   const [isPublicFeedOpen, setIsPublicFeedOpen] = useState(false);
   const [publicPlaylists, setPublicPlaylists] = useState<PublicPlaylist[]>([]);
+  // 홈 화면 "인기 재생목록 TOP 5" 미리보기용
+  const [homeRanking, setHomeRanking] = useState<PublicPlaylist[]>([]);
+  function refreshHomeRanking() {
+    getPublicPlaylists()
+      .then((list) => setHomeRanking(list.slice(0, 5)))
+      .catch(() => {});
+  }
+  useEffect(() => {
+    refreshHomeRanking();
+    // 앱을 다시 열 때도 최신 순위/좋아요로 갱신
+    const onVisible = () => {
+      if (document.visibilityState === "visible") refreshHomeRanking();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, []);
+  // 랭킹 화면을 닫고 홈으로 돌아올 때(좋아요를 누르고 왔을 수 있음) 다시 불러옴
+  useEffect(() => {
+    if (!isPublicFeedOpen) refreshHomeRanking();
+  }, [isPublicFeedOpen]);
   const [isLoadingPublicFeed, setIsLoadingPublicFeed] = useState(false);
   // 피드에서 재생목록을 클릭하면 그 안의 곡 목록을 같은 모달 안에서 보여줌(상세 화면을 또
   // 새로 안 만들고, "둘러보기 목록 <-> 선택한 재생목록 곡" 두 단계만 모달 하나로 처리).
@@ -692,7 +713,9 @@ export default function Home() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
+  const profileOpenedDirectlyRef = useRef(false);
   function handleOpenPublicFeed() {
+    profileOpenedDirectlyRef.current = false;
     setIsPublicFeedOpen(true);
     setViewingPublicPlaylistId(null);
     setPublicPlaylistTracks(null);
@@ -722,6 +745,8 @@ export default function Home() {
       }
       handleOpenPublicFeed();
       handleViewProfile(nickname);
+      // 프로필 탭으로 바로 들어온 경우: 뒤로가기는 랭킹이 아니라 메인으로
+      profileOpenedDirectlyRef.current = true;
     } catch {
       setError("내 프로필을 불러오지 못했어요.");
     }
@@ -797,6 +822,10 @@ export default function Home() {
       setViewingProfileNickname(null);
       setProfilePlaylists(null);
       setProfileInfo(null);
+      if (profileOpenedDirectlyRef.current) {
+        profileOpenedDirectlyRef.current = false;
+        setIsPublicFeedOpen(false);
+      }
     }
   }
 
@@ -864,7 +893,33 @@ export default function Home() {
     const { data: subscription } = supabase.auth.onAuthStateChange((_event, session) => {
       setUserEmail(session?.user.email ?? null);
     });
-    return () => subscription.subscription.unsubscribe();
+
+    // 저장된 세션이 있어도 서버에서는 이미 만료/무효일 수 있음(앱을 오래 닫아둔 뒤, 다른 기기에서
+    // 같은 계정으로 로그인 등) — 그러면 화면은 로그인 상태인데 요청은 비로그인으로 처리됨.
+    // 앱을 열거나 다시 화면으로 돌아올 때 서버에 토큰을 확인해서, 무효면 로그아웃 상태로 맞춤.
+    // 네트워크 오류 같은 일시적 실패는 그대로 두고(status 없음), 인증 거절일 때만 로그아웃 처리.
+    async function validateSession() {
+      if (!supabase) return;
+      const { data } = await supabase.auth.getSession();
+      if (!data.session) {
+        setUserEmail(null);
+        return;
+      }
+      const { error } = await supabase.auth.getUser();
+      if (error && (error.status === 401 || error.status === 403)) {
+        await supabase.auth.signOut({ scope: "local" });
+        setUserEmail(null);
+      }
+    }
+    function handleVisible() {
+      if (document.visibilityState === "visible") validateSession();
+    }
+    validateSession();
+    document.addEventListener("visibilitychange", handleVisible);
+    return () => {
+      subscription.subscription.unsubscribe();
+      document.removeEventListener("visibilitychange", handleVisible);
+    };
   }, []);
 
   useEffect(() => {
@@ -1384,6 +1439,10 @@ export default function Home() {
       // 더 여유 있게 쓸 수 있음.
       const videoId = track.videoId ?? (await searchYoutubeVideo(track.artist, track.name)).videoId;
       if (videoId) {
+        // 지금 재생하는 곡은 "내가 넣어둔 대기 곡" 목록에서 뺌(재생 시작됨)
+        commitUserQueued(
+          userQueuedRef.current.filter((t) => !(t.name === track.name && t.artist === track.artist))
+        );
         const prev = nowPlayingRef.current;
         if (prev && !options?.skipHistory && prev.videoId !== videoId) {
           playHistoryRef.current = [...playHistoryRef.current, prev].slice(-30);
@@ -1393,6 +1452,8 @@ export default function Home() {
           // 재생목록에서 고른 곡들을 순서대로 재생 중 — 큐를 비슷한 곡으로 덮어쓰지 않고
           // 남은 목록을 그대로 "다음 트랙" 패널에 반영함.
           isManualQueueRef.current = true;
+          // 목록을 직접 골라 재생하는 경우엔 그 목록이 곧 대기열이라, 따로 넣어둔 곡은 비움
+          commitUserQueued([]);
           setQueue(options.manualNext);
         } else {
           // 평소처럼 카드/검색 결과를 직접 눌러서 재생한 경우 — 수동 큐 모드는 해제하고
@@ -1481,7 +1542,10 @@ export default function Home() {
     getSimilarTracks(artist, name)
       .then((data) => {
         if (!append) {
-          setQueue(data.tracks);
+          // 내가 직접 넣어둔 곡들을 맨 앞에 유지하고 그 뒤에 비슷한 곡을 이어붙임
+          const mine = userQueuedRef.current.filter((t) => trackKey(t) !== playedKey);
+          const mineKeys = new Set(mine.map(trackKey));
+          setQueue([...mine, ...data.tracks.filter((t) => !mineKeys.has(trackKey(t)))]);
           return;
         }
         setQueue((prev) => {
@@ -1500,7 +1564,7 @@ export default function Home() {
       .catch(() => {
         // append 모드가 아닐 때(=완전히 새 곡으로 전환)만 비움 — append 모드에서 API 하나
         // 실패했다고 이미 떠 있던 후보까지 지울 이유는 없음.
-        if (!append) setQueue([]);
+        if (!append) setQueue(userQueuedRef.current.filter((t) => trackKey(t) !== playedKey));
       });
   }
 
@@ -1514,6 +1578,43 @@ export default function Home() {
   // 지금 재생 중인 곡의 videoId/제목/아티스트로 확실히 덮어써서, 혹시 모를 큐 상태 불일치가
   // 있어도 화면에 보이는 정보가 실제 재생과 어긋나지 않게 함(이미지 등 나머지 필드는 로컬
   // 큐에 있던 값을 그대로 재사용).
+  // 곡 메뉴의 "다음에 재생"(큐 맨 앞) / "대기열에 추가"(큐 맨 뒤) — 듣고 싶은 곡을 미리 넣어둠.
+  // 재생 중인 곡이 없으면 대기열이 의미 없어서 그냥 바로 재생함. 같은 곡이 이미 큐에 있으면 옮김.
+  function handleQueueTrack(track: Track, position: "next" | "last") {
+    if (!nowPlaying) {
+      handlePlay(track);
+      return;
+    }
+    // 내가 직접 넣은 곡은 따로도 기억해둠 — 비슷한 곡 추천이 늦게 도착해서 큐를 통째로 덮어써도
+    // 내가 넣은 곡이 사라지지 않게 함. 큐 맨 앞에 "내가 추가한 곡"이 모이고(방금 "다음에 재생"한
+    // 곡이 맨 처음, "대기열에 추가"한 곡은 내가 넣은 곡들 맨 뒤), 그 뒤에 추천 곡이 이어짐.
+    const sameTrack = (t: Track) => t.name === track.name && t.artist === track.artist;
+    const pending = userQueuedRef.current.filter((t) => !sameTrack(t));
+    const mine = position === "next" ? [track, ...pending] : [...pending, track];
+    commitUserQueued(mine);
+    const keyOf = (t: Track) => `${t.artist.toLowerCase().trim()}::${t.name.toLowerCase().trim()}`;
+    const mineKeys = new Set(mine.map(keyOf));
+    setQueue((prev) => [...mine, ...prev.filter((t) => !mineKeys.has(keyOf(t)))]);
+    showToast(position === "next" ? "다음에 재생돼요" : "대기열에 추가했어요");
+  }
+
+  // 사용자가 "다음에 재생"/"대기열에 추가"로 직접 넣은 곡들(재생되면 목록에서 빠짐). ref는 비동기
+  // 콜백 안에서 최신 값을 읽으려고, state(키 목록)는 플레이어의 "내가 추가한 곡" 구분 표시용.
+  const userQueuedRef = useRef<Track[]>([]);
+  const [userQueuedKeys, setUserQueuedKeys] = useState<string[]>([]);
+  function commitUserQueued(list: Track[]) {
+    userQueuedRef.current = list;
+    setUserQueuedKeys(list.map((t) => `${t.artist.toLowerCase().trim()}::${t.name.toLowerCase().trim()}`));
+  }
+
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  function showToast(message: string) {
+    setToastMessage(message);
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    toastTimerRef.current = setTimeout(() => setToastMessage(null), 1800);
+  }
+
   function handleTrackEnded(nativeOverride?: { videoId: string; name: string; artist: string }) {
     function withOverride(base: Track | undefined): Track | undefined {
       if (!nativeOverride) return base;
@@ -2119,7 +2220,12 @@ export default function Home() {
   }
 
   return (
-    <>
+    <QueueActionsContext.Provider
+      value={{
+        playNext: (t) => handleQueueTrack({ ...t, listeners: null, url: "", image: t.image ?? null }, "next"),
+        addToQueue: (t) => handleQueueTrack({ ...t, listeners: null, url: "", image: t.image ?? null }, "last"),
+      }}
+    >
       {/* 상단 고정 헤더 — 멜론/유튜브 뮤직처럼 로고 + 검색창을 맨 위에 나란히 둠.
           기존엔 로고가 화면 중앙에 크게 있고 검색창은 본문 중간에 묻혀 있었는데,
           실제 음악 서비스들은 다 검색을 최상단에 상시 노출한다는 본인 피드백 반영. */}
@@ -2187,8 +2293,8 @@ export default function Home() {
             <button
               type="button"
               aria-label={userEmail ? "프로필" : "로그인"}
-              onClick={() => (userEmail ? setIsProfileSheetOpen(true) : setIsAuthModalOpen(true))}
-              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-white/80 hover:bg-white/10 lg:hidden"
+              onClick={() => (userEmail ? handleOpenMyProfile() : setIsAuthModalOpen(true))}
+              className="hidden h-11 w-11 shrink-0 items-center justify-center rounded-full text-white/80 hover:bg-white/10 sm:flex lg:hidden"
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-5 w-5">
                 <circle cx="12" cy="8" r="4" />
@@ -2198,18 +2304,22 @@ export default function Home() {
           </div>
           {/* 로그인은 선택 기능이라(ROADMAP 5-2) 안 눌러도 기존 기능 전부 그대로 동작함.
               로그인하면 이메일 일부 + 로그아웃 버튼으로 바뀜. */}
-          <div className="hidden items-center justify-end lg:flex">
+          <div className="hidden items-center justify-end gap-1 lg:flex">
             {userEmail ? (
-              <button
-                type="button"
-                onClick={async () => {
-                  await supabase?.auth.signOut();
-                }}
-                className="truncate rounded-full px-3 py-1.5 text-xs text-white/70 hover:bg-white/10"
-                title={userEmail}
-              >
-                {userEmail.split("@")[0]} · 로그아웃
-              </button>
+              <>
+                <button
+                  type="button"
+                  onClick={handleOpenMyProfile}
+                  className="flex items-center gap-1.5 truncate rounded-full px-3 py-1.5 text-xs text-white/80 hover:bg-white/10"
+                  title={userEmail}
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-4 w-4 shrink-0">
+                    <circle cx="12" cy="8" r="4" />
+                    <path d="M4 21c0-4 4-6 8-6s8 2 8 6" />
+                  </svg>
+                  <span className="truncate">내 프로필</span>
+                </button>
+</>
             ) : (
               <button
                 type="button"
@@ -2299,6 +2409,49 @@ export default function Home() {
           새로고침해도 고정돼야 맞는데 "유튜브 뮤직처럼 매번 좀 달라졌으면 좋겠다"는 피드백을 받아
           따로 둔 섹션. 처음엔 즐겨찾기 태그/아티스트 기반 셔플이었는데([[학습노트 37번]]), 이후
           실제 Claude Haiku 4.5 LLM 추천으로 교체함([[학습노트 38번]], 실패 시에만 셔플로 폴백). */}
+      {homeRanking.length > 0 && (
+        <div className="w-full max-w-xl">
+          <div className="mb-2 flex items-center justify-between">
+            <p className="text-xl font-bold text-white">인기 재생목록 TOP {homeRanking.length}</p>
+            <button
+              type="button"
+              onClick={handleOpenPublicFeed}
+              className="rounded-full border border-white/30 px-3 py-1 text-xs font-medium text-white hover:bg-white/10"
+            >
+              전체 랭킹
+            </button>
+          </div>
+          <div className="flex flex-col">
+            {homeRanking.map((p, i) => (
+              <button
+                key={p.id}
+                type="button"
+                onClick={() => {
+                  handleOpenPublicFeed();
+                  handleViewPublicPlaylist(p.id);
+                }}
+                className="flex items-center gap-3 rounded-lg px-1 py-1.5 text-left hover:bg-white/5"
+              >
+                <span className={`w-5 shrink-0 text-center text-base font-bold ${i === 0 ? "text-[#ff3b5c]" : "text-white/60"}`}>
+                  {i + 1}
+                </span>
+                {p.coverImageUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={p.coverImageUrl} alt="" className="h-11 w-11 shrink-0 rounded object-cover" />
+                ) : (
+                  <div className="h-11 w-11 shrink-0 rounded bg-white/10" />
+                )}
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium text-white">{p.name}</p>
+                  <p className="truncate text-xs text-white/50">{p.ownerNickname ?? "익명"} · {p.trackCount}곡</p>
+                </div>
+                <span className="shrink-0 text-xs text-white/60">♥ {p.likeCount}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {quickPickTracks.length > 0 && (
         <div className="w-full max-w-xl">
           <div className="mb-2 flex items-center justify-between">
@@ -2812,16 +2965,18 @@ export default function Home() {
       {/* (게이미피케이션, UI 재구조화 2026-10-10) 처음엔 재생목록 상세 화면 안 작은 🌐 아이콘으로
           넣었는데, "게이미피케이션 기능인데 아이콘 하나로 나오니 이상하다, 랭킹 페이지를 따로
           두는 게 낫겠다"는 라이브 피드백을 받고 다른 탭들과 동급인 전용 탭으로 승격함. */}
+      {/* 랭킹은 홈의 "인기 재생목록 TOP 5 > 전체 랭킹"으로 들어가므로 탭을 프로필로 교체.
+          누르면 로그인 상태면 바로 내 프로필(로그아웃은 프로필 안), 아니면 로그인 모달. */}
       <button
         type="button"
-        onClick={handleOpenPublicFeed}
+        onClick={() => (userEmail ? handleOpenMyProfile() : setIsAuthModalOpen(true))}
         className="flex flex-1 flex-col items-center justify-center gap-1 text-[11px] text-white/70"
       >
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-5 w-5">
-          <path d="M8 21h8M12 17v4M7 4h10l-1 7a4 4 0 0 1-8 0L7 4Z" />
-          <path d="M5 4H3v2a4 4 0 0 0 4 4M19 4h2v2a4 4 0 0 1-4 4" />
+          <circle cx="12" cy="8" r="4" />
+          <path d="M4 21c0-4 4-6 8-6s8 2 8 6" />
         </svg>
-        랭킹
+        프로필
       </button>
       {/* (UI 재구조화, 2026-10-14) "검색"/"프로필" 탭을 헤더 아이콘(로고 옆)으로 옮기면서 빈
           4번째 자리에 뭘 넣을지 물었고, 홈 화면 "빠른 선곡"의 하이라이트 믹스 재생을 하단 탭
@@ -2906,6 +3061,7 @@ export default function Home() {
           handleTrackEnded({ videoId: data.videoId, name: data.title, artist: data.artist })
         }
         mixRequest={mixRequest}
+        userQueuedKeys={userQueuedKeys}
         onHighlightModeChange={setHighlightOn}
         initialHighlight={highlightOn}
         queue={queue}
@@ -3179,7 +3335,18 @@ export default function Home() {
           handlePlay(first, { manualNext: rest });
         }}
         onAddToPlaylist={handleOpenAddToPlaylist}
+        onPlayNext={(t) => handleQueueTrack(t, "next")}
+        onAddToQueue={(t) => handleQueueTrack(t, "last")}
       />
+    )}
+
+    {/* 대기열 추가 안내 — 잠깐 떴다 사라지는 작은 알림 */}
+    {toastMessage && (
+      <div className="pointer-events-none fixed inset-x-0 bottom-28 z-[80] flex justify-center px-4">
+        <div className="rounded-full bg-neutral-800 px-4 py-2 text-sm text-white shadow-lg ring-1 ring-white/10">
+          {toastMessage}
+        </div>
+      </div>
     )}
 
     {/* (게이미피케이션, UI 재구조화) 다른 사용자가 공개한 재생목록 둘러보기 — 전용 전체화면
@@ -3204,6 +3371,12 @@ export default function Home() {
         profileInfo={profileInfo}
         onToggleFollow={handleToggleFollow}
         onSaveBio={handleSaveBio}
+        onSignOut={async () => {
+          await supabase?.auth.signOut();
+          setIsPublicFeedOpen(false);
+          setViewingProfileNickname(null);
+          setProfileInfo(null);
+        }}
       />
     )}
 
@@ -3339,6 +3512,6 @@ export default function Home() {
         </div>
       </div>
     )}
-    </>
+    </QueueActionsContext.Provider>
   );
 }

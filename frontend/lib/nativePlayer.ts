@@ -22,7 +22,7 @@ interface PlaybackBridgePlugin {
   // "다음 곡 미리보기"를 헤드리스 웹뷰에 미리 넘겨둠. 자세한 배경은 LEARNING_NOTES.md §73 참고.
   setQueue(options: { tracks: { videoId: string; title: string; artist: string }[] }): Promise<void>;
   addListener(
-    eventName: "ready" | "stateChange" | "timeUpdate" | "autoAdvance",
+    eventName: "ready" | "stateChange" | "timeUpdate" | "autoAdvance" | "error" | "mediaCommand",
     callback: (data: any) => void
   ): Promise<{ remove: () => Promise<void> }>;
 }
@@ -49,6 +49,9 @@ export type NativePlayerCallbacks = {
   // 곡으로 넘어갔을 때 호출됨 — MiniPlayer.tsx가 이걸로 UI/상위(page.tsx) 상태를 실제
   // 재생 중인 곡과 다시 맞춤.
   onAutoAdvance?: (data: { videoId: string; title: string; artist: string }) => void;
+  // 재생 불가 영상 에러(큐가 비어 네이티브에서 못 넘긴 경우) / 알림·잠금화면의 이전·다음 버튼
+  onError?: () => void;
+  onMediaCommand?: (command: "next" | "previous") => void;
 };
 
 export type NativePlayerHandle = {
@@ -141,6 +144,16 @@ export function createNativePlayer(
       currentTitle = typeof data?.title === "string" ? data.title : currentTitle;
       currentArtist = typeof data?.artist === "string" ? data.artist : currentArtist;
       callbacks.onAutoAdvance?.({ videoId: data.videoId, title: currentTitle, artist: currentArtist });
+    }
+  }).then((h) => handles.push(h));
+
+  b.addListener("error", () => {
+    callbacks.onError?.();
+  }).then((h) => handles.push(h));
+
+  b.addListener("mediaCommand", (data: any) => {
+    if (data?.command === "next" || data?.command === "previous") {
+      callbacks.onMediaCommand?.(data.command);
     }
   }).then((h) => handles.push(h));
 

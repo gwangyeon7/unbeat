@@ -2016,6 +2016,9 @@ def artist_top_tracks(
 
     print(f"[artist-top-tracks] '{artist_name}' -> Last.fm 원본 {len(raw_tracks)}곡")
 
+    # (속도 개선) 예전엔 원본 30~50곡 전부의 이미지를 한 곡씩 순서대로 찾아서(곡마다 iTunes 등
+    # 외부 호출) 아티스트에 따라 매우 느렸음. 이미지는 거르고 자른 뒤 최종 목록에 대해서만,
+    # 그것도 병렬로 찾음.
     tracks = []
     for track in raw_tracks:
         tracks.append({
@@ -2023,7 +2026,8 @@ def artist_top_tracks(
             "artist": _clean_artist_name(track["artist"]["name"]),
             "listeners": track.get("listeners"),
             "url": track.get("url"),
-            "image": track_image(track),
+            "image": None,
+            "_raw": track,
         })
 
     # "둘러보기" 목적의 목록이라 가사 있는 곡만 걸러서 내려줌(§44와 동일 원칙, 검색 자체와는 별개 취급)
@@ -2032,6 +2036,17 @@ def artist_top_tracks(
         tracks = _filter_tracks_with_lyrics(tracks, limit)
     else:
         tracks = tracks[:limit]
+
+    def _fill_image(t: dict) -> dict:
+        raw = t.pop("_raw", None)
+        try:
+            t["image"] = track_image(raw) if raw else None
+        except Exception:
+            t["image"] = None
+        return t
+
+    with ThreadPoolExecutor(max_workers=10) as executor:
+        tracks = list(executor.map(_fill_image, tracks))
     tracks = _apply_korean_titles(tracks)
     print(f"[artist-top-tracks] '{artist_name}' -> 가사 필터 통과 {len(tracks)}곡")
 

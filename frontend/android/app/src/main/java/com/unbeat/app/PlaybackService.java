@@ -43,6 +43,12 @@ public class PlaybackService extends Service {
     // (§73 추가) 알림에 재생/일시정지 토글 버튼을 넣기 위한 액션 — 알림의 버튼을 누르면
     // 안드로이드가 이 액션이 담긴 Intent로 이 서비스를 다시 시작(onStartCommand)해줌.
     private static final String ACTION_TOGGLE_PLAY_PAUSE = "com.unbeat.app.ACTION_TOGGLE_PLAY_PAUSE";
+    private static final String ACTION_NEXT = "com.unbeat.app.ACTION_NEXT";
+    private static final String ACTION_PREVIOUS = "com.unbeat.app.ACTION_PREVIOUS";
+
+    // 재생 중 화면이 꺼져도 CPU/와이파이가 잠들어 곡 사이에 끊기지 않게 하는 락.
+    private android.os.PowerManager.WakeLock wakeLock;
+    private android.net.wifi.WifiManager.WifiLock wifiLock;
 
     public interface PlaybackListener {
         void onEvent(String type, JSONObject data);
@@ -69,6 +75,11 @@ public class PlaybackService extends Service {
     // (§73 추가) 알림의 재생/일시정지 버튼 아이콘·라벨을 결정하는 현재 재생 상태.
     // player.html의 stateChange 이벤트(state==1이면 재생 중)로만 갱신됨.
     private boolean isPlaying = false;
+    // (2026-11-17) 잠금화면/알림창의 "미디어 컨트롤"(곡 제목+재생 버튼 위젯)에 뜨려면 일반 알림이 아니라
+    // MediaSession + MediaStyle 알림이어야 함. 친구 갤럭시에서 크롬(웹)은 잠금화면에 미디어 위젯이 뜨는데
+    // 앱(APK)은 안 뜨던 원인 — 크롬은 웹의 Media Session API로 이걸 자동으로 만들어주지만, 이 서비스의
+    // 알림은 평범한 알림이었음. 그래서 MediaSession을 만들어 곡 정보/재생 상태를 알려줌.
+    private android.media.session.MediaSession mediaSession;
 
     public class LocalBinder extends Binder {
         PlaybackService getService() {
@@ -88,7 +99,62 @@ public class PlaybackService extends Service {
     @Override
     public void onCreate() {
         super.onCreate();
+        setupMediaSession();
         setupWebView();
+    }
+
+    private void setupMediaSession() {
+        mediaSession = new android.media.session.MediaSession(this, "UnbeatPlayback");
+        mediaSession.setCallback(new android.media.session.MediaSession.Callback() {
+            @Override
+            public void onPlay() {
+                play();
+            }
+
+            @Override
+            public void onPause() {
+                pause();
+            }
+
+            @Override
+            public void onSeekTo(long pos) {
+                seekTo(pos / 1000.0);
+            }
+
+            @Override
+            public void onSkipToNext() {
+                skipNext();
+            }
+
+            @Override
+            public void onSkipToPrevious() {
+                skipPrevious();
+            }
+        });
+        mediaSession.setActive(true);
+    }
+
+    /** 잠금화면/알림창 미디어 위젯에 보일 곡 정보와 재생 상태를 갱신. */
+    private void updateMediaSession() {
+        if (mediaSession == null) return;
+        mediaSession.setMetadata(new android.media.MediaMetadata.Builder()
+                .putString(android.media.MediaMetadata.METADATA_KEY_TITLE, currentTitle)
+                .putString(android.media.MediaMetadata.METADATA_KEY_ARTIST, currentArtist)
+                .build());
+        long actions = android.media.session.PlaybackState.ACTION_PLAY
+                | android.media.session.PlaybackState.ACTION_PAUSE
+                | android.media.session.PlaybackState.ACTION_PLAY_PAUSE
+                | android.media.session.PlaybackState.ACTION_SEEK_TO
+                | android.media.session.PlaybackState.ACTION_SKIP_TO_NEXT
+                | android.media.session.PlaybackState.ACTION_SKIP_TO_PREVIOUS;
+        mediaSession.setPlaybackState(new android.media.session.PlaybackState.Builder()
+                .setActions(actions)
+                .setState(isPlaying
+                                ? android.media.session.PlaybackState.STATE_PLAYING
+                                : android.media.session.PlaybackState.STATE_PAUSED,
+                        android.media.session.PlaybackState.PLAYBACK_POSITION_UNKNOWN,
+                        1.0f)
+                .build());
     }
 
     private void setupWebView() {
@@ -195,12 +261,15 @@ public class PlaybackService extends Service {
                         int state = obj.optInt("state", -99);
                         if (state == 1) {
                             isPlaying = true;
+                            acquireLocks();
                             startForeground(NOTIFICATION_ID, buildNotification());
                         } else if (state == 2) {
                             isPlaying = false;
+                            releaseLocks();
                             startForeground(NOTIFICATION_ID, buildNotification());
                         } else if (state == 0) {
                             isPlaying = false;
+                            releaseLocks();
                             stopForeground(false);
                         }
                     } else if ("autoAdvance".equals(type)) {
@@ -218,6 +287,51 @@ public class PlaybackService extends Service {
                 }
             });
         }
+    }
+
+    private void acquireLocks() {
+        try {
+            if (wakeLock == null) {
+                android.os.PowerManager pm = (android.os.PowerManager) getSystemService(Context.POWER_SERVICE);
+                wakeLock = pm.newWakeLock(android.os.PowerManager.PARTIAL_WAKE_LOCK, "unbeat:playback");
+                wakeLock.setReferenceCounted(false);
+            }
+            if (!wakeLock.isHeld()) wakeLock.acquire(6 * 60 * 60 * 1000L);
+            if (wifiLock == null) {
+                android.net.wifi.WifiManager wm = (android.net.wifi.WifiManager)
+                        getApplicationContext().getSystemService(Context.WIFI_SERVICE);
+                wifiLock = wm.createWifiLock(android.net.wifi.WifiManager.WIFI_MODE_FULL_HIGH_PERF, "unbeat:wifi");
+                wifiLock.setReferenceCounted(false);
+            }
+            if (!wifiLock.isHeld()) wifiLock.acquire();
+        } catch (Exception e) {
+            Log.e(TAG, "acquireLocks failed", e);
+        }
+    }
+
+    private void releaseLocks() {
+        try {
+            if (wakeLock != null && wakeLock.isHeld()) wakeLock.release();
+            if (wifiLock != null && wifiLock.isHeld()) wifiLock.release();
+        } catch (Exception e) {
+            Log.e(TAG, "releaseLocks failed", e);
+        }
+    }
+
+    // 다음곡: 헤드리스 웹뷰 큐에 있으면 거기서 바로, 없으면 화면 쪽(JS)에 위임.
+    private void skipNext() {
+        runJs("window.nativeNext()");
+    }
+
+    // 이전곡: 이전 곡 목록은 화면 쪽(JS)이 갖고 있어서 항상 위임.
+    private void skipPrevious() {
+        mainHandler.post(() -> {
+            try {
+                if (listener != null) listener.onEvent("mediaCommand", new JSONObject().put("command", "previous"));
+            } catch (Exception e) {
+                Log.e(TAG, "skipPrevious failed", e);
+            }
+        });
     }
 
     public void updateNowPlaying(String title, String artist) {
@@ -248,7 +362,17 @@ public class PlaybackService extends Service {
                         ? getApplicationInfo().icon
                         : android.R.drawable.ic_media_play)
                 .setOngoing(true)
+                .setVisibility(Notification.VISIBILITY_PUBLIC)
+                .setCategory(Notification.CATEGORY_TRANSPORT)
                 .setContentIntent(contentIntent);
+
+        // 잠금화면/알림창 미디어 컨트롤로 인식되게 MediaStyle + MediaSession 연결
+        updateMediaSession();
+        if (mediaSession != null) {
+            builder.setStyle(new Notification.MediaStyle()
+                    .setMediaSession(mediaSession.getSessionToken())
+                    .setShowActionsInCompactView(0, 1, 2));
+        }
 
         int iconResId = getResources().getIdentifier("ic_launcher_foreground", "mipmap", getPackageName());
         if (iconResId == 0) {
@@ -270,10 +394,24 @@ public class PlaybackService extends Service {
         PendingIntent togglePendingIntent = PendingIntent.getService(this, 1, toggleIntent, flags);
         int toggleIcon = isPlaying ? android.R.drawable.ic_media_pause : android.R.drawable.ic_media_play;
         CharSequence toggleLabel = isPlaying ? "일시정지" : "재생";
+        Intent prevIntent = new Intent(this, PlaybackService.class).setAction(ACTION_PREVIOUS);
+        PendingIntent prevPendingIntent = PendingIntent.getService(this, 2, prevIntent, flags);
+        Intent nextIntent = new Intent(this, PlaybackService.class).setAction(ACTION_NEXT);
+        PendingIntent nextPendingIntent = PendingIntent.getService(this, 3, nextIntent, flags);
+
+        // 순서: 이전(0) / 재생·일시정지(1) / 다음(2)
+        builder.addAction(new Notification.Action.Builder(
+                android.graphics.drawable.Icon.createWithResource(this, android.R.drawable.ic_media_previous),
+                "이전곡",
+                prevPendingIntent).build());
         builder.addAction(new Notification.Action.Builder(
                 android.graphics.drawable.Icon.createWithResource(this, toggleIcon),
                 toggleLabel,
                 togglePendingIntent).build());
+        builder.addAction(new Notification.Action.Builder(
+                android.graphics.drawable.Icon.createWithResource(this, android.R.drawable.ic_media_next),
+                "다음곡",
+                nextPendingIntent).build());
 
         return builder.build();
     }
@@ -342,12 +480,21 @@ public class PlaybackService extends Service {
             } else {
                 play();
             }
+        } else if (intent != null && ACTION_NEXT.equals(intent.getAction())) {
+            skipNext();
+        } else if (intent != null && ACTION_PREVIOUS.equals(intent.getAction())) {
+            skipPrevious();
         }
         return START_STICKY;
     }
 
     @Override
     public void onDestroy() {
+        releaseLocks();
+        if (mediaSession != null) {
+            mediaSession.release();
+            mediaSession = null;
+        }
         if (webView != null) {
             webView.destroy();
             webView = null;

@@ -108,8 +108,16 @@
     // 재생 금지 영상). 이게 한 번도 안 찍히면 API/네트워크 쪽 문제, 찍히면 영상 자체
     // 문제로 원인을 좁힐 수 있음.
     function onPlayerError(e) {
+      // 재생 불가 영상이면 큐에 다음 곡이 있을 때 화면 웹뷰를 거치지 않고 바로 넘어감
+      // (화면 꺼진 상태에서도 멈추지 않게). 큐가 비었으면 화면 쪽에 에러를 알려 처리하게 함.
+      if (advanceQueue()) return;
       postEvent("error", { code: e.data });
     }
+
+    // 알림/잠금화면의 다음곡 버튼 — 큐가 있으면 여기서 바로, 없으면 화면 쪽에 위임.
+    window.nativeNext = function () {
+      if (!advanceQueue()) postEvent("mediaCommand", { command: "next" });
+    };
 
     window.onYouTubeIframeAPIReady = function () {
       isApiReady = true;

@@ -232,9 +232,31 @@ export async function searchYoutubeVideo(
     return { videoId: youtubeVideoIdCache.get(key) ?? null };
   }
   const params = new URLSearchParams({ artist, track });
-  const result = await fetchJson<{ videoId: string | null }>(`/youtube-search?${params.toString()}`);
+  let result = await fetchJson<{ videoId: string | null }>(`/youtube-search?${params.toString()}`);
+  // 영상을 못 찾았고 제목에 "- LIVE 071318", "(Remastered)", "[Gift]" 같은 부가 표기가 있으면, 그걸 떼고
+  // 한 번 더 찾아봄 — 이런 표기 때문에 유튜브 검색에 안 잡히는 곡이 많았음.
+  if (!result.videoId) {
+    const simplified = simplifyTrackTitle(track);
+    if (simplified && simplified !== track) {
+      const retryParams = new URLSearchParams({ artist, track: simplified });
+      try {
+        result = await fetchJson<{ videoId: string | null }>(`/youtube-search?${retryParams.toString()}`);
+      } catch {
+        // 재시도 실패는 무시 — 원래 결과(못 찾음) 그대로 반환
+      }
+    }
+  }
   youtubeVideoIdCache.set(key, result.videoId ?? null);
   return result;
+}
+
+// 곡 제목에서 검색에 방해되는 부가 표기를 제거: " - LIVE ...", " - Remastered", "(Live)", "[...]", "(feat. ...)" 등.
+function simplifyTrackTitle(title: string): string {
+  return title
+    .replace(/\s*[-–—]\s*(live|remaster(ed)?|acoustic|version|ver\.?|mix|inst(rumental)?|stage mix|edit)\b.*$/i, "")
+    .replace(/\s*[([][^)\]]*[)\]]/g, "")
+    .replace(/\s{2,}/g, " ")
+    .trim();
 }
 
 // 미니 플레이어 "다음 트랙" 큐용 — 지금 재생 중인 곡과 비슷한 곡 목록.

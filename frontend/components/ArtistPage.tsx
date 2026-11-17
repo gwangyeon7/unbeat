@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Image from "next/image";
 import { getArtistTopTracks, type Track } from "@/lib/api";
+import CompactTrackRow from "./CompactTrackRow";
 
 type ArtistPageProps = {
   artistName: string;
@@ -13,6 +13,9 @@ type ArtistPageProps = {
   // "▶ 재생" 버튼 — 맨 위 곡만이 아니라 목록 전체를 순서대로 이어서 재생
   onPlayAll?: (tracks: Track[]) => void;
   onAddToPlaylist?: (track: Track) => void;
+  // ⋮ 메뉴의 "다음에 재생" / "대기열에 추가"
+  onPlayNext?: (track: Track) => void;
+  onAddToQueue?: (track: Track) => void;
 };
 
 // 아티스트 카드를 누르면 열리는 전체화면 "아티스트 페이지" — 그 아티스트의 인기곡을
@@ -25,6 +28,8 @@ export default function ArtistPage({
   onPlay,
   onPlayAll,
   onAddToPlaylist,
+  onPlayNext,
+  onAddToQueue,
 }: ArtistPageProps) {
   const [tracks, setTracks] = useState<Track[] | null>(null);
   const [failed, setFailed] = useState(false);
@@ -62,9 +67,19 @@ export default function ArtistPage({
       <div className="flex-1 overflow-y-auto pb-24">
         <div className="mx-auto w-full max-w-xl px-4 py-5">
           <div className="mb-4 flex items-center gap-4">
-            <div className="flex h-20 w-20 items-center justify-center rounded-full bg-white/10 text-3xl font-bold text-white/60">
-              {artistName.trim().charAt(0).toUpperCase()}
-            </div>
+            {/* 아티스트 사진 API가 없어서, 곡 목록에서 이미지가 있는 첫 곡의 커버를 대신 씀(홈의
+                아티스트 카드와 같은 방식). 아직 불러오는 중이거나 이미지가 없으면 이니셜. */}
+            {(() => {
+              const artistImage = tracks?.find((t) => t.image)?.image;
+              return artistImage ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={artistImage} alt="" className="h-20 w-20 shrink-0 rounded-full object-cover" />
+              ) : (
+                <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-full bg-white/10 text-3xl font-bold text-white/60">
+                  {artistName.trim().charAt(0).toUpperCase()}
+                </div>
+              );
+            })()}
             <div className="min-w-0 flex-1">
               <p className="truncate text-2xl font-bold">{artistName}</p>
               <p className="text-xs text-white/50">인기곡</p>
@@ -87,50 +102,24 @@ export default function ArtistPage({
             <p className="text-sm text-white/50">곡을 찾지 못했어요.</p>
           )}
 
-          <ul className="divide-y divide-white/5">
+          {/* 곡마다 ＋/★ 버튼 두 개 대신 오른쪽 ⋮ 메뉴 하나로 통일(다른 목록과 같은 CompactTrackRow) */}
+          <ul>
             {tracks?.map((track, idx) => (
-              <li
-                key={`${track.artist}-${track.name}-${idx}`}
-                className="flex items-center gap-3 py-2"
-              >
-                <button
-                  onClick={() => onPlay(track)}
-                  className="flex min-w-0 flex-1 items-center gap-3 text-left"
-                >
-                  <span className="w-5 text-center text-xs text-white/40">{idx + 1}</span>
-                  <div className="relative h-12 w-12 flex-shrink-0 overflow-hidden rounded bg-white/10">
-                    {track.image && (
-                      <Image
-                        src={track.image}
-                        alt={track.name}
-                        fill
-                        sizes="48px"
-                        className="object-cover"
-                        unoptimized
-                      />
-                    )}
-                  </div>
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-medium">{track.name}</p>
-                    <p className="truncate text-xs text-white/50">{track.artist}</p>
-                  </div>
-                </button>
-                {onAddToPlaylist && (
-                  <button
-                    onClick={() => onAddToPlaylist(track)}
-                    aria-label="재생목록에 추가"
-                    className="px-2 text-lg text-white/60"
-                  >
-                    +
-                  </button>
-                )}
-                <button
-                  onClick={() => onToggleFavorite(track)}
-                  aria-label={isFavorite(track) ? "즐겨찾기 해제" : "즐겨찾기 추가"}
-                  className="px-2 text-lg text-yellow-400"
-                >
-                  {isFavorite(track) ? "★" : "☆"}
-                </button>
+              <li key={`${track.artist}-${track.name}-${idx}`} className="flex items-center gap-1">
+                <span className="w-5 shrink-0 text-center text-xs text-white/40">{idx + 1}</span>
+                <div className="min-w-0 flex-1">
+                  <CompactTrackRow
+                    title={track.name}
+                    subtitle={track.artist}
+                    image={track.image}
+                    isFavorite={isFavorite(track)}
+                    onPlay={() => onPlay(track)}
+                    onToggleFavorite={() => onToggleFavorite(track)}
+                    onAddToPlaylist={onAddToPlaylist ? () => onAddToPlaylist(track) : undefined}
+                    onPlayNext={onPlayNext ? () => onPlayNext(track) : undefined}
+                    onAddToQueue={onAddToQueue ? () => onAddToQueue(track) : undefined}
+                  />
+                </div>
               </li>
             ))}
           </ul>

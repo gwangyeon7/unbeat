@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import { isNativeAndroid } from "@/lib/nativePlayer";
 
 // (2026-10-22, 피드백) 홈 화면에 설치한 앱에서 구글 로그인(OAuth 리다이렉트)을 하면 앱을 벗어나
 // 삼성 인터넷 같은 브라우저로 빠져서, 앱이 아니라 브라우저 화면(하단바 3겹)이 돼버림. 리다이렉트
@@ -52,6 +53,12 @@ export default function AuthModal({ onClose, onAuthSuccess }: AuthModalProps) {
   // 멈춤(GIS 팝업 방식) — 구글이 임베디드/설치형 웹앱의 OAuth를 제한하는 동작이라 코드로 우회가
   // 어려움. 그래서 설치형 앱에서는 구글 로그인을 숨기고 이메일 로그인만 보여줌(브라우저 접속은 그대로).
   const [isInstalledApp, setIsInstalledApp] = useState(false);
+  // 안드로이드 네이티브 앱(APK, Capacitor 웹뷰)에서는 구글이 웹뷰 안의 로그인을 막아서(disallowed_useragent)
+  // 구글 로그인이 불가능함 — 구글 버튼을 아예 숨기고 이메일 로그인만 보여줌.
+  const [isNativeApp, setIsNativeApp] = useState(false);
+  useEffect(() => {
+    setIsNativeApp(isNativeAndroid());
+  }, []);
   useEffect(() => {
     const mq = ["standalone", "fullscreen", "minimal-ui"].some(
       (m) => window.matchMedia(`(display-mode: ${m})`).matches
@@ -68,7 +75,7 @@ export default function AuthModal({ onClose, onAuthSuccess }: AuthModalProps) {
     setIsInstalledChecked(true);
   }, [isInstalledApp]);
   useEffect(() => {
-    if (!GOOGLE_CLIENT_ID || !supabase || !isInstalledChecked) return;
+    if (!GOOGLE_CLIENT_ID || !supabase || !isInstalledChecked || isNativeApp) return;
     let cancelled = false;
     loadGisScript()
       .then(() => {
@@ -116,7 +123,7 @@ export default function AuthModal({ onClose, onAuthSuccess }: AuthModalProps) {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isInstalledChecked, isInstalledApp]);
+  }, [isInstalledChecked, isInstalledApp, isNativeApp]);
 
   // 설치형 앱 전용: FedCM 계정 선택창 띄우기. 안 뜨면(차단/미지원) 이유를 안내.
   function handleInstalledGoogle() {
@@ -278,7 +285,7 @@ export default function AuthModal({ onClose, onAuthSuccess }: AuthModalProps) {
           </div>
         ) : (
           <div className="flex flex-col gap-3">
-            {isInstalledApp && GOOGLE_CLIENT_ID && mode !== "reset" && (
+            {isInstalledApp && !isNativeApp && GOOGLE_CLIENT_ID && mode !== "reset" && (
               <button
                 type="button"
                 disabled={!gisReady}
@@ -294,7 +301,7 @@ export default function AuthModal({ onClose, onAuthSuccess }: AuthModalProps) {
                 구글로 계속하기
               </button>
             )}
-            {GOOGLE_CLIENT_ID && !isInstalledApp && (
+            {GOOGLE_CLIENT_ID && !isInstalledApp && !isNativeApp && (
               <div
                 ref={googleButtonRef}
                 className={`flex min-h-[40px] justify-center ${mode === "reset" ? "hidden" : ""}`}
@@ -305,7 +312,7 @@ export default function AuthModal({ onClose, onAuthSuccess }: AuthModalProps) {
               disabled={isGoogleLoading}
               onClick={handleGoogleSignIn}
               className={`flex items-center justify-center gap-2 rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm font-medium hover:bg-white/10 disabled:opacity-50 ${
-                isInstalledApp || (GOOGLE_CLIENT_ID && gisReady) || mode === "reset" ? "hidden" : ""
+                isInstalledApp || isNativeApp || (GOOGLE_CLIENT_ID && gisReady) || mode === "reset" ? "hidden" : ""
               }`}
             >
               <svg viewBox="0 0 48 48" className="h-4 w-4" aria-hidden="true">

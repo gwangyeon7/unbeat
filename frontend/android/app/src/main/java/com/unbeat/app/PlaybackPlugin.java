@@ -128,6 +128,8 @@ public class PlaybackPlugin extends Plugin implements PlaybackService.PlaybackLi
             if (data.has("duration")) payload.put("duration", data.getDouble("duration"));
             if (data.has("currentTime")) payload.put("currentTime", data.getDouble("currentTime"));
             // (§73 후속) autoAdvance 이벤트용 — 새로 넘어간 곡 정보를 JS 쪽에도 그대로 전달.
+            if (data.has("code")) payload.put("code", data.getInt("code"));
+            if (data.has("command")) payload.put("command", data.getString("command"));
             if (data.has("videoId")) payload.put("videoId", data.getString("videoId"));
             if (data.has("title")) payload.put("title", data.getString("title"));
             if (data.has("artist")) payload.put("artist", data.getString("artist"));

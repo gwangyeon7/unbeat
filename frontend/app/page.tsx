@@ -284,11 +284,24 @@ export default function Home() {
   const [publicPlaylists, setPublicPlaylists] = useState<PublicPlaylist[]>([]);
   // 홈 화면 "인기 재생목록 TOP 5" 미리보기용
   const [homeRanking, setHomeRanking] = useState<PublicPlaylist[]>([]);
-  useEffect(() => {
+  function refreshHomeRanking() {
     getPublicPlaylists()
       .then((list) => setHomeRanking(list.slice(0, 5)))
       .catch(() => {});
+  }
+  useEffect(() => {
+    refreshHomeRanking();
+    // 앱을 다시 열 때도 최신 순위/좋아요로 갱신
+    const onVisible = () => {
+      if (document.visibilityState === "visible") refreshHomeRanking();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
   }, []);
+  // 랭킹 화면을 닫고 홈으로 돌아올 때(좋아요를 누르고 왔을 수 있음) 다시 불러옴
+  useEffect(() => {
+    if (!isPublicFeedOpen) refreshHomeRanking();
+  }, [isPublicFeedOpen]);
   const [isLoadingPublicFeed, setIsLoadingPublicFeed] = useState(false);
   // 피드에서 재생목록을 클릭하면 그 안의 곡 목록을 같은 모달 안에서 보여줌(상세 화면을 또
   // 새로 안 만들고, "둘러보기 목록 <-> 선택한 재생목록 곡" 두 단계만 모달 하나로 처리).

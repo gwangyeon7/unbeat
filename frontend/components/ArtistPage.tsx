@@ -67,9 +67,19 @@ export default function ArtistPage({
       <div className="flex-1 overflow-y-auto pb-24">
         <div className="mx-auto w-full max-w-xl px-4 py-5">
           <div className="mb-4 flex items-center gap-4">
-            <div className="flex h-20 w-20 items-center justify-center rounded-full bg-white/10 text-3xl font-bold text-white/60">
-              {artistName.trim().charAt(0).toUpperCase()}
-            </div>
+            {/* 아티스트 사진 API가 없어서, 곡 목록에서 이미지가 있는 첫 곡의 커버를 대신 씀(홈의
+                아티스트 카드와 같은 방식). 아직 불러오는 중이거나 이미지가 없으면 이니셜. */}
+            {(() => {
+              const artistImage = tracks?.find((t) => t.image)?.image;
+              return artistImage ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={artistImage} alt="" className="h-20 w-20 shrink-0 rounded-full object-cover" />
+              ) : (
+                <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-full bg-white/10 text-3xl font-bold text-white/60">
+                  {artistName.trim().charAt(0).toUpperCase()}
+                </div>
+              );
+            })()}
             <div className="min-w-0 flex-1">
               <p className="truncate text-2xl font-bold">{artistName}</p>
               <p className="text-xs text-white/50">인기곡</p>

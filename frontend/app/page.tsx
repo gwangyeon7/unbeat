@@ -1045,11 +1045,7 @@ export default function Home() {
   // - 곡 제목으로 검색한 경우: 기존처럼 "검색된 곡" + "OO의 다른 곡"을 따로 보여줌.
   function buildMobileSongSections() {
     const norm = (s: string) => s.trim().toLowerCase();
-    const searchNote = youtubeFallbackUsed
-      ? "Last.fm에 없어서 유튜브에서 찾았어요"
-      : aiGuessedQuery
-        ? `AI 추측: ${aiGuessedQuery}로 검색됨`
-        : null;
+    const searchNote = null;
     const artistNames = new Set(cleanSearchArtists(artists).map((a) => norm(a.name)));
     const matched = searchTracks.filter((t) => artistNames.has(norm(t.artist))).length;
     const isArtistSearch =
@@ -2684,16 +2680,6 @@ export default function Home() {
         <div className="w-full max-w-xl">
           <p className="mb-2 text-xl font-bold text-white">
             검색된 곡
-            {aiGuessedQuery && (
-              <span className="ml-1 text-xs font-normal text-white/30">
-                (AI 추측: <span className="text-white/50">{aiGuessedQuery}</span>로 검색됨)
-              </span>
-            )}
-            {youtubeFallbackUsed && (
-              <span className="ml-1 text-xs font-normal text-white/30">
-                (Last.fm에 없어서 유튜브에서 찾았어요 · 첫 곡은 청취자 수 등 정보 없음)
-              </span>
-            )}
           </p>
           <TrackList
             tracks={searchTracks}

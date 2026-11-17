@@ -69,6 +69,11 @@ public class PlaybackService extends Service {
     // (§73 추가) 알림의 재생/일시정지 버튼 아이콘·라벨을 결정하는 현재 재생 상태.
     // player.html의 stateChange 이벤트(state==1이면 재생 중)로만 갱신됨.
     private boolean isPlaying = false;
+    // (2026-11-17) 잠금화면/알림창의 "미디어 컨트롤"(곡 제목+재생 버튼 위젯)에 뜨려면 일반 알림이 아니라
+    // MediaSession + MediaStyle 알림이어야 함. 친구 갤럭시에서 크롬(웹)은 잠금화면에 미디어 위젯이 뜨는데
+    // 앱(APK)은 안 뜨던 원인 — 크롬은 웹의 Media Session API로 이걸 자동으로 만들어주지만, 이 서비스의
+    // 알림은 평범한 알림이었음. 그래서 MediaSession을 만들어 곡 정보/재생 상태를 알려줌.
+    private android.media.session.MediaSession mediaSession;
 
     public class LocalBinder extends Binder {
         PlaybackService getService() {
@@ -88,7 +93,50 @@ public class PlaybackService extends Service {
     @Override
     public void onCreate() {
         super.onCreate();
+        setupMediaSession();
         setupWebView();
+    }
+
+    private void setupMediaSession() {
+        mediaSession = new android.media.session.MediaSession(this, "UnbeatPlayback");
+        mediaSession.setCallback(new android.media.session.MediaSession.Callback() {
+            @Override
+            public void onPlay() {
+                play();
+            }
+
+            @Override
+            public void onPause() {
+                pause();
+            }
+
+            @Override
+            public void onSeekTo(long pos) {
+                seekTo(pos / 1000.0);
+            }
+        });
+        mediaSession.setActive(true);
+    }
+
+    /** 잠금화면/알림창 미디어 위젯에 보일 곡 정보와 재생 상태를 갱신. */
+    private void updateMediaSession() {
+        if (mediaSession == null) return;
+        mediaSession.setMetadata(new android.media.MediaMetadata.Builder()
+                .putString(android.media.MediaMetadata.METADATA_KEY_TITLE, currentTitle)
+                .putString(android.media.MediaMetadata.METADATA_KEY_ARTIST, currentArtist)
+                .build());
+        long actions = android.media.session.PlaybackState.ACTION_PLAY
+                | android.media.session.PlaybackState.ACTION_PAUSE
+                | android.media.session.PlaybackState.ACTION_PLAY_PAUSE
+                | android.media.session.PlaybackState.ACTION_SEEK_TO;
+        mediaSession.setPlaybackState(new android.media.session.PlaybackState.Builder()
+                .setActions(actions)
+                .setState(isPlaying
+                                ? android.media.session.PlaybackState.STATE_PLAYING
+                                : android.media.session.PlaybackState.STATE_PAUSED,
+                        android.media.session.PlaybackState.PLAYBACK_POSITION_UNKNOWN,
+                        1.0f)
+                .build());
     }
 
     private void setupWebView() {
@@ -248,7 +296,17 @@ public class PlaybackService extends Service {
                         ? getApplicationInfo().icon
                         : android.R.drawable.ic_media_play)
                 .setOngoing(true)
+                .setVisibility(Notification.VISIBILITY_PUBLIC)
+                .setCategory(Notification.CATEGORY_TRANSPORT)
                 .setContentIntent(contentIntent);
+
+        // 잠금화면/알림창 미디어 컨트롤로 인식되게 MediaStyle + MediaSession 연결
+        updateMediaSession();
+        if (mediaSession != null) {
+            builder.setStyle(new Notification.MediaStyle()
+                    .setMediaSession(mediaSession.getSessionToken())
+                    .setShowActionsInCompactView(0));
+        }
 
         int iconResId = getResources().getIdentifier("ic_launcher_foreground", "mipmap", getPackageName());
         if (iconResId == 0) {
@@ -348,6 +406,10 @@ public class PlaybackService extends Service {
 
     @Override
     public void onDestroy() {
+        if (mediaSession != null) {
+            mediaSession.release();
+            mediaSession = null;
+        }
         if (webView != null) {
             webView.destroy();
             webView = null;

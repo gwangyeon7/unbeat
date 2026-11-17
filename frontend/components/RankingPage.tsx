@@ -383,6 +383,98 @@ function PlaylistCard({
   );
 }
 
+// (2026-11-17) 랭킹 목록은 큰 카드가 너무 크고 많아서 눈에 안 들어온다는 피드백 — 곡 목록(빠른 선곡)처럼
+// 한 줄에 [순위 · 작은 커버 · 이름/닉네임·곡 수 · 좋아요]만 보이는 촘촘한 행으로 바꿈. 한 화면에 훨씬
+// 많이 보이고 순위가 숫자로 바로 읽힘. 프로필 화면의 큰 카드(PlaylistCard)는 그대로 둠.
+function PlaylistRankRow({
+  playlist,
+  rank,
+  onSelectPlaylist,
+  onViewProfile,
+  onToggleLike,
+  likeCountToShow,
+}: {
+  playlist: PublicPlaylist;
+  rank: number;
+  onSelectPlaylist: (id: number) => void;
+  onViewProfile: (nickname: string) => void;
+  onToggleLike: (playlist: PublicPlaylist) => void;
+  likeCountToShow?: number;
+}) {
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={() => onSelectPlaylist(playlist.id)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onSelectPlaylist(playlist.id);
+        }
+      }}
+      className="flex min-w-0 cursor-pointer items-center gap-3 rounded-md p-1.5 hover:bg-white/5"
+    >
+      <span
+        className={`w-7 shrink-0 text-center tabular-nums ${
+          rank <= 3 ? "text-lg font-extrabold text-white" : "text-sm font-semibold text-white/50"
+        }`}
+      >
+        {rank}
+      </span>
+      <div className="h-14 w-14 shrink-0 overflow-hidden rounded-md bg-neutral-800">
+        {playlist.coverImageUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={playlist.coverImageUrl} alt="" className="h-full w-full object-cover" />
+        ) : (
+          <div className="flex h-full w-full items-center justify-center">
+            <span className="text-xl text-white/15">♪</span>
+          </div>
+        )}
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-semibold">{playlist.name}</p>
+        <p className="truncate text-xs text-white/50">
+          {playlist.ownerNickname ? (
+            <span
+              role="button"
+              tabIndex={0}
+              onClick={(e) => {
+                e.stopPropagation();
+                onViewProfile(playlist.ownerNickname!);
+              }}
+              className="hover:text-white/80"
+            >
+              {playlist.ownerNickname}
+            </span>
+          ) : null}
+          {playlist.ownerNickname ? " · " : ""}
+          {playlist.trackCount}곡
+        </p>
+      </div>
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          onToggleLike(playlist);
+        }}
+        aria-label="좋아요"
+        className="flex shrink-0 items-center gap-1 rounded-full px-2.5 py-1.5 text-white/70 hover:bg-white/10"
+      >
+        <svg
+          viewBox="0 0 24 24"
+          className="h-4 w-4"
+          fill={playlist.likedByMe ? "#ff3b5c" : "none"}
+          stroke={playlist.likedByMe ? "#ff3b5c" : "currentColor"}
+          strokeWidth="2"
+        >
+          <path d="M12 21s-7.5-4.6-10-9.3C.3 7.9 2.6 4 6.6 4c2 0 3.6 1 5.4 3 1.8-2 3.4-3 5.4-3 4 0 6.3 3.9 4.6 7.7C19.5 16.4 12 21 12 21z" />
+        </svg>
+        <span className="text-xs font-medium tabular-nums">{likeCountToShow ?? playlist.likeCount}</span>
+      </button>
+    </div>
+  );
+}
+
 // (게이미피케이션, UI 재구조화 2026-10-10) 재생목록 상세 화면 안 🌐 아이콘 + 모달로 처음 만들었는데,
 // "이게 게이미피케이션 기능인데 아이콘 하나로 띡 나오니까 이상하다, 랭킹 페이지를 따로 두는 게
 // 낫겠다"는 라이브 테스트 피드백을 받고 전용 전체화면 페이지로 분리함. 같은 피드백 라운드에서
@@ -650,16 +742,15 @@ export default function RankingPage({
                     : "이 카테고리에는 아직 공개된 재생목록이 없어요."}
               </p>
             ) : (
-              <div className="grid grid-cols-1 gap-4 pb-6 sm:grid-cols-2 xl:grid-cols-3">
+              <div className="flex flex-col gap-0.5 pb-6">
                 {filteredFeedPlaylists.map((p, i) => (
-                  <PlaylistCard
+                  <PlaylistRankRow
                     key={p.id}
                     rank={rankTab === "liked" || rankTab === "new" ? overallRank(p.id) : i + 1}
                     playlist={p}
                     onSelectPlaylist={onSelectPlaylist}
                     onViewProfile={onViewProfile}
                     onToggleLike={onToggleLike}
-                    showNickname
                     likeCountToShow={rankTab === "week" ? p.weeklyLikeCount : undefined}
                   />
                 ))}

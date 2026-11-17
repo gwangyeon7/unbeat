@@ -282,6 +282,13 @@ export default function Home() {
   const [isTogglingVisibility, setIsTogglingVisibility] = useState(false);
   const [isPublicFeedOpen, setIsPublicFeedOpen] = useState(false);
   const [publicPlaylists, setPublicPlaylists] = useState<PublicPlaylist[]>([]);
+  // 홈 화면 "인기 재생목록 TOP 5" 미리보기용
+  const [homeRanking, setHomeRanking] = useState<PublicPlaylist[]>([]);
+  useEffect(() => {
+    getPublicPlaylists()
+      .then((list) => setHomeRanking(list.slice(0, 5)))
+      .catch(() => {});
+  }, []);
   const [isLoadingPublicFeed, setIsLoadingPublicFeed] = useState(false);
   // 피드에서 재생목록을 클릭하면 그 안의 곡 목록을 같은 모달 안에서 보여줌(상세 화면을 또
   // 새로 안 만들고, "둘러보기 목록 <-> 선택한 재생목록 곡" 두 단계만 모달 하나로 처리).
@@ -693,7 +700,9 @@ export default function Home() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
+  const profileOpenedDirectlyRef = useRef(false);
   function handleOpenPublicFeed() {
+    profileOpenedDirectlyRef.current = false;
     setIsPublicFeedOpen(true);
     setViewingPublicPlaylistId(null);
     setPublicPlaylistTracks(null);
@@ -723,6 +732,8 @@ export default function Home() {
       }
       handleOpenPublicFeed();
       handleViewProfile(nickname);
+      // 프로필 탭으로 바로 들어온 경우: 뒤로가기는 랭킹이 아니라 메인으로
+      profileOpenedDirectlyRef.current = true;
     } catch {
       setError("내 프로필을 불러오지 못했어요.");
     }
@@ -798,6 +809,10 @@ export default function Home() {
       setViewingProfileNickname(null);
       setProfilePlaylists(null);
       setProfileInfo(null);
+      if (profileOpenedDirectlyRef.current) {
+        profileOpenedDirectlyRef.current = false;
+        setIsPublicFeedOpen(false);
+      }
     }
   }
 
@@ -865,7 +880,33 @@ export default function Home() {
     const { data: subscription } = supabase.auth.onAuthStateChange((_event, session) => {
       setUserEmail(session?.user.email ?? null);
     });
-    return () => subscription.subscription.unsubscribe();
+
+    // 저장된 세션이 있어도 서버에서는 이미 만료/무효일 수 있음(앱을 오래 닫아둔 뒤, 다른 기기에서
+    // 같은 계정으로 로그인 등) — 그러면 화면은 로그인 상태인데 요청은 비로그인으로 처리됨.
+    // 앱을 열거나 다시 화면으로 돌아올 때 서버에 토큰을 확인해서, 무효면 로그아웃 상태로 맞춤.
+    // 네트워크 오류 같은 일시적 실패는 그대로 두고(status 없음), 인증 거절일 때만 로그아웃 처리.
+    async function validateSession() {
+      if (!supabase) return;
+      const { data } = await supabase.auth.getSession();
+      if (!data.session) {
+        setUserEmail(null);
+        return;
+      }
+      const { error } = await supabase.auth.getUser();
+      if (error && (error.status === 401 || error.status === 403)) {
+        await supabase.auth.signOut({ scope: "local" });
+        setUserEmail(null);
+      }
+    }
+    function handleVisible() {
+      if (document.visibilityState === "visible") validateSession();
+    }
+    validateSession();
+    document.addEventListener("visibilitychange", handleVisible);
+    return () => {
+      subscription.subscription.unsubscribe();
+      document.removeEventListener("visibilitychange", handleVisible);
+    };
   }, []);
 
   useEffect(() => {
@@ -2239,8 +2280,8 @@ export default function Home() {
             <button
               type="button"
               aria-label={userEmail ? "프로필" : "로그인"}
-              onClick={() => (userEmail ? setIsProfileSheetOpen(true) : setIsAuthModalOpen(true))}
-              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-white/80 hover:bg-white/10 lg:hidden"
+              onClick={() => (userEmail ? handleOpenMyProfile() : setIsAuthModalOpen(true))}
+              className="hidden h-11 w-11 shrink-0 items-center justify-center rounded-full text-white/80 hover:bg-white/10 sm:flex lg:hidden"
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-5 w-5">
                 <circle cx="12" cy="8" r="4" />
@@ -2250,18 +2291,22 @@ export default function Home() {
           </div>
           {/* 로그인은 선택 기능이라(ROADMAP 5-2) 안 눌러도 기존 기능 전부 그대로 동작함.
               로그인하면 이메일 일부 + 로그아웃 버튼으로 바뀜. */}
-          <div className="hidden items-center justify-end lg:flex">
+          <div className="hidden items-center justify-end gap-1 lg:flex">
             {userEmail ? (
-              <button
-                type="button"
-                onClick={async () => {
-                  await supabase?.auth.signOut();
-                }}
-                className="truncate rounded-full px-3 py-1.5 text-xs text-white/70 hover:bg-white/10"
-                title={userEmail}
-              >
-                {userEmail.split("@")[0]} · 로그아웃
-              </button>
+              <>
+                <button
+                  type="button"
+                  onClick={handleOpenMyProfile}
+                  className="flex items-center gap-1.5 truncate rounded-full px-3 py-1.5 text-xs text-white/80 hover:bg-white/10"
+                  title={userEmail}
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-4 w-4 shrink-0">
+                    <circle cx="12" cy="8" r="4" />
+                    <path d="M4 21c0-4 4-6 8-6s8 2 8 6" />
+                  </svg>
+                  <span className="truncate">내 프로필</span>
+                </button>
+</>
             ) : (
               <button
                 type="button"
@@ -2351,6 +2396,49 @@ export default function Home() {
           새로고침해도 고정돼야 맞는데 "유튜브 뮤직처럼 매번 좀 달라졌으면 좋겠다"는 피드백을 받아
           따로 둔 섹션. 처음엔 즐겨찾기 태그/아티스트 기반 셔플이었는데([[학습노트 37번]]), 이후
           실제 Claude Haiku 4.5 LLM 추천으로 교체함([[학습노트 38번]], 실패 시에만 셔플로 폴백). */}
+      {homeRanking.length > 0 && (
+        <div className="w-full max-w-xl">
+          <div className="mb-2 flex items-center justify-between">
+            <p className="text-xl font-bold text-white">인기 재생목록 TOP {homeRanking.length}</p>
+            <button
+              type="button"
+              onClick={handleOpenPublicFeed}
+              className="rounded-full border border-white/30 px-3 py-1 text-xs font-medium text-white hover:bg-white/10"
+            >
+              전체 랭킹
+            </button>
+          </div>
+          <div className="flex flex-col">
+            {homeRanking.map((p, i) => (
+              <button
+                key={p.id}
+                type="button"
+                onClick={() => {
+                  handleOpenPublicFeed();
+                  handleViewPublicPlaylist(p.id);
+                }}
+                className="flex items-center gap-3 rounded-lg px-1 py-1.5 text-left hover:bg-white/5"
+              >
+                <span className={`w-5 shrink-0 text-center text-base font-bold ${i === 0 ? "text-[#ff3b5c]" : "text-white/60"}`}>
+                  {i + 1}
+                </span>
+                {p.coverImageUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={p.coverImageUrl} alt="" className="h-11 w-11 shrink-0 rounded object-cover" />
+                ) : (
+                  <div className="h-11 w-11 shrink-0 rounded bg-white/10" />
+                )}
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium text-white">{p.name}</p>
+                  <p className="truncate text-xs text-white/50">{p.ownerNickname ?? "익명"} · {p.trackCount}곡</p>
+                </div>
+                <span className="shrink-0 text-xs text-white/60">♥ {p.likeCount}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {quickPickTracks.length > 0 && (
         <div className="w-full max-w-xl">
           <div className="mb-2 flex items-center justify-between">
@@ -2864,16 +2952,18 @@ export default function Home() {
       {/* (게이미피케이션, UI 재구조화 2026-10-10) 처음엔 재생목록 상세 화면 안 작은 🌐 아이콘으로
           넣었는데, "게이미피케이션 기능인데 아이콘 하나로 나오니 이상하다, 랭킹 페이지를 따로
           두는 게 낫겠다"는 라이브 피드백을 받고 다른 탭들과 동급인 전용 탭으로 승격함. */}
+      {/* 랭킹은 홈의 "인기 재생목록 TOP 5 > 전체 랭킹"으로 들어가므로 탭을 프로필로 교체.
+          누르면 로그인 상태면 바로 내 프로필(로그아웃은 프로필 안), 아니면 로그인 모달. */}
       <button
         type="button"
-        onClick={handleOpenPublicFeed}
+        onClick={() => (userEmail ? handleOpenMyProfile() : setIsAuthModalOpen(true))}
         className="flex flex-1 flex-col items-center justify-center gap-1 text-[11px] text-white/70"
       >
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-5 w-5">
-          <path d="M8 21h8M12 17v4M7 4h10l-1 7a4 4 0 0 1-8 0L7 4Z" />
-          <path d="M5 4H3v2a4 4 0 0 0 4 4M19 4h2v2a4 4 0 0 1-4 4" />
+          <circle cx="12" cy="8" r="4" />
+          <path d="M4 21c0-4 4-6 8-6s8 2 8 6" />
         </svg>
-        랭킹
+        프로필
       </button>
       {/* (UI 재구조화, 2026-10-14) "검색"/"프로필" 탭을 헤더 아이콘(로고 옆)으로 옮기면서 빈
           4번째 자리에 뭘 넣을지 물었고, 홈 화면 "빠른 선곡"의 하이라이트 믹스 재생을 하단 탭
@@ -3268,6 +3358,12 @@ export default function Home() {
         profileInfo={profileInfo}
         onToggleFollow={handleToggleFollow}
         onSaveBio={handleSaveBio}
+        onSignOut={async () => {
+          await supabase?.auth.signOut();
+          setIsPublicFeedOpen(false);
+          setViewingProfileNickname(null);
+          setProfileInfo(null);
+        }}
       />
     )}
 

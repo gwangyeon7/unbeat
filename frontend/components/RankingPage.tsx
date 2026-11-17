@@ -32,6 +32,8 @@ type RankingPageProps = {
   profileInfo: UserProfilePage | null;
   onToggleFollow: () => void;
   onSaveBio: (bio: string) => void;
+  // 내 프로필 화면 안의 로그아웃 버튼
+  onSignOut?: () => void;
 };
 
 // 팔로워/팔로잉 목록 바텀시트 — 프로필 카드의 숫자를 누르면 열림. 목록에서 바로 팔로우/언팔로우하고,
@@ -132,11 +134,13 @@ function ProfileHeader({
   onToggleFollow,
   onSaveBio,
   onViewProfile,
+  onSignOut,
 }: {
   info: UserProfilePage;
   onToggleFollow: () => void;
   onSaveBio: (bio: string) => void;
   onViewProfile: (nickname: string) => void;
+  onSignOut?: () => void;
 }) {
   const [followSheet, setFollowSheet] = useState<"followers" | "following" | null>(null);
   const [editing, setEditing] = useState(false);
@@ -160,6 +164,15 @@ function ProfileHeader({
             </button>
           </p>
         </div>
+        {info.isMe && onSignOut && (
+          <button
+            type="button"
+            onClick={onSignOut}
+            className="shrink-0 rounded-full border border-white/20 px-3 py-1.5 text-xs text-white/70 hover:bg-white/10"
+          >
+            로그아웃
+          </button>
+        )}
         {!info.isMe && (
           <button
             type="button"
@@ -499,6 +512,7 @@ export default function RankingPage({
   profileInfo,
   onToggleFollow,
   onSaveBio,
+  onSignOut,
 }: RankingPageProps) {
   // (랭킹 카테고리 필터, 2026-10-10 추가) 이미 fetch된 publicPlaylists(최대 50개)를
   // 클라이언트에서 거르기만 하면 되는 순수 화면 상태라, page.tsx로 끌어올리지 않고 여기 로컬
@@ -636,6 +650,7 @@ export default function RankingPage({
                   onToggleFollow={onToggleFollow}
                   onSaveBio={onSaveBio}
                   onViewProfile={onViewProfile}
+                  onSignOut={onSignOut}
                 />
               )}
               {profilePlaylists.length === 0 ? (

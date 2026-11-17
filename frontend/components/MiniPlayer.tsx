@@ -696,6 +696,11 @@ export default function MiniPlayer({
       playerRef.current = createNativePlayer(track.videoId, track.name, track.artist, {
         onReady: handleReady,
         onStateChange: handleStateChange,
+        onError: handleError,
+        onMediaCommand: (cmd) => {
+          if (cmd === "next") onNextRef.current?.();
+          else onPreviousRef.current?.();
+        },
         onAutoAdvance: (data) => {
           lastAutoAdvancedVideoIdRef.current = data.videoId;
           hasFiredPlayingRef.current = false;

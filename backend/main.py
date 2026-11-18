@@ -2214,6 +2214,54 @@ ALIAS_CATALOG = load_catalog()
 _search_log_executor = ThreadPoolExecutor(max_workers=2)
 
 
+# (2026-11-18) 표시 이름과 조회용 이름 분리 — 같은 사람이 아티스트 칸엔 "IU", 곡 목록엔 "아이유"로 다르게 보이던 문제.
+#   표시 이름(display): 화면용. 한글 이름이 있으면 한글, 없으면 영문 그대로(YOASOBI)
+#   정식 이름(official): 응답의 officialName(새 필드) — 외부/다른 클라이언트용 공식 표기
+#   조회용 이름(lookup): 아티스트 페이지/추천에서 Last.fm에 실제로 넘기는 이름. 별칭표 생성기가 아티스트마다 고른 값
+#     ("아이유"로 조회하면 한글 제목, "IU"로 조회하면 영문 제목 / "라이즈"는 방송 클립이 섞이고 "RIIZE"는 깨끗함)
+# 응답 키는 그대로(name은 표시 이름으로) + displayName/officialName/artistOfficialName 추가 — 프론트 호환.
+# 별칭표(메모리)와 이미 있는 캐시만 봄 — 외부 호출/유료 API 없음.
+def artist_names(name: str) -> dict:
+    """이름 하나 -> {"id", "display", "official", "lookup"}. 별칭표에 있으면 그 값, 없으면 고정 매핑/캐시된 한글명."""
+    found = ALIAS_CATALOG.find_artist(name)
+    if found:
+        return found
+    clean = (name or "").strip()
+    ko = KOREAN_ARTIST_NAME_OVERRIDES.get(clean.lower())
+    if not ko and clean and not HANGUL_PATTERN.search(clean):
+        ko = (get_cached(_korean_artist_cache_key(clean)) or {}).get("name")  # 캐시만 — Claude 호출 없음
+    display = ko if ko and HANGUL_PATTERN.search(ko) else clean
+    return {"id": None, "display": display, "official": clean, "lookup": clean}
+
+
+def _with_track_display(tracks: list) -> list:
+    """곡의 artist를 아티스트 칸과 같은 표시 이름으로 + artistOfficialName 추가. 별칭표에 없는 아티스트는 기존 표기 유지
+    (파이프라인이 이미 한글 보완을 한 값이라 바꾸지 않음)."""
+    out = []
+    for t in tracks or []:
+        n = artist_names(t.get("artistOfficialName") or t.get("artist") or "")
+        out.append({**t, "artist": n["display"] if n["id"] else t.get("artist"), "artistOfficialName": n["official"]})
+    return out
+
+
+def _with_display_names(resp: dict, q: str = "") -> dict:
+    """/search 응답(별칭표/파이프라인 공통)의 아티스트·곡 이름을 같은 규칙으로. 캐시된 응답에도 매번 적용(캐시 자체는 안 바꿈)."""
+    official_hint = None
+    if q and HANGUL_PATTERN.search(q):
+        # 한글 검색어로 찾은 공식 아티스트(_resolve_official_korean_artist, 캐시만 확인): 별칭표에 없어도 검색어 자체가
+        # 그 아티스트의 한글 이름(별칭의 한글 부분 == 검색어인 것만 채택하는 로직이라)
+        cached = get_cached(f"search-official-artist:v1:{q.lower().strip()}") or {}
+        official_hint = ((cached.get("result") or {}).get("artist") or {}).get("name")
+    artists = []
+    for a in resp.get("artists") or []:
+        n = artist_names(a.get("officialName") or a.get("name") or "")
+        display = n["display"]
+        if n["id"] is None and official_hint and a.get("name") == official_hint and display == n["official"]:
+            display = q.strip()
+        artists.append({**a, "name": display, "displayName": display, "officialName": n["official"]})
+    return {**resp, "artists": artists, "tracks": _with_track_display(resp.get("tracks"))}
+
+
 def _log_search_async(x_session_id: Optional[str], q: str, artists: list, tracks: list) -> None:
     """검색 로그/최근 검색어 저장을 응답 뒤로 미룸 — 별칭표 응답의 목표(100ms 이하)를 DB 왕복이 깎아먹지 않게."""
     if not x_session_id:
@@ -2256,11 +2304,11 @@ def _search_from_catalog(q: str, x_session_id: Optional[str] = None) -> Optional
 @app.get("/search")
 def search(q: str, artist: Optional[str] = None, x_session_id: Optional[str] = Header(default=None)):
     if artist and artist.strip():
-        return _search_exact_pick(q.strip(), artist.strip(), x_session_id)
+        return _with_display_names(_search_exact_pick(q.strip(), artist.strip(), x_session_id), q)
     catalog_result = _search_from_catalog(q, x_session_id)
     if catalog_result is not None:
-        return catalog_result
-    return {**_search_by_query(q, x_session_id), "source": "pipeline"}
+        return _with_display_names(catalog_result, q)
+    return _with_display_names({**_search_by_query(q, x_session_id), "source": "pipeline"}, q)
 
 
 def _search_by_query(q: str, x_session_id: Optional[str] = None):
@@ -2785,6 +2833,12 @@ def _search_by_query(q: str, x_session_id: Optional[str] = None):
 
 @app.get("/recommend")
 def recommend_by_artist(artist_name: str, x_session_id: Optional[str] = Header(default=None)):
+    """(2026-11-18) 한글 표시 이름("아이유")으로 와도 조회용 이름으로 바꿔 조회 — artist_names 주석 참고."""
+    resp = _recommend_by_artist(artist_names(artist_name)["lookup"], x_session_id)
+    return {**resp, "tracks": _with_track_display(resp.get("tracks"))}
+
+
+def _recommend_by_artist(artist_name: str, x_session_id: Optional[str] = None):
     # v3: 한글 아티스트명 보완(_apply_korean_titles) 추가로 버전업
     cache_key = f"recommend:v6:{artist_name.lower().strip()}"
     cached = get_cached(cache_key)
@@ -2885,6 +2939,17 @@ def _clean_top_tracks(tracks: list) -> list:
 
 @app.get("/artist-top-tracks")
 def artist_top_tracks(
+    artist_name: str,
+    limit: int = 15,
+    lyrics_only: bool = True,
+    x_session_id: Optional[str] = Header(default=None),
+):
+    """(2026-11-18) 아티스트 페이지: "아이유"/"IU"/"아이유 (IU)" 어느 이름으로 와도 같은 조회용 이름 -> 같은 곡과 캐시."""
+    resp = _artist_top_tracks(artist_names(artist_name)["lookup"], limit, lyrics_only, x_session_id)
+    return {**resp, "tracks": _with_track_display(resp.get("tracks"))}
+
+
+def _artist_top_tracks(
     artist_name: str,
     limit: int = 15,
     lyrics_only: bool = True,
@@ -3453,6 +3518,20 @@ def similar_tracks(
     track: str,
     allow_youtube: bool = True,
     x_session_id: Optional[str] = Header(default=None),
+):
+    """(2026-11-18) 재생 중인 곡의 아티스트가 한글 표시 이름이어도 조회용 이름으로 — artist_names 주석 참고."""
+    # 관리자가 등록한 "다음 트랙" 오버라이드는 등록할 때 쓴 이름이 키라서, 원래 이름으로 등록된 게 있으면 원래 이름 그대로
+    has_override = get_cached(_next_track_override_key(artist, track)) is not None
+    lookup = artist if has_override else artist_names(artist)["lookup"]
+    resp = _similar_tracks(lookup, track, allow_youtube, x_session_id)
+    return {**resp, "tracks": _with_track_display(resp.get("tracks"))} if isinstance(resp, dict) else resp
+
+
+def _similar_tracks(
+    artist: str,
+    track: str,
+    allow_youtube: bool = True,
+    x_session_id: Optional[str] = None,
 ):
     """
     미니 플레이어 "다음 트랙" 자동 재생 큐용. "유튜브 뮤직처럼 지금 듣는 곡이랑 비슷한 곡을

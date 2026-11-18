@@ -5,7 +5,9 @@
 backend/catalog/catalog.json에 적어두고, 검색어가 그 별칭과 정확히 같으면(정규화 후) 바로 응답함.
 
 - 데이터: catalog.json (backend/catalog/build_catalog.py가 수동 목록 + manual_seed.json으로 생성)
-    artists: id, official(정식 이름, 표시용), ko(한글명), aliases(색인되는 검색어), image
+    artists: id, official(정식 이름), ko(한글명), lookup(Last.fm 조회용 이름), aliases(색인되는 검색어), image
+  표시 이름 규칙(2026-11-18): 화면에는 한글 이름(ko)이 있으면 한글, 없으면 정식 이름 — 아티스트 칸과 곡의 아티스트가
+  같은 사람인데 "IU"/"아이유"로 다르게 보이던 문제. 응답의 name은 표시 이름, officialName은 정식 이름(새 필드).
     tracks : id, title, artist_id, ko_title, aliases(사람들이 치는 검색어, 한글 발음 포함), image, listeners, url
     ambiguous: 여러 항목에 걸려 별칭표로 단정하지 않는 검색어 목록(파이프라인으로 넘김)
 - 인덱스: 서버 시작 시 한 번 읽어 "정규화된 별칭 -> 아티스트/곡 id" 사전을 메모리에 만듦.
@@ -39,6 +41,9 @@ class AliasCatalog:
         # 모호 별칭: 서로 다른 곡/아티스트에 걸리는 검색어("고백" 3곡). 생성기가 이미 색인에서 뺐지만, 손으로 고친
         # catalog.json에 다시 들어가도 단정해서 답하지 않게 여기서도 막음 -> 이 검색어는 항상 기존 파이프라인으로
         self.ambiguous: set = set()
+        # 이름 -> 아티스트 id(정식/한글/조회용/별칭 전부). 검색어 가로채기(index)와 별개로, 이름 변환에만 씀
+        # (아티스트 페이지가 "아이유"로 와도 "IU"로 와도 같은 아티스트 = 같은 조회용 이름)
+        self.by_name: dict = {}
         self.loaded_from: Optional[str] = None
 
     def load(self, path: str = CATALOG_PATH) -> "AliasCatalog":
@@ -60,8 +65,13 @@ class AliasCatalog:
                     "id": aid,
                     "official": str(a["official"]),
                     "ko": a.get("ko") or None,
+                    "lookup": a.get("lookup") or str(a["official"]),
                     "image": a.get("image") or None,
                 }
+                for name in [a["official"], a.get("ko"), a.get("lookup")] + list(a.get("aliases") or []):
+                    key = normalize(name) if isinstance(name, str) else ""
+                    if key:
+                        self.by_name.setdefault(key, aid)
                 # official(정식 영문 이름)은 표시용 — 색인은 aliases만. "Treasure"/"Crush" 같은 영어 단어 검색을
                 # K팝 아티스트로 가로채지 않게, 영문 별칭은 build_catalog.py가 수동 시드에 있는 것만 aliases에 넣음.
                 for alias in a.get("aliases") or []:
@@ -105,6 +115,28 @@ class AliasCatalog:
         if item_id not in bucket[kind]:
             bucket[kind].append(item_id)
 
+    def display_name(self, aid: str) -> str:
+        """화면용 이름: 한글 이름이 있으면 한글, 없으면 정식 이름(YOASOBI처럼 한글명이 없는 아티스트는 영문 그대로)."""
+        a = self.artists[aid]
+        ko = a["ko"]
+        return ko if ko and any("가" <= ch <= "힣" for ch in ko) else a["official"]
+
+    def find_artist(self, name: str) -> Optional[dict]:
+        """이름(전체, 괄호 앞, 괄호 안 순서)으로 아티스트를 찾음 — "RIIZE (라이즈)" 같은 Last.fm 표기도 찾게.
+        반환: {"id", "display", "official", "lookup"} 또는 None. 메모리 조회만(외부 호출 없음)."""
+        if not isinstance(name, str) or not name.strip():
+            return None
+        candidates = [name]
+        if "(" in name and name.rstrip().endswith(")"):
+            outer, _, inner = name.rstrip()[:-1].partition("(")
+            candidates += [outer, inner]
+        for cand in candidates:
+            aid = self.by_name.get(normalize(cand))
+            if aid:
+                a = self.artists[aid]
+                return {"id": aid, "display": self.display_name(aid), "official": a["official"], "lookup": a["lookup"]}
+        return None
+
     def _artist_out(self, aid: str, artist_image: Callable[[str], Optional[str]]) -> dict:
         a = self.artists[aid]
         image = a["image"]
@@ -114,12 +146,15 @@ class AliasCatalog:
             except Exception:
                 image = None
         # listeners를 비워두면 프론트의 "1위의 50% 미만 숨김" 규칙에 안 걸림(max가 0이라 필터 생략)
-        return {"name": a["official"], "mbid": None, "image": image, "listeners": None}
+        display = self.display_name(aid)
+        # name은 기존 키(프론트 호환) — 화면용 표시 이름. 조회는 officialName(새 필드)으로
+        return {"name": display, "displayName": display, "officialName": a["official"],
+                "mbid": None, "image": image, "listeners": None}
 
     def _track_out(self, tid: str, track_image: Callable[[str, str], Optional[str]]) -> dict:
         t = self.tracks[tid]
         a = self.artists[t["artist_id"]]
-        artist_display = a["ko"] or a["official"]  # 곡 목록은 기존 파이프라인처럼 한글 아티스트명 우선
+        artist_display = self.display_name(t["artist_id"])  # 아티스트 칸과 같은 규칙(한글 우선)
         name = f"{t['ko_title']} ({t['title']})" if t["ko_title"] and t["ko_title"] != t["title"] else t["title"]
         image = t["image"]
         if not image:
@@ -130,7 +165,8 @@ class AliasCatalog:
                     image = None
                 if image:
                     break
-        return {"name": name, "artist": artist_display, "listeners": t["listeners"], "url": t["url"], "image": image}
+        return {"name": name, "artist": artist_display, "artistOfficialName": a["official"],
+                "listeners": t["listeners"], "url": t["url"], "image": image}
 
     def lookup(
         self,

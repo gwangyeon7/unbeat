@@ -5,6 +5,7 @@
    "id": "10cm",
    "official": "10cm",
    "ko": "십센치",
+   "lookup": "10cm",
    "aliases": [
     "십센치"
    ],
@@ -14,6 +15,7 @@
    "id": "2ne1",
    "official": "2NE1",
    "ko": "투애니원",
+   "lookup": "투애니원",
    "aliases": [
     "투애니원"
    ],
@@ -23,6 +25,7 @@
    "id": "a2o",
    "official": "A2O",
    "ko": null,
+   "lookup": "A2O",
    "aliases": [],
    "image": "https://cdn-images.dzcdn.net/images/artist/1fecff61b191427ec4d2760a77527bf5/500x500-000000-80-0-0.jpg"
   },
@@ -30,6 +33,7 @@
    "id": "aespa",
    "official": "aespa",
    "ko": "에스파",
+   "lookup": "aespa",
    "aliases": [
     "에스파"
    ],
@@ -39,6 +43,7 @@
    "id": "ahnyeeun",
    "official": "AHN YEEUN",
    "ko": "안예은",
+   "lookup": "안예은",
    "aliases": [
     "안예은"
    ],
@@ -48,6 +53,7 @@
    "id": "aihiguchi",
    "official": "Ai Higuchi",
    "ko": null,
+   "lookup": "Ai Higuchi",
    "aliases": [],
    "image": "https://cdn-images.dzcdn.net/images/artist/43c22597a41ce14133086bcc1bc76853/500x500-000000-80-0-0.jpg"
   },
@@ -55,6 +61,7 @@
    "id": "aimyon",
    "official": "aimyon",
    "ko": null,
+   "lookup": "aimyon",
    "aliases": [
     "아이묭"
    ],
@@ -64,6 +71,7 @@
    "id": "akmu",
    "official": "AKMU",
    "ko": "악동뮤지션",
+   "lookup": "악동뮤지션",
    "aliases": [
     "악동뮤지션",
     "악뮤"
@@ -74,6 +82,7 @@
    "id": "alldayproject",
    "official": "ALLDAY PROJECT",
    "ko": null,
+   "lookup": "ALLDAY PROJECT",
    "aliases": [],
    "image": "https://cdn-images.dzcdn.net/images/artist/89b7e6e53f5186e9c23489049edd5306/500x500-000000-80-0-0.jpg"
   },
@@ -81,6 +90,7 @@
    "id": "apink",
    "official": "Apink",
    "ko": "에이핑크",
+   "lookup": "에이핑크",
    "aliases": [
     "에이핑크"
    ],
@@ -90,6 +100,7 @@
    "id": "ashisland",
    "official": "ASH ISLAND",
    "ko": null,
+   "lookup": "ASH ISLAND",
    "aliases": [],
    "image": "https://cdn-images.dzcdn.net/images/artist/c279e84434198f1d3eb4ff1599ab4724/500x500-000000-80-0-0.jpg"
   },
@@ -97,6 +108,7 @@
    "id": "astro",
    "official": "ASTRO",
    "ko": "아스트로",
+   "lookup": "아스트로",
    "aliases": [
     "아스트로"
    ],
@@ -106,6 +118,7 @@
    "id": "ateez",
    "official": "ATEEZ",
    "ko": "에이티즈",
+   "lookup": "ATEEZ",
    "aliases": [
     "에이티즈"
    ],
@@ -115,6 +128,7 @@
    "id": "ayumuimazu",
    "official": "Ayumu Imazu",
    "ko": null,
+   "lookup": "Ayumu Imazu",
    "aliases": [],
    "image": "https://cdn-images.dzcdn.net/images/artist/5a56082f214f2732dc990ad03b6ca2bc/500x500-000000-80-0-0.jpg"
   },
@@ -122,6 +136,7 @@
    "id": "babymonster",
    "official": "BABYMONSTER",
    "ko": "베이비몬스터",
+   "lookup": "BABYMONSTER",
    "aliases": [
     "베이비몬스터"
    ],
@@ -131,6 +146,7 @@
    "id": "backnumber",
    "official": "back number",
    "ko": null,
+   "lookup": "back number",
    "aliases": [
     "백 넘버"
    ],
@@ -140,6 +156,7 @@
    "id": "baekhyun",
    "official": "BAEKHYUN",
    "ko": "백현",
+   "lookup": "백현",
    "aliases": [
     "백현"
    ],
@@ -149,6 +166,7 @@
    "id": "beenzino",
    "official": "Beenzino",
    "ko": "빈지노",
+   "lookup": "빈지노",
    "aliases": [
     "빈지노"
    ],
@@ -158,6 +176,7 @@
    "id": "beo",
    "official": "BE'O",
    "ko": "비오",
+   "lookup": "BE'O",
    "aliases": [
     "비오"
    ],
@@ -167,6 +186,7 @@
    "id": "bibi",
    "official": "BIBI",
    "ko": "비비",
+   "lookup": "비비",
    "aliases": [
     "비비"
    ],
@@ -176,6 +196,7 @@
    "id": "bigbang",
    "official": "BIGBANG",
    "ko": "빅뱅",
+   "lookup": "빅뱅",
    "aliases": [
     "빅뱅"
    ],
@@ -185,6 +206,7 @@
    "id": "bignaughty",
    "official": "BIG Naughty",
    "ko": "빅나티",
+   "lookup": "BIG Naughty",
    "aliases": [
     "빅나티",
     "서동현"
@@ -195,6 +217,7 @@
    "id": "blackpink",
    "official": "BLACKPINK",
    "ko": "블랙핑크",
+   "lookup": "블랙핑크",
    "aliases": [
     "블랙핑크"
    ],
@@ -204,6 +227,7 @@
    "id": "bol4",
    "official": "BOL4",
    "ko": "볼빨간사춘기",
+   "lookup": "볼빨간사춘기",
    "aliases": [
     "BOL4",
     "볼빨간사춘기"
@@ -214,6 +238,7 @@
    "id": "boynextdoor",
    "official": "BOYNEXTDOOR",
    "ko": "보이넥스트도어",
+   "lookup": "BOYNEXTDOOR",
    "aliases": [
     "보이넥스트도어"
    ],
@@ -223,6 +248,7 @@
    "id": "btob",
    "official": "BTOB",
    "ko": "비투비",
+   "lookup": "비투비",
    "aliases": [
     "비투비"
    ],
@@ -232,6 +258,7 @@
    "id": "bts",
    "official": "BTS",
    "ko": "방탄소년단",
+   "lookup": "방탄소년단",
    "aliases": [
     "BTS",
     "방탄소년단"
@@ -242,6 +269,7 @@
    "id": "cantbeblue",
    "official": "can't be blue",
    "ko": null,
+   "lookup": "can't be blue",
    "aliases": [],
    "image": "https://cdn-images.dzcdn.net/images/artist/48ab87c9214bb32ddc714763da38f881/500x500-000000-80-0-0.jpg"
   },
@@ -249,6 +277,7 @@
    "id": "carthegarden",
    "official": "Car, The Garden",
    "ko": "카더가든",
+   "lookup": "카더가든",
    "aliases": [
     "카더가든"
    ],
@@ -258,6 +287,7 @@
    "id": "changmo",
    "official": "CHANGMO",
    "ko": "창모",
+   "lookup": "창모",
    "aliases": [
     "창모"
    ],
@@ -267,6 +297,7 @@
    "id": "chanyeol",
    "official": "CHANYEOL",
    "ko": "찬열",
+   "lookup": "찬열",
    "aliases": [
     "찬열"
    ],
@@ -276,6 +307,7 @@
    "id": "cheeze",
    "official": "CHEEZE",
    "ko": "치즈",
+   "lookup": "CHEEZE",
    "aliases": [
     "치즈"
    ],
@@ -285,6 +317,7 @@
    "id": "choqmay",
    "official": "ChoQMay",
    "ko": null,
+   "lookup": "ChoQMay",
    "aliases": [],
    "image": "https://cdn-images.dzcdn.net/images/artist/44f766a17fb74de0da4c5b7f8ae538a2/500x500-000000-80-0-0.jpg"
   },
@@ -292,6 +325,7 @@
    "id": "chungha",
    "official": "CHUNG HA",
    "ko": "청하",
+   "lookup": "청하",
    "aliases": [
     "청하"
    ],
@@ -301,6 +335,7 @@
    "id": "coogie",
    "official": "Coogie",
    "ko": "쿠기",
+   "lookup": "쿠기",
    "aliases": [
     "쿠기"
    ],
@@ -310,6 +345,7 @@
    "id": "cortis",
    "official": "CORTIS",
    "ko": "코르티스",
+   "lookup": "CORTIS",
    "aliases": [
     "코르티스"
    ],
@@ -319,6 +355,7 @@
    "id": "crush",
    "official": "Crush",
    "ko": "크러쉬",
+   "lookup": "크러쉬",
    "aliases": [
     "크러쉬"
    ],
@@ -328,6 +365,7 @@
    "id": "damonsyear",
    "official": "Damons year",
    "ko": "데이먼스 이어",
+   "lookup": "Damons year",
    "aliases": [
     "데이먼스 이어"
    ],
@@ -337,6 +375,7 @@
    "id": "daniel",
    "official": "DANIEL",
    "ko": null,
+   "lookup": "DANIEL",
    "aliases": [],
    "image": "https://cdn-images.dzcdn.net/images/artist/4e66c8177a103ab7184485f7860e4150/500x500-000000-80-0-0.jpg"
   },
@@ -344,6 +383,7 @@
    "id": "davichi",
    "official": "DAVICHI",
    "ko": "다비치",
+   "lookup": "다비치",
    "aliases": [
     "Davichi",
     "다비치"
@@ -354,6 +394,7 @@
    "id": "day6",
    "official": "DAY6",
    "ko": "데이식스",
+   "lookup": "데이식스",
    "aliases": [
     "데이식스"
    ],
@@ -363,6 +404,7 @@
    "id": "dean",
    "official": "Dean",
    "ko": "딘",
+   "lookup": "Dean",
    "aliases": [
     "딘"
    ],
@@ -372,6 +414,7 @@
    "id": "dhack",
    "official": "D-Hack",
    "ko": "디핵",
+   "lookup": "디핵",
    "aliases": [
     "디핵"
    ],
@@ -381,6 +424,7 @@
    "id": "do",
    "official": "D.O.",
    "ko": "도경수",
+   "lookup": "도경수",
    "aliases": [
     "도경수"
    ],
@@ -390,6 +434,7 @@
    "id": "dprlive",
    "official": "DPR LIVE",
    "ko": null,
+   "lookup": "DPR LIVE",
    "aliases": [],
    "image": "https://cdn-images.dzcdn.net/images/artist/542090a8de8f857b88fcdb8510ed69da/500x500-000000-80-0-0.jpg"
   },
@@ -397,6 +442,7 @@
    "id": "eclipse",
    "official": "ECLIPSE",
    "ko": "이클립스",
+   "lookup": "ECLIPSE",
    "aliases": [
     "이클립스"
    ],
@@ -406,6 +452,7 @@
    "id": "enhypen",
    "official": "ENHYPEN",
    "ko": "엔하이픈",
+   "lookup": "ENHYPEN",
    "aliases": [
     "엔하이픈"
    ],
@@ -415,6 +462,7 @@
    "id": "epikhigh",
    "official": "EPIK HIGH",
    "ko": "에픽하이",
+   "lookup": "에픽하이",
    "aliases": [
     "에픽하이"
    ],
@@ -424,6 +472,7 @@
    "id": "exo",
    "official": "EXO",
    "ko": "엑소",
+   "lookup": "엑소",
    "aliases": [
     "엑소"
    ],
@@ -433,6 +482,7 @@
    "id": "g0nny",
    "official": "g0nny",
    "ko": "거니",
+   "lookup": "g0nny",
    "aliases": [
     "거니"
    ],
@@ -442,6 +492,7 @@
    "id": "gdragon",
    "official": "G-DRAGON",
    "ko": null,
+   "lookup": "G-DRAGON",
    "aliases": [],
    "image": "https://cdn-images.dzcdn.net/images/artist/7ac3313d36221d7450cb16e171d557b6/500x500-000000-80-0-0.jpg"
   },
@@ -449,6 +500,7 @@
    "id": "geeks",
    "official": "Geeks",
    "ko": "긱스",
+   "lookup": "긱스",
    "aliases": [
     "긱스"
    ],
@@ -458,6 +510,7 @@
    "id": "gfriend",
    "official": "GFRIEND",
    "ko": "여자친구",
+   "lookup": "여자친구",
    "aliases": [
     "여자친구"
    ],
@@ -467,6 +520,7 @@
    "id": "girlsgeneration",
    "official": "Girls' Generation",
    "ko": "소녀시대",
+   "lookup": "소녀시대",
    "aliases": [
     "girls generation",
     "snsd",
@@ -478,6 +532,7 @@
    "id": "got7",
    "official": "GOT7",
    "ko": "갓세븐",
+   "lookup": "GOT7",
    "aliases": [
     "갓세븐"
    ],
@@ -487,6 +542,7 @@
    "id": "hamo",
    "official": "hamo",
    "ko": "하모",
+   "lookup": "hamo",
    "aliases": [
     "하모"
    ],
@@ -496,6 +552,7 @@
    "id": "haon",
    "official": "HAON",
    "ko": "김하온",
+   "lookup": "김하온",
    "aliases": [
     "김하온"
    ],
@@ -505,6 +562,7 @@
    "id": "hcode",
    "official": "H:CODE",
    "ko": "에이치코드",
+   "lookup": "H:CODE",
    "aliases": [
     "에이치코드"
    ],
@@ -514,6 +572,7 @@
    "id": "hearts2hearts",
    "official": "Hearts2Hearts",
    "ko": "하츠투하츠",
+   "lookup": "Hearts2Hearts",
    "aliases": [
     "하츠투하츠"
    ],
@@ -523,6 +582,7 @@
    "id": "heize",
    "official": "Heize",
    "ko": "헤이즈",
+   "lookup": "헤이즈",
    "aliases": [
     "헤이즈"
    ],
@@ -532,6 +592,7 @@
    "id": "huhgak",
    "official": "Huh Gak",
    "ko": "허각",
+   "lookup": "허각",
    "aliases": [
     "허각"
    ],
@@ -541,6 +602,7 @@
    "id": "huntrx",
    "official": "HUNTR/X",
    "ko": null,
+   "lookup": "HUNTR/X",
    "aliases": [],
    "image": "https://cdn-images.dzcdn.net/images/artist/02cd2e0137770b59698988a0d6d87625/500x500-000000-80-0-0.jpg"
   },
@@ -548,6 +610,7 @@
    "id": "hwasa",
    "official": "HWASA",
    "ko": "화사",
+   "lookup": "화사",
    "aliases": [
     "화사"
    ],
@@ -557,6 +620,7 @@
    "id": "hyukoh",
    "official": "HYUKOH",
    "ko": "혁오",
+   "lookup": "혁오",
    "aliases": [
     "혁오"
    ],
@@ -566,6 +630,7 @@
    "id": "hyunseo",
    "official": "HYUN SEO",
    "ko": "헌서",
+   "lookup": "HYUN SEO",
    "aliases": [
     "헌서"
    ],
@@ -575,6 +640,7 @@
    "id": "idle",
    "official": "i-dle",
    "ko": "아이들",
+   "lookup": "(G)I-DLE",
    "aliases": [
     "(G)I-DLE",
     "아이들",
@@ -586,6 +652,7 @@
    "id": "ikon",
    "official": "iKON",
    "ko": "아이콘",
+   "lookup": "아이콘",
    "aliases": [
     "아이콘"
    ],
@@ -595,6 +662,7 @@
    "id": "illit",
    "official": "ILLIT",
    "ko": "아일릿",
+   "lookup": "ILLIT",
    "aliases": [
     "아일릿"
    ],
@@ -604,6 +672,7 @@
    "id": "imase",
    "official": "imase",
    "ko": null,
+   "lookup": "imase",
    "aliases": [
     "이마세"
    ],
@@ -613,6 +682,7 @@
    "id": "ioi",
    "official": "I.O.I",
    "ko": "아이오아이",
+   "lookup": "아이오아이",
    "aliases": [
     "아이오아이"
    ],
@@ -622,6 +692,7 @@
    "id": "isegyeidol",
    "official": "ISEGYE IDOL",
    "ko": "이세계아이돌",
+   "lookup": "ISEGYE IDOL",
    "aliases": [
     "이세계아이돌"
    ],
@@ -631,6 +702,7 @@
    "id": "itzy",
    "official": "ITZY",
    "ko": "있지",
+   "lookup": "ITZY",
    "aliases": [
     "있지"
    ],
@@ -640,6 +712,7 @@
    "id": "iu",
    "official": "IU",
    "ko": "아이유",
+   "lookup": "아이유",
    "aliases": [
     "IU",
     "아이유"
@@ -650,6 +723,7 @@
    "id": "ive",
    "official": "IVE",
    "ko": "아이브",
+   "lookup": "아이브",
    "aliases": [
     "아이브"
    ],
@@ -659,6 +733,7 @@
    "id": "jaeha",
    "official": "JAEHA",
    "ko": "재하",
+   "lookup": "JAEHA",
    "aliases": [
     "재하"
    ],
@@ -668,6 +743,7 @@
    "id": "jannabi",
    "official": "JANNABI",
    "ko": "잔나비",
+   "lookup": "잔나비",
    "aliases": [
     "JANNABI",
     "잔나비"
@@ -678,6 +754,7 @@
    "id": "jennie",
    "official": "JENNIE",
    "ko": "제니",
+   "lookup": "제니",
    "aliases": [
     "JENNIE",
     "제니"
@@ -688,6 +765,7 @@
    "id": "jeongeunji",
    "official": "JEONG EUN JI",
    "ko": "정은지",
+   "lookup": "정은지",
    "aliases": [
     "정은지"
    ],
@@ -697,6 +775,7 @@
    "id": "jinyoung",
    "official": "JINYOUNG",
    "ko": "진영",
+   "lookup": "JINYOUNG",
    "aliases": [
     "진영"
    ],
@@ -706,6 +785,7 @@
    "id": "jisoo",
    "official": "JISOO",
    "ko": "지수",
+   "lookup": "지수",
    "aliases": [
     "지수"
    ],
@@ -715,6 +795,7 @@
    "id": "joosiq",
    "official": "Joosiq",
    "ko": "주시크",
+   "lookup": "Joosiq",
    "aliases": [
     "주시크"
    ],
@@ -724,6 +805,7 @@
    "id": "jukjae",
    "official": "Jukjae",
    "ko": "적재",
+   "lookup": "적재",
    "aliases": [
     "적재"
    ],
@@ -733,6 +815,7 @@
    "id": "justhis",
    "official": "JUSTHIS",
    "ko": "저스디스",
+   "lookup": "JUSTHIS",
    "aliases": [
     "justhis",
     "저스디스"
@@ -743,6 +826,7 @@
    "id": "kanaboon",
    "official": "Kana-Boon",
    "ko": null,
+   "lookup": "Kana-Boon",
    "aliases": [],
    "image": "https://cdn-images.dzcdn.net/images/artist/3839b9c6ccf7029945ac29c157be4fcc/500x500-000000-80-0-0.jpg"
   },
@@ -750,6 +834,7 @@
    "id": "kara",
    "official": "Kara",
    "ko": "카라",
+   "lookup": "카라",
    "aliases": [
     "카라"
    ],
@@ -759,6 +844,7 @@
    "id": "kautiun",
    "official": "Kautiun",
    "ko": null,
+   "lookup": "Kautiun",
    "aliases": [],
    "image": null
   },
@@ -766,6 +852,7 @@
    "id": "keemhyoeun",
    "official": "Keem Hyo-Eun",
    "ko": "김효은",
+   "lookup": "Keem Hyo-Eun",
    "aliases": [
     "김효은"
    ],
@@ -775,6 +862,7 @@
    "id": "kenshiyonezu",
    "official": "Kenshi Yonezu",
    "ko": null,
+   "lookup": "Kenshi Yonezu",
    "aliases": [
     "요네즈 켄시"
    ],
@@ -784,6 +872,7 @@
    "id": "kep1er",
    "official": "Kep1er",
    "ko": "케플러",
+   "lookup": "Kep1er",
    "aliases": [
     "케플러"
    ],
@@ -793,6 +882,7 @@
    "id": "kiiikiii",
    "official": "KiiiKiii",
    "ko": "키키",
+   "lookup": "KiiiKiii",
    "aliases": [
     "키키"
    ],
@@ -802,6 +892,7 @@
    "id": "kinggnu",
    "official": "King Gnu",
    "ko": null,
+   "lookup": "King Gnu",
    "aliases": [
     "킹누"
    ],
@@ -811,6 +902,7 @@
    "id": "kissoflife",
    "official": "KISS OF LIFE",
    "ko": "키스오브라이프",
+   "lookup": "KISS OF LIFE",
    "aliases": [
     "키스오브라이프"
    ],
@@ -820,6 +912,7 @@
    "id": "ladygaga",
    "official": "Lady Gaga",
    "ko": null,
+   "lookup": "Lady Gaga",
    "aliases": [],
    "image": "https://cdn-images.dzcdn.net/images/artist/7565262f7661b0d762621a8d69ba6f49/500x500-000000-80-0-0.jpg"
   },
@@ -827,6 +920,7 @@
    "id": "leehi",
    "official": "LEEHI",
    "ko": "이하이",
+   "lookup": "이하이",
    "aliases": [
     "이하이"
    ],
@@ -836,6 +930,7 @@
    "id": "leellamarz",
    "official": "Leellamarz",
    "ko": "릴러말즈",
+   "lookup": "Leellamarz",
    "aliases": [
     "릴러말즈"
    ],
@@ -845,6 +940,7 @@
    "id": "leina",
    "official": "Leina",
    "ko": null,
+   "lookup": "Leina",
    "aliases": [],
    "image": "https://cdn-images.dzcdn.net/images/artist/1c4d1181382ce5afd06cb3988c49ffa5/500x500-000000-80-0-0.jpg"
   },
@@ -852,6 +948,7 @@
    "id": "lesserafim",
    "official": "LE SSERAFIM",
    "ko": "르세라핌",
+   "lookup": "르세라핌",
    "aliases": [
     "르세라핌"
    ],
@@ -861,6 +958,7 @@
    "id": "limyoungwoong",
    "official": "Lim Young Woong",
    "ko": "임영웅",
+   "lookup": "임영웅",
    "aliases": [
     "Lim Young Woong",
     "임영웅"
@@ -871,6 +969,7 @@
    "id": "lisa",
    "official": "LISA",
    "ko": "리사",
+   "lookup": "LISA",
    "aliases": [
     "리사"
    ],
@@ -880,6 +979,7 @@
    "id": "maktub",
    "official": "MAKTUB",
    "ko": "마크툽",
+   "lookup": "마크툽",
    "aliases": [
     "마크툽"
    ],
@@ -889,6 +989,7 @@
    "id": "mamamoo",
    "official": "MAMAMOO",
    "ko": "마마무",
+   "lookup": "마마무",
    "aliases": [
     "마마무"
    ],
@@ -898,6 +999,7 @@
    "id": "mc몽",
    "official": "MC몽",
    "ko": "MC몽",
+   "lookup": "MC몽",
    "aliases": [
     "MC몽"
    ],
@@ -907,6 +1009,7 @@
    "id": "mc스나이퍼",
    "official": "MC 스나이퍼",
    "ko": "MC 스나이퍼",
+   "lookup": "MC 스나이퍼",
    "aliases": [
     "MC 스나이퍼"
    ],
@@ -916,6 +1019,7 @@
    "id": "melomance",
    "official": "MeloMance",
    "ko": "멜로망스",
+   "lookup": "멜로망스",
    "aliases": [
     "MeloMance",
     "멜로망스"
@@ -926,6 +1030,7 @@
    "id": "meovv",
    "official": "MEOVV",
    "ko": "미야오",
+   "lookup": "MEOVV",
    "aliases": [
     "미야오"
    ],
@@ -935,6 +1040,7 @@
    "id": "mikimatsubara",
    "official": "Miki Matsubara",
    "ko": null,
+   "lookup": "Miki Matsubara",
    "aliases": [],
    "image": "https://cdn-images.dzcdn.net/images/artist/131655446cc1d947d4e7791fd37ef2ff/500x500-000000-80-0-0.jpg"
   },
@@ -942,6 +1048,7 @@
    "id": "mirani",
    "official": "MIRANI",
    "ko": "미란이",
+   "lookup": "미란이",
    "aliases": [
     "미란이"
    ],
@@ -951,6 +1058,7 @@
    "id": "monstax",
    "official": "Monsta X",
    "ko": "몬스타엑스",
+   "lookup": "몬스타엑스",
    "aliases": [
     "몬스타엑스"
    ],
@@ -960,6 +1068,7 @@
    "id": "mrsgreenapple",
    "official": "Mrs. GREEN APPLE",
    "ko": null,
+   "lookup": "Mrs. GREEN APPLE",
    "aliases": [
     "미세스 그린 애플"
    ],
@@ -969,6 +1078,7 @@
    "id": "msasuke",
    "official": "M.Sasuke",
    "ko": null,
+   "lookup": "M.Sasuke",
    "aliases": [],
    "image": "https://cdn-images.dzcdn.net/images/artist/04fe1f7330d38c28d542789867eccf14/500x500-000000-80-0-0.jpg"
   },
@@ -976,6 +1086,7 @@
    "id": "natori",
    "official": "natori",
    "ko": null,
+   "lookup": "natori",
    "aliases": [],
    "image": "https://cdn-images.dzcdn.net/images/artist/0affca8aaa563a73c0d90e79a4d04a85/500x500-000000-80-0-0.jpg"
   },
@@ -983,6 +1094,7 @@
    "id": "nct",
    "official": "NCT",
    "ko": "엔시티",
+   "lookup": "NCT",
    "aliases": [
     "nct",
     "엔시티"
@@ -993,6 +1105,7 @@
    "id": "nct127",
    "official": "NCT 127",
    "ko": "엔시티 127",
+   "lookup": "NCT 127",
    "aliases": [
     "nct 127",
     "엔시티 127"
@@ -1003,6 +1116,7 @@
    "id": "nctdream",
    "official": "NCT DREAM",
    "ko": "엔시티 드림",
+   "lookup": "NCT DREAM",
    "aliases": [
     "엔시티 드림"
    ],
@@ -1012,6 +1126,7 @@
    "id": "nctwish",
    "official": "NCT WISH",
    "ko": null,
+   "lookup": "NCT WISH",
    "aliases": [],
    "image": "https://cdn-images.dzcdn.net/images/artist/e4b40d9d38cf0433818214b95e0e4358/500x500-000000-80-0-0.jpg"
   },
@@ -1019,6 +1134,7 @@
    "id": "nerdconnection",
    "official": "Nerd Connection",
    "ko": "너드커넥션",
+   "lookup": "너드커넥션",
    "aliases": [
     "너드커넥션"
    ],
@@ -1028,6 +1144,7 @@
    "id": "newjeans",
    "official": "NewJeans",
    "ko": "뉴진스",
+   "lookup": "뉴진스",
    "aliases": [
     "뉴진스"
    ],
@@ -1037,6 +1154,7 @@
    "id": "nmixx",
    "official": "NMIXX",
    "ko": "엔믹스",
+   "lookup": "NMIXX",
    "aliases": [
     "엔믹스"
    ],
@@ -1046,6 +1164,7 @@
    "id": "novelbright",
    "official": "Novelbright",
    "ko": "노벨브라이트",
+   "lookup": "Novelbright",
    "aliases": [
     "노벨브라이트"
    ],
@@ -1055,6 +1174,7 @@
    "id": "nowimyoung",
    "official": "NOWIMYOUNG",
    "ko": "나우아임영",
+   "lookup": "NOWIMYOUNG",
    "aliases": [
     "나우아임영"
    ],
@@ -1064,6 +1184,7 @@
    "id": "nuest",
    "official": "NU'EST",
    "ko": "뉴이스트",
+   "lookup": "뉴이스트",
    "aliases": [
     "뉴이스트"
    ],
@@ -1073,6 +1194,7 @@
    "id": "officialhigedandism",
    "official": "OFFICIAL HIGE DANDISM",
    "ko": null,
+   "lookup": "OFFICIAL HIGE DANDISM",
    "aliases": [
     "오피셜 히게 단디즘",
     "히게단"
@@ -1083,6 +1205,7 @@
    "id": "ohmygirl",
    "official": "OH MY GIRL",
    "ko": "오마이걸",
+   "lookup": "오마이걸",
    "aliases": [
     "오마이걸"
    ],
@@ -1092,6 +1215,7 @@
    "id": "ovan",
    "official": "OVAN",
    "ko": "오반",
+   "lookup": "오반",
    "aliases": [
     "오반"
    ],
@@ -1101,6 +1225,7 @@
    "id": "owhen",
    "official": "O.WHEN",
    "ko": "오왠",
+   "lookup": "오왠",
    "aliases": [
     "오왠"
    ],
@@ -1110,6 +1235,7 @@
    "id": "pandagomm",
    "official": "Panda Gomm",
    "ko": null,
+   "lookup": "Panda Gomm",
    "aliases": [],
    "image": "https://cdn-images.dzcdn.net/images/artist/9da73366796190876dfae4c523e9a0cc/500x500-000000-80-0-0.jpg"
   },
@@ -1117,6 +1243,7 @@
    "id": "pateko",
    "official": "PATEKO",
    "ko": "파테코",
+   "lookup": "PATEKO",
    "aliases": [
     "파테코"
    ],
@@ -1126,6 +1253,7 @@
    "id": "paulblanco",
    "official": "Paul Blanco",
    "ko": null,
+   "lookup": "Paul Blanco",
    "aliases": [],
    "image": "https://cdn-images.dzcdn.net/images/artist/60875f0ec3832cfdce9e9bda0f7818ec/500x500-000000-80-0-0.jpg"
   },
@@ -1133,6 +1261,7 @@
    "id": "paulkim",
    "official": "Paul Kim",
    "ko": "폴킴",
+   "lookup": "폴킴",
    "aliases": [
     "폴킴"
    ],
@@ -1142,6 +1271,7 @@
    "id": "ph1",
    "official": "pH-1",
    "ko": null,
+   "lookup": "pH-1",
    "aliases": [],
    "image": "https://cdn-images.dzcdn.net/images/artist/62cbbd0a8d40f6db155072b172de19f0/500x500-000000-80-0-0.jpg"
   },
@@ -1149,6 +1279,7 @@
    "id": "plave",
    "official": "PLAVE",
    "ko": null,
+   "lookup": "PLAVE",
    "aliases": [],
    "image": "https://cdn-images.dzcdn.net/images/artist/c1fbd15086294c48300e24f23d77191d/500x500-000000-80-0-0.jpg"
   },
@@ -1156,6 +1287,7 @@
    "id": "psy",
    "official": "PSY",
    "ko": "싸이",
+   "lookup": "싸이",
    "aliases": [
     "싸이"
    ],
@@ -1165,6 +1297,7 @@
    "id": "radwimps",
    "official": "RADWIMPS",
    "ko": "래드윔프스",
+   "lookup": "RADWIMPS",
    "aliases": [
     "라드윔프스",
     "래드윔프스"
@@ -1175,6 +1308,7 @@
    "id": "redoor",
    "official": "Redoor",
    "ko": "리도어",
+   "lookup": "Redoor",
    "aliases": [
     "리도어"
    ],
@@ -1184,6 +1318,7 @@
    "id": "redvelvet",
    "official": "Red Velvet",
    "ko": "레드벨벳",
+   "lookup": "레드벨벳",
    "aliases": [
     "레드벨벳"
    ],
@@ -1193,6 +1328,7 @@
    "id": "rescene",
    "official": "RESCENE",
    "ko": "리센느",
+   "lookup": "RESCENE",
    "aliases": [
     "리센느"
    ],
@@ -1202,6 +1338,7 @@
    "id": "riize",
    "official": "RIIZE",
    "ko": "라이즈",
+   "lookup": "RIIZE",
    "aliases": [
     "라이즈"
    ],
@@ -1211,6 +1348,7 @@
    "id": "rokudenashi",
    "official": "Rokudenashi",
    "ko": null,
+   "lookup": "Rokudenashi",
    "aliases": [],
    "image": "https://cdn-images.dzcdn.net/images/artist/4fe3dff74cacf5d30b1850eb537306ef/500x500-000000-80-0-0.jpg"
   },
@@ -1218,6 +1356,7 @@
    "id": "rosé",
    "official": "ROSÉ",
    "ko": "로제",
+   "lookup": "ROSÉ",
    "aliases": [
     "ROSÉ",
     "로제"
@@ -1228,6 +1367,7 @@
    "id": "royal44",
    "official": "Royal 44",
    "ko": null,
+   "lookup": "Royal 44",
    "aliases": [],
    "image": "https://cdn-images.dzcdn.net/images/artist/f229c45a8e4b27f017edcc331ea0d45d/500x500-000000-80-0-0.jpg"
   },
@@ -1235,6 +1375,7 @@
    "id": "sane",
    "official": "San E",
    "ko": "산이",
+   "lookup": "산이",
    "aliases": [
     "산이"
    ],
@@ -1244,6 +1385,7 @@
    "id": "seikomatsuda",
    "official": "SEIKO MATSUDA",
    "ko": null,
+   "lookup": "SEIKO MATSUDA",
    "aliases": [],
    "image": "https://cdn-images.dzcdn.net/images/artist/d2f55eb6313d19e94c2bcaea8ce459cc/500x500-000000-80-0-0.jpg"
   },
@@ -1251,6 +1393,7 @@
    "id": "sesoneon",
    "official": "SE SO NEON",
    "ko": "세소년",
+   "lookup": "SE SO NEON",
    "aliases": [
     "세소년"
    ],
@@ -1260,6 +1403,7 @@
    "id": "seventeen",
    "official": "SEVENTEEN",
    "ko": "세븐틴",
+   "lookup": "세븐틴",
    "aliases": [
     "세븐틴"
    ],
@@ -1269,6 +1413,7 @@
    "id": "shaun",
    "official": "SHAUN",
    "ko": "숀",
+   "lookup": "숀",
    "aliases": [
     "숀"
    ],
@@ -1278,6 +1423,7 @@
    "id": "shinee",
    "official": "SHINee",
    "ko": "샤이니",
+   "lookup": "샤이니",
    "aliases": [
     "샤이니"
    ],
@@ -1287,6 +1433,7 @@
    "id": "sikk",
    "official": "Sik-K",
    "ko": "식케이",
+   "lookup": "식케이",
    "aliases": [
     "식케이"
    ],
@@ -1296,6 +1443,7 @@
    "id": "silicagel",
    "official": "Silica Gel",
    "ko": "실리카겔",
+   "lookup": "실리카겔",
    "aliases": [
     "실리카겔"
    ],
@@ -1305,6 +1453,7 @@
    "id": "sistar",
    "official": "Sistar",
    "ko": "씨스타",
+   "lookup": "씨스타",
    "aliases": [
     "씨스타"
    ],
@@ -1314,6 +1463,7 @@
    "id": "sokodomo",
    "official": "sokodomo",
    "ko": "소코도모",
+   "lookup": "sokodomo",
    "aliases": [
     "소코도모"
    ],
@@ -1323,6 +1473,7 @@
    "id": "soyeon",
    "official": "SOYEON",
    "ko": "소연",
+   "lookup": "소연",
    "aliases": [
     "소연"
    ],
@@ -1332,6 +1483,7 @@
    "id": "spyair",
    "official": "SPYAIR",
    "ko": null,
+   "lookup": "SPYAIR",
    "aliases": [],
    "image": "https://cdn-images.dzcdn.net/images/artist/a505837f1dc4bf2bca286716c48176c9/500x500-000000-80-0-0.jpg"
   },
@@ -1339,6 +1491,7 @@
    "id": "stayc",
    "official": "STAYC",
    "ko": "스테이씨",
+   "lookup": "STAYC",
    "aliases": [
     "스테이씨"
    ],
@@ -1348,6 +1501,7 @@
    "id": "straykids",
    "official": "Stray Kids",
    "ko": "스트레이 키즈",
+   "lookup": "Stray Kids",
    "aliases": [
     "스트레이 키즈"
    ],
@@ -1357,6 +1511,7 @@
    "id": "sungsikyung",
    "official": "Sung Si Kyung",
    "ko": "성시경",
+   "lookup": "성시경",
    "aliases": [
     "Sung Si Kyung",
     "성시경"
@@ -1367,6 +1522,7 @@
    "id": "sunmi",
    "official": "SUNMI",
    "ko": "선미",
+   "lookup": "선미",
    "aliases": [
     "선미"
    ],
@@ -1376,6 +1532,7 @@
    "id": "superjunior",
    "official": "SUPER JUNIOR",
    "ko": "슈퍼주니어",
+   "lookup": "슈퍼주니어",
    "aliases": [
     "슈퍼주니어"
    ],
@@ -1385,6 +1542,7 @@
    "id": "supremeteam",
    "official": "Supreme Team",
    "ko": null,
+   "lookup": "Supreme Team",
    "aliases": [],
    "image": "https://cdn-images.dzcdn.net/images/artist/9151b6230a2342f0d3d8ea767303012f/500x500-000000-80-0-0.jpg"
   },
@@ -1392,6 +1550,7 @@
    "id": "taeyeon",
    "official": "TAEYEON",
    "ko": "태연",
+   "lookup": "태연",
    "aliases": [
     "태연"
    ],
@@ -1401,6 +1560,7 @@
    "id": "takahashiyoko",
    "official": "Takahashi Yoko",
    "ko": null,
+   "lookup": "Takahashi Yoko",
    "aliases": [],
    "image": "https://cdn-images.dzcdn.net/images/artist/805cee1d019f09c1d7a24287d9719a10/500x500-000000-80-0-0.jpg"
   },
@@ -1408,6 +1568,7 @@
    "id": "taniyuuki",
    "official": "Tani Yuuki",
    "ko": null,
+   "lookup": "Tani Yuuki",
    "aliases": [],
    "image": "https://cdn-images.dzcdn.net/images/artist/b306a0e55c89cb7da716384c8702e68f/500x500-000000-80-0-0.jpg"
   },
@@ -1415,6 +1576,7 @@
    "id": "tatsuyakitani",
    "official": "Tatsuya Kitani",
    "ko": null,
+   "lookup": "Tatsuya Kitani",
    "aliases": [],
    "image": "https://cdn-images.dzcdn.net/images/artist/a4992e1c054a41fa93026a610c68e48b/500x500-000000-80-0-0.jpg"
   },
@@ -1422,6 +1584,7 @@
    "id": "theboyz",
    "official": "THE BOYZ",
    "ko": "더보이즈",
+   "lookup": "더보이즈",
    "aliases": [
     "더보이즈"
    ],
@@ -1431,6 +1594,7 @@
    "id": "toil",
    "official": "TOIL",
    "ko": null,
+   "lookup": "TOIL",
    "aliases": [],
    "image": "https://cdn-images.dzcdn.net/images/artist/ba90afe97b5af54ade57b8629628a5b7/500x500-000000-80-0-0.jpg"
   },
@@ -1438,6 +1602,7 @@
    "id": "tomiokaai",
    "official": "TOMIOKA AI",
    "ko": "토미오카 아이",
+   "lookup": "TOMIOKA AI",
    "aliases": [
     "토미오카 아이"
    ],
@@ -1447,6 +1612,7 @@
    "id": "treasure",
    "official": "Treasure",
    "ko": "트레저",
+   "lookup": "Treasure",
    "aliases": [
     "트레저"
    ],
@@ -1456,6 +1622,7 @@
    "id": "tuki",
    "official": "tuki.",
    "ko": null,
+   "lookup": "tuki.",
    "aliases": [],
    "image": "https://cdn-images.dzcdn.net/images/artist/f2e55775b9abe087315cfca03c448200/500x500-000000-80-0-0.jpg"
   },
@@ -1463,6 +1630,7 @@
    "id": "tvxq",
    "official": "TVXQ!",
    "ko": "동방신기",
+   "lookup": "동방신기",
    "aliases": [
     "동방신기"
    ],
@@ -1472,6 +1640,7 @@
    "id": "twice",
    "official": "TWICE",
    "ko": "트와이스",
+   "lookup": "트와이스",
    "aliases": [
     "트와이스"
    ],
@@ -1481,6 +1650,7 @@
    "id": "tws",
    "official": "TWS",
    "ko": "투어스",
+   "lookup": "투어스",
    "aliases": [
     "투어스"
    ],
@@ -1490,6 +1660,7 @@
    "id": "txt",
    "official": "TXT",
    "ko": "투모로우바이투게더",
+   "lookup": "투모로우바이투게더",
    "aliases": [
     "TOMORROW X TOGETHER",
     "TXT",
@@ -1501,6 +1672,7 @@
    "id": "vaundy",
    "official": "Vaundy",
    "ko": null,
+   "lookup": "Vaundy",
    "aliases": [],
    "image": "https://cdn-images.dzcdn.net/images/artist/f069158052bed124becca95528df3e0d/500x500-000000-80-0-0.jpg"
   },
@@ -1508,6 +1680,7 @@
    "id": "vixx",
    "official": "VIXX",
    "ko": "빅스",
+   "lookup": "빅스",
    "aliases": [
     "빅스"
    ],
@@ -1517,6 +1690,7 @@
    "id": "wavetoearth",
    "official": "wave to earth",
    "ko": null,
+   "lookup": "wave to earth",
    "aliases": [],
    "image": "https://cdn-images.dzcdn.net/images/artist/d27a4c2c28addd9d63bc141683839fdf/500x500-000000-80-0-0.jpg"
   },
@@ -1524,6 +1698,7 @@
    "id": "winner",
    "official": "WINNER",
    "ko": "위너",
+   "lookup": "위너",
    "aliases": [
     "위너"
    ],
@@ -1533,6 +1708,7 @@
    "id": "wondergirls",
    "official": "Wonder Girls",
    "ko": "원더걸스",
+   "lookup": "원더걸스",
    "aliases": [
     "원더걸스"
    ],
@@ -1542,6 +1718,7 @@
    "id": "woody",
    "official": "Woody",
    "ko": "우디",
+   "lookup": "Woody",
    "aliases": [
     "우디"
    ],
@@ -1551,6 +1728,7 @@
    "id": "woodz",
    "official": "WOODZ",
    "ko": null,
+   "lookup": "WOODZ",
    "aliases": [],
    "image": "https://cdn-images.dzcdn.net/images/artist/345cd1201d0ba2d8546562fb418c8b04/500x500-000000-80-0-0.jpg"
   },
@@ -1558,6 +1736,7 @@
    "id": "yena",
    "official": "YENA",
    "ko": "최예나",
+   "lookup": "YENA",
    "aliases": [
     "최예나"
    ],
@@ -1567,6 +1746,7 @@
    "id": "yerinbaek",
    "official": "Yerin Baek",
    "ko": "백예린",
+   "lookup": "백예린",
    "aliases": [
     "백예린"
    ],
@@ -1576,6 +1756,7 @@
    "id": "yoasobi",
    "official": "YOASOBI",
    "ko": null,
+   "lookup": "YOASOBI",
    "aliases": [
     "요아소비"
    ],
@@ -1585,6 +1766,7 @@
    "id": "younha",
    "official": "Younha",
    "ko": "윤하",
+   "lookup": "윤하",
    "aliases": [
     "윤하"
    ],
@@ -1594,6 +1776,7 @@
    "id": "yuika",
    "official": "Yuika",
    "ko": null,
+   "lookup": "Yuika",
    "aliases": [],
    "image": "https://cdn-images.dzcdn.net/images/artist/e256587763e0fee557ddebc6daee8e46/500x500-000000-80-0-0.jpg"
   },
@@ -1601,6 +1784,7 @@
    "id": "yuuri",
    "official": "Yuuri",
    "ko": null,
+   "lookup": "Yuuri",
    "aliases": [],
    "image": "https://cdn-images.dzcdn.net/images/artist/d040ca5cb1fa78690840b953a9305357/500x500-000000-80-0-0.jpg"
   },
@@ -1608,6 +1792,7 @@
    "id": "zerobaseone",
    "official": "ZEROBASEONE",
    "ko": "제로베이스원",
+   "lookup": "ZEROBASEONE",
    "aliases": [
     "제로베이스원"
    ],
@@ -1617,6 +1802,7 @@
    "id": "zico",
    "official": "ZICO",
    "ko": "지코",
+   "lookup": "지코",
    "aliases": [
     "지코"
    ],
@@ -1626,6 +1812,7 @@
    "id": "ziont",
    "official": "Zion.T",
    "ko": "자이언티",
+   "lookup": "Zion.T",
    "aliases": [
     "자이언티"
    ],
@@ -1635,6 +1822,7 @@
    "id": "검정치마",
    "official": "검정치마",
    "ko": "검정치마",
+   "lookup": "검정치마",
    "aliases": [
     "검정치마"
    ],
@@ -1644,6 +1832,7 @@
    "id": "경서예지",
    "official": "경서예지",
    "ko": "경서예지",
+   "lookup": "경서예지",
    "aliases": [
     "경서예지"
    ],
@@ -1653,6 +1842,7 @@
    "id": "국악딴따라",
    "official": "국악딴따라",
    "ko": "국악딴따라",
+   "lookup": "국악딴따라",
    "aliases": [
     "국악딴따라"
    ],
@@ -1662,6 +1852,7 @@
    "id": "그냥",
    "official": "그_냥",
    "ko": "그_냥",
+   "lookup": "그_냥",
    "aliases": [],
    "image": "https://cdn-images.dzcdn.net/images/artist/bf6af9d1c08be090aabd80ab2602e80f/500x500-000000-80-0-0.jpg"
   },
@@ -1669,6 +1860,7 @@
    "id": "기리보이",
    "official": "기리보이",
    "ko": "기리보이",
+   "lookup": "기리보이",
    "aliases": [
     "기리보이"
    ],
@@ -1678,6 +1870,7 @@
    "id": "김건",
    "official": "김건",
    "ko": "김건",
+   "lookup": "김건",
    "aliases": [
     "김건"
    ],
@@ -1687,6 +1880,7 @@
    "id": "김나영",
    "official": "김나영",
    "ko": "김나영",
+   "lookup": "김나영",
    "aliases": [
     "김나영"
    ],
@@ -1696,6 +1890,7 @@
    "id": "김승민",
    "official": "김승민",
    "ko": "김승민",
+   "lookup": "김승민",
    "aliases": [
     "김승민"
    ],
@@ -1705,6 +1900,7 @@
    "id": "김진표",
    "official": "김진표",
    "ko": "김진표",
+   "lookup": "김진표",
    "aliases": [
     "김진표"
    ],
@@ -1714,6 +1910,7 @@
    "id": "김형중",
    "official": "김형중",
    "ko": "김형중",
+   "lookup": "김형중",
    "aliases": [
     "김형중"
    ],
@@ -1723,6 +1920,7 @@
    "id": "다이나믹듀오",
    "official": "다이나믹 듀오",
    "ko": "다이나믹 듀오",
+   "lookup": "다이나믹 듀오",
    "aliases": [
     "다이나믹 듀오"
    ],
@@ -1732,6 +1930,7 @@
    "id": "델리스파이스",
    "official": "델리스파이스",
    "ko": "델리스파이스",
+   "lookup": "델리스파이스",
    "aliases": [
     "델리스파이스"
    ],
@@ -1741,6 +1940,7 @@
    "id": "뜨거운감자",
    "official": "뜨거운 감자",
    "ko": "뜨거운 감자",
+   "lookup": "뜨거운 감자",
    "aliases": [
     "뜨거운 감자"
    ],
@@ -1750,6 +1950,7 @@
    "id": "로꼬",
    "official": "로꼬",
    "ko": "로꼬",
+   "lookup": "로꼬",
    "aliases": [
     "로꼬"
    ],
@@ -1759,6 +1960,7 @@
    "id": "로이킴",
    "official": "로이킴",
    "ko": "로이킴",
+   "lookup": "로이킴",
    "aliases": [
     "Roy Kim",
     "로이킴"
@@ -1769,6 +1971,7 @@
    "id": "리쌍",
    "official": "리쌍",
    "ko": "리쌍",
+   "lookup": "리쌍",
    "aliases": [
     "리쌍"
    ],
@@ -1778,6 +1981,7 @@
    "id": "마틴스미스",
    "official": "마틴스미스",
    "ko": "마틴스미스",
+   "lookup": "마틴스미스",
    "aliases": [
     "마틴스미스"
    ],
@@ -1787,6 +1991,7 @@
    "id": "머무르",
    "official": "머무르",
    "ko": "머무르",
+   "lookup": "머무르",
    "aliases": [
     "머무르"
    ],
@@ -1796,6 +2001,7 @@
    "id": "박다혜",
    "official": "박다혜",
    "ko": "박다혜",
+   "lookup": "박다혜",
    "aliases": [
     "박다혜"
    ],
@@ -1805,6 +2011,7 @@
    "id": "박재정",
    "official": "박재정",
    "ko": "박재정",
+   "lookup": "박재정",
    "aliases": [
     "박재정"
    ],
@@ -1814,6 +2021,7 @@
    "id": "방쏭",
    "official": "방쏭",
    "ko": "방쏭",
+   "lookup": "방쏭",
    "aliases": [
     "방쏭"
    ],
@@ -1823,6 +2031,7 @@
    "id": "백아",
    "official": "백아",
    "ko": "백아",
+   "lookup": "백아",
    "aliases": [
     "백아"
    ],
@@ -1832,6 +2041,7 @@
    "id": "범진",
    "official": "범진",
    "ko": "범진",
+   "lookup": "범진",
    "aliases": [
     "범진"
    ],
@@ -1841,6 +2051,7 @@
    "id": "베스티",
    "official": "베스티",
    "ko": "베스티",
+   "lookup": "베스티",
    "aliases": [
     "베스티"
    ],
@@ -1850,6 +2061,7 @@
    "id": "빈첸",
    "official": "빈첸",
    "ko": "빈첸",
+   "lookup": "빈첸",
    "aliases": [
     "빈첸"
    ],
@@ -1859,6 +2071,7 @@
    "id": "소녀시대효리수",
    "official": "소녀시대-효리수",
    "ko": "소녀시대-효리수",
+   "lookup": "소녀시대-효리수",
    "aliases": [
     "소녀시대-효리수"
    ],
@@ -1868,6 +2081,7 @@
    "id": "순순희",
    "official": "순순희",
    "ko": "순순희",
+   "lookup": "순순희",
    "aliases": [
     "순순희"
    ],
@@ -1877,6 +2091,7 @@
    "id": "스탠딩에그",
    "official": "스탠딩 에그",
    "ko": "스탠딩 에그",
+   "lookup": "스탠딩 에그",
    "aliases": [
     "스탠딩 에그"
    ],
@@ -1886,6 +2101,7 @@
    "id": "안녕",
    "official": "#안녕",
    "ko": "#안녕",
+   "lookup": "#안녕",
    "aliases": [],
    "image": "https://cdn-images.dzcdn.net/images/artist/db86fbbefc79db32c1874b1c13873e45/500x500-000000-80-0-0.jpg"
   },
@@ -1893,6 +2109,7 @@
    "id": "양요섭",
    "official": "양요섭",
    "ko": "양요섭",
+   "lookup": "양요섭",
    "aliases": [
     "양요섭"
    ],
@@ -1902,6 +2119,7 @@
    "id": "양홍원",
    "official": "양홍원",
    "ko": "양홍원",
+   "lookup": "양홍원",
    "aliases": [
     "양홍원"
    ],
@@ -1911,6 +2129,7 @@
    "id": "언터쳐블",
    "official": "언터쳐블",
    "ko": "언터쳐블",
+   "lookup": "언터쳐블",
    "aliases": [
     "언터쳐블"
    ],
@@ -1920,6 +2139,7 @@
    "id": "우원재",
    "official": "우원재",
    "ko": "우원재",
+   "lookup": "우원재",
    "aliases": [
     "우원재"
    ],
@@ -1929,6 +2149,7 @@
    "id": "우효",
    "official": "우효",
    "ko": "우효",
+   "lookup": "우효",
    "aliases": [
     "우효"
    ],
@@ -1938,6 +2159,7 @@
    "id": "원슈타인",
    "official": "원슈타인",
    "ko": "원슈타인",
+   "lookup": "원슈타인",
    "aliases": [
     "원슈타인"
    ],
@@ -1947,6 +2169,7 @@
    "id": "윤토벤",
    "official": "윤토벤",
    "ko": "윤토벤",
+   "lookup": "윤토벤",
    "aliases": [
     "윤토벤"
    ],
@@ -1956,6 +2179,7 @@
    "id": "이무진",
    "official": "이무진",
    "ko": "이무진",
+   "lookup": "이무진",
    "aliases": [
     "Lee Mujin",
     "이무진"
@@ -1966,6 +2190,7 @@
    "id": "이영지",
    "official": "이영지",
    "ko": "이영지",
+   "lookup": "이영지",
    "aliases": [
     "이영지"
    ],
@@ -1975,6 +2200,7 @@
    "id": "이찬혁",
    "official": "이찬혁",
    "ko": "이찬혁",
+   "lookup": "이찬혁",
    "aliases": [
     "이찬혁"
    ],
@@ -1984,6 +2210,7 @@
    "id": "이창섭",
    "official": "이창섭",
    "ko": "이창섭",
+   "lookup": "이창섭",
    "aliases": [
     "이창섭"
    ],
@@ -1993,6 +2220,7 @@
    "id": "인디고",
    "official": "인디고",
    "ko": "인디고",
+   "lookup": "인디고",
    "aliases": [
     "인디고"
    ],
@@ -2002,6 +2230,7 @@
    "id": "임재현",
    "official": "임재현",
    "ko": "임재현",
+   "lookup": "임재현",
    "aliases": [
     "임재현"
    ],
@@ -2011,6 +2240,7 @@
    "id": "정국",
    "official": "정국",
    "ko": "정국",
+   "lookup": "정국",
    "aliases": [
     "정국"
    ],
@@ -2020,6 +2250,7 @@
    "id": "정승환",
    "official": "정승환",
    "ko": "정승환",
+   "lookup": "정승환",
    "aliases": [
     "정승환"
    ],
@@ -2029,6 +2260,7 @@
    "id": "정준일",
    "official": "정준일",
    "ko": "정준일",
+   "lookup": "정준일",
    "aliases": [
     "정준일"
    ],
@@ -2038,6 +2270,7 @@
    "id": "조선힙합official",
    "official": "조선힙합_official",
    "ko": "조선힙합_official",
+   "lookup": "조선힙합_official",
    "aliases": [],
    "image": "https://cdn-images.dzcdn.net/images/artist/27ebe3eca0f0737507a17f9ac2c81ad4/500x500-000000-80-0-0.jpg"
   },
@@ -2045,6 +2278,7 @@
    "id": "조째즈",
    "official": "조째즈",
    "ko": "조째즈",
+   "lookup": "조째즈",
    "aliases": [
     "조째즈"
    ],
@@ -2054,6 +2288,7 @@
    "id": "죠지",
    "official": "죠지",
    "ko": "죠지",
+   "lookup": "죠지",
    "aliases": [
     "죠지"
    ],
@@ -2063,6 +2298,7 @@
    "id": "최열음",
    "official": "최열음",
    "ko": "최열음",
+   "lookup": "최열음",
    "aliases": [
     "최열음"
    ],
@@ -2072,6 +2308,7 @@
    "id": "최유리",
    "official": "최유리",
    "ko": "최유리",
+   "lookup": "최유리",
    "aliases": [
     "최유리"
    ],
@@ -2081,6 +2318,7 @@
    "id": "최정철",
    "official": "최정철",
    "ko": "최정철",
+   "lookup": "최정철",
    "aliases": [
     "최정철"
    ],
@@ -2090,6 +2328,7 @@
    "id": "튜이드",
    "official": "튜이드",
    "ko": "튜이드",
+   "lookup": "튜이드",
    "aliases": [
     "튜이드"
    ],
@@ -2099,6 +2338,7 @@
    "id": "프라이머리",
    "official": "프라이머리",
    "ko": "프라이머리",
+   "lookup": "프라이머리",
    "aliases": [
     "프라이머리"
    ],
@@ -2108,6 +2348,7 @@
    "id": "프리스타일",
    "official": "프리스타일",
    "ko": "프리스타일",
+   "lookup": "프리스타일",
    "aliases": [
     "프리스타일"
    ],
@@ -2117,6 +2358,7 @@
    "id": "한로로",
    "official": "한로로",
    "ko": "한로로",
+   "lookup": "한로로",
    "aliases": [
     "한로로"
    ],
@@ -2126,6 +2368,7 @@
    "id": "한요한",
    "official": "한요한",
    "ko": "한요한",
+   "lookup": "한요한",
    "aliases": [
     "한요한"
    ],
@@ -2135,6 +2378,7 @@
    "id": "허회경",
    "official": "허회경",
    "ko": "허회경",
+   "lookup": "허회경",
    "aliases": [
     "허회경"
    ],
@@ -2144,6 +2388,7 @@
    "id": "호미들",
    "official": "호미들",
    "ko": "호미들",
+   "lookup": "호미들",
    "aliases": [
     "호미들"
    ],
@@ -2153,6 +2398,7 @@
    "id": "황가람",
    "official": "황가람",
    "ko": "황가람",
+   "lookup": "황가람",
    "aliases": [
     "황가람"
    ],

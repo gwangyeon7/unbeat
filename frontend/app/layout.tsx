@@ -7,6 +7,14 @@ export const metadata: Metadata = {
   // (아이폰 홈 화면 추가 대응, 2026-10-15) 홈 화면에 추가해서 열면 Safari 주소창/하단 바 없이
   // 전체 화면 앱처럼 뜨게 함 — "Safari 전용 바가 자리를 너무 차지한다"는 피드백. 일반 Safari
   // 탭으로 열었을 땐 브라우저 바를 코드로 숨길 수 없어서(iOS 정책) 이 방식이 유일한 방법임.
+  // 아이폰 "홈 화면에 추가"가 아이콘을 못 찾으면 이니셜(U) 아이콘을 자동 생성함 — 아이콘 경로를 명시
+  icons: {
+    icon: [
+      { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icon-512.png", sizes: "512x512", type: "image/png" },
+    ],
+    apple: [{ url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" }],
+  },
   appleWebApp: {
     capable: true,
     title: "Unbeat",

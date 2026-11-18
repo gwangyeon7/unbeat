@@ -4,10 +4,14 @@ import { getAccessToken } from "@/lib/supabase";
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000";
 
 export type Artist = {
+  // 화면용 표시 이름(한글 이름이 있으면 한글, 없으면 영문) — 백엔드가 /search 응답에서 이 규칙으로 채움
   name: string;
   mbid: string;
   image: string | null;
   listeners: string;
+  // (2026-11-18 추가, 옛 응답엔 없음) displayName = name, officialName = 정식 이름(아티스트 페이지 조회용)
+  displayName?: string;
+  officialName?: string;
 };
 
 export type Track = {
@@ -19,6 +23,8 @@ export type Track = {
   // 유튜브 인기 급상승(getYoutubeChart) 트랙만 채워짐 — 이미 videoId를 알고 있어서
   // 재생 시 /youtube-search로 다시 검색할 필요가 없음(쿼터 절약).
   videoId?: string | null;
+  // (2026-11-18 추가) artist는 표시 이름, artistOfficialName은 그 아티스트의 정식 이름
+  artistOfficialName?: string;
 };
 
 async function fetchJson<T>(path: string, options: RequestInit = {}): Promise<T> {

@@ -5,7 +5,14 @@ import { getArtistTopTracks, type Track } from "@/lib/api";
 import CompactTrackRow from "./CompactTrackRow";
 
 type ArtistPageProps = {
+  // 화면 제목에 쓰는 표시 이름(한글 우선)
   artistName: string;
+  // 곡 조회에 쓰는 정식 이름(검색 카드에서 열었을 때만 있음). 없으면 artistName으로 조회 — 백엔드가 한글 이름도
+  // 같은 아티스트의 조회용 이름으로 바꿔 줌
+  lookupName?: string | null;
+  // 아티스트 본인 사진(검색 카드에서 열었을 때). 없으면 이니셜 — 첫 곡 커버를 대신 쓰면 첫 곡과 같은
+  // 이미지가 두 번 보여서 어색했음
+  imageUrl?: string | null;
   onClose: () => void;
   isFavorite: (track: Track) => boolean;
   onToggleFavorite: (track: Track) => void;
@@ -22,6 +29,8 @@ type ArtistPageProps = {
 // 세로 목록으로 많이(최대 30곡) 보여주고, 곡을 누르면 바로 재생함(애플 뮤직 아티스트 화면 참고).
 export default function ArtistPage({
   artistName,
+  lookupName,
+  imageUrl,
   onClose,
   isFavorite,
   onToggleFavorite,
@@ -39,7 +48,7 @@ export default function ArtistPage({
     setTracks(null);
     setFailed(false);
     // 가사 필터 없이 더 많은 곡을 받음(상세 화면이라 목록이 풍성한 쪽이 낫다)
-    getArtistTopTracks(artistName, { limit: 30, lyricsOnly: false })
+    getArtistTopTracks(lookupName || artistName, { limit: 30, lyricsOnly: false })
       .then((res) => {
         if (!cancelled) setTracks(res.tracks);
       })
@@ -52,7 +61,7 @@ export default function ArtistPage({
     return () => {
       cancelled = true;
     };
-  }, [artistName]);
+  }, [artistName, lookupName]);
 
   return (
     <div className="fixed inset-0 z-40 flex flex-col bg-black text-white">
@@ -67,10 +76,9 @@ export default function ArtistPage({
       <div className="flex-1 overflow-y-auto pb-24">
         <div className="mx-auto w-full max-w-xl px-4 py-5">
           <div className="mb-4 flex items-center gap-4">
-            {/* 아티스트 사진 API가 없어서, 곡 목록에서 이미지가 있는 첫 곡의 커버를 대신 씀(홈의
-                아티스트 카드와 같은 방식). 아직 불러오는 중이거나 이미지가 없으면 이니셜. */}
+            {/* 아티스트 본인 사진(검색 카드에서 넘어온 것). 없으면 이니셜. */}
             {(() => {
-              const artistImage = tracks?.find((t) => t.image)?.image;
+              const artistImage = imageUrl;
               return artistImage ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={artistImage} alt="" className="h-20 w-20 shrink-0 rounded-full object-cover" />

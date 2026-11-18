@@ -2340,7 +2340,15 @@ def search(q: str, artist: Optional[str] = None, x_session_id: Optional[str] = H
     pinned = ALIAS_CATALOG.unique_title_track(q, track_image=cached_track_image)
     if pinned:
         key = _track_dedupe_key(pinned)
-        result["tracks"] = [pinned] + [t for t in result.get("tracks") or [] if _track_dedupe_key(t) != key]
+        # 별칭표 곡이 맨 위에 올라온 검색이면 그 곡의 아티스트 카드를 맨 앞에 두고, 아래 긴 꼬리(동명 무명곡)는 5곡까지만
+        # — "leo"에서 유우리를 찾는데 VIXX 레오 카드와 무명곡 수십 개가 먼저 보이던 문제.
+        result["tracks"] = ([pinned] + [t for t in result.get("tracks") or [] if _track_dedupe_key(t) != key])[:5]
+        card = ALIAS_CATALOG.artist_card(pinned.get("artistOfficialName") or "", cached_artist_image)
+        if card:
+            card_key = ALIAS_CATALOG_NORMALIZE(card["name"])
+            result["artists"] = [card] + [
+                a for a in result.get("artists") or [] if ALIAS_CATALOG_NORMALIZE(a.get("name", "")) != card_key
+            ]
     result["artists"] = _drop_title_named_artists(q, result.get("artists") or [], result.get("tracks") or [])
     return _with_display_names(result, q)
 

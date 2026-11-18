@@ -203,6 +203,11 @@ class AliasCatalog:
         ids = self.by_title.get(normalize(q)) or []
         return self._track_out(ids[0], track_image) if len(ids) == 1 else None
 
+    def artist_card(self, official_name: str, artist_image: Callable[[str], Optional[str]] = lambda name: None) -> Optional[dict]:
+        """정식 이름으로 아티스트 카드(응답 형식). 별칭표에 없으면 None."""
+        found = self.find_artist(official_name)
+        return self._artist_out(found["id"], artist_image) if found else None
+
     def lookup(
         self,
         q: str,

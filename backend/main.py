@@ -18,7 +18,7 @@ import requests
 import os
 
 from auth import get_user_from_auth_header
-from search_catalog import load_catalog
+from search_catalog import load_catalog, normalize as ALIAS_CATALOG_NORMALIZE
 
 # Last.fm의 artist.getCorrection은 영문 철자 간 편집 거리(edit distance) 기반이라
 # 한글 입력("아이위" 등)엔 아예 안 맞음 — 한글 오타와 영문 정식명("아이위" ↔ "IU")은
@@ -2334,7 +2334,36 @@ def search(q: str, artist: Optional[str] = None, x_session_id: Optional[str] = H
     catalog_result = _search_from_catalog(q, x_session_id)
     if catalog_result is not None:
         return _with_display_names(catalog_result, q)
-    return _with_display_names({**_search_by_query(q, x_session_id), "source": "pipeline"}, q)
+    result = {**_search_by_query(q, x_session_id), "source": "pipeline"}
+    # (2026-11-18) 영문 제목 단독 검색("leo"): 별칭표에 정규화 제목이 같은 곡이 정확히 1곡이면 맨 위에 추가(중복 제거).
+    # 응답 단계에서 처리 — 파이프라인 캐시는 그대로, 별칭표를 고치면 서버 재시작만으로 반영됨.
+    pinned = ALIAS_CATALOG.unique_title_track(q, track_image=cached_track_image)
+    if pinned:
+        key = _track_dedupe_key(pinned)
+        result["tracks"] = [pinned] + [t for t in result.get("tracks") or [] if _track_dedupe_key(t) != key]
+    result["artists"] = _drop_title_named_artists(q, result.get("artists") or [], result.get("tracks") or [])
+    return _with_display_names(result, q)
+
+
+def _drop_title_named_artists(q: str, artists: list, tracks: list) -> list:
+    """(2026-11-18) 곡 제목을 쳤는데 같은 이름의 무명 "아티스트"가 카드로 뜨던 문제("프리텐더"). 검색어와 이름이 같은
+    아티스트가 청취자 2,000명 미만이고, 상위 곡 5개 중 제목에 검색어가 들어간 곡이 있으면 곡 검색으로 보고 카드를 뺌."""
+    key = ALIAS_CATALOG_NORMALIZE(q)
+    if not key or not artists:
+        return artists
+    title_hit = any(key in ALIAS_CATALOG_NORMALIZE(t.get("name", "")) for t in tracks[:5])
+    if not title_hit:
+        return artists
+    kept = []
+    for a in artists:
+        try:
+            listeners = int(a.get("listeners") or 0)
+        except (TypeError, ValueError):
+            listeners = 0
+        if ALIAS_CATALOG_NORMALIZE(a.get("name", "")) == key and listeners < 2000:
+            continue
+        kept.append(a)
+    return kept
 
 
 def _search_by_query(q: str, x_session_id: Optional[str] = None):
@@ -2426,7 +2455,8 @@ def _search_by_query(q: str, x_session_id: Optional[str] = None):
     # v35: (2026-11-18) 소스별 인기 신호를 합친 정렬 점수(track_rank_score)로 곡 순서를 정함 — 안 올리면 옛 순서가 남음.
     # v36: (2026-11-18) 한글 검색어의 공식 아티스트(Deezer/iTunes/Last.fm 별칭) 병합, 곡 후보 8 -> 30곡 후 상위 10곡.
     # v37: (2026-11-18) 아티스트를 확실히 찾았을 때 다른 가수 동명 곡의 제목 가산점을 청취자 수에 비례해 보정 — 안 올리면 옛 순서가 남음.
-    cache_key = f"search:v37:{q.lower().strip()}"
+    # v38: (2026-11-18) 영문 제목 단독 검색에 별칭표 유일 곡 추가(응답 단계 처리지만 전후 비교를 위해 버전업)
+    cache_key = f"search:v38:{q.lower().strip()}"
     cached = get_cached(cache_key)
     if cached is not None:
         if x_session_id:

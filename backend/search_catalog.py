@@ -44,6 +44,8 @@ class AliasCatalog:
         # 이름 -> 아티스트 id(정식/한글/조회용/별칭 전부). 검색어 가로채기(index)와 별개로, 이름 변환에만 씀
         # (아티스트 페이지가 "아이유"로 와도 "IU"로 와도 같은 아티스트 = 같은 조회용 이름)
         self.by_name: dict = {}
+        # 정규화 제목 -> 곡 id 목록. 영문 제목 단독 검색("leo")에서 같은 제목이 "정확히 1곡"일 때만 쓰임(unique_title_track)
+        self.by_title: dict = {}
         self.loaded_from: Optional[str] = None
 
     def load(self, path: str = CATALOG_PATH) -> "AliasCatalog":
@@ -93,6 +95,7 @@ class AliasCatalog:
                     "url": t.get("url") or "",
                 }
                 self.tracks_by_artist.setdefault(aid, []).append(tid)
+                self.by_title.setdefault(normalize(t["title"]), []).append(tid)
                 for alias in t.get("aliases") or []:
                     self._add(alias, "tracks", tid)
             except Exception:
@@ -101,11 +104,34 @@ class AliasCatalog:
             key = normalize(item.get("alias") if isinstance(item, dict) else item)
             if key:
                 self.ambiguous.add(key)
+        self._load_extra_aliases(os.path.join(os.path.dirname(path), "extra_aliases.json"))
         self.loaded_from = path
         print(f"[catalog] 별칭표 로드: 아티스트 {len(self.artists)}명, 곡 {len(self.tracks)}곡, 별칭 {len(self.index)}개, "
               f"모호 별칭 {len(self.ambiguous)}개"
               + (f", 잘못된 항목 {skipped}개 건너뜀" if skipped else ""))
         return self
+
+    def _load_extra_aliases(self, path: str) -> None:
+        """extra_aliases.json의 별칭을 덧붙임. 이미 다른 곡/아티스트가 쓰는 별칭이면 건너뜀(모호해지므로). 실패해도 무시."""
+        try:
+            with open(path, encoding="utf-8") as f:
+                extra = json.load(f)
+        except Exception:
+            return
+        for kind, store in (("tracks", self.tracks), ("artists", self.artists)):
+            for item_id, aliases in (extra.get(kind) or {}).items():
+                if item_id not in store:
+                    continue
+                for alias in aliases:
+                    key = normalize(alias)
+                    if not key or key in self.ambiguous:
+                        continue
+                    bucket = self.index.get(key)
+                    if bucket and any(i != item_id for i in bucket["tracks"] + bucket["artists"]):
+                        continue
+                    self._add(alias, kind, item_id)
+                    if kind == "artists":
+                        self.by_name.setdefault(key, item_id)
 
     def _add(self, alias, kind: str, item_id: str) -> None:
         key = normalize(alias) if isinstance(alias, str) else ""
@@ -168,6 +194,20 @@ class AliasCatalog:
         return {"name": name, "artist": artist_display, "artistOfficialName": a["official"],
                 "listeners": t["listeners"], "url": t["url"], "image": image}
 
+    def unique_title_track(self, q: str, track_image: Callable[[str, str], Optional[str]] = lambda a, t: None) -> Optional[dict]:
+        """(2026-11-18) 한글 없는 검색어(영문 제목 단독, 예: "leo")의 정규화 제목과 정확히 같은 곡이 별칭표에 딱 1곡이면
+        그 곡(응답 형식), 0곡이거나 2곡 이상이면 None. 별칭 색인이 아니라서 검색을 가로채지 않고, 호출부가 파이프라인
+        결과 맨 위에 "추가"만 함(영문 제목은 다른 가수의 같은 제목 곡이 있을 수 있어 대체하지 않음)."""
+        if not isinstance(q, str) or any("가" <= ch <= "힣" for ch in q):
+            return None
+        ids = self.by_title.get(normalize(q)) or []
+        return self._track_out(ids[0], track_image) if len(ids) == 1 else None
+
+    def artist_card(self, official_name: str, artist_image: Callable[[str], Optional[str]] = lambda name: None) -> Optional[dict]:
+        """정식 이름으로 아티스트 카드(응답 형식). 별칭표에 없으면 None."""
+        found = self.find_artist(official_name)
+        return self._artist_out(found["id"], artist_image) if found else None
+
     def lookup(
         self,
         q: str,
@@ -187,12 +227,15 @@ class AliasCatalog:
             return None
         artist_ids = list(bucket["artists"])
         track_ids = list(bucket["tracks"])
+        # (2026-11-18) 곡 제목만 일치한 검색어는 아티스트 카드를 띄우지 않음 — 곡을 찾는 검색에 아티스트가 같이 뜨면
+        # 어색하다는 피드백. 아티스트 카드는 아티스트 이름(별칭)을 쳤을 때만. 대표곡 채우기용 id만 따로 둠.
+        fill_ids = list(artist_ids)
         for tid in bucket["tracks"]:
             aid = self.tracks[tid]["artist_id"]
-            if aid not in artist_ids:
-                artist_ids.append(aid)
+            if aid not in fill_ids:
+                fill_ids.append(aid)
         # 일치한 아티스트의 대표곡, 그다음 일치한 곡의 아티스트 대표곡(곡만 일치해도 목록이 1곡으로 끝나지 않게)
-        for aid in artist_ids:
+        for aid in fill_ids:
             for tid in self.tracks_by_artist.get(aid, []):
                 if tid not in track_ids:
                     track_ids.append(tid)

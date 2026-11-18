@@ -10,6 +10,7 @@ from datetime import date
 from urllib.parse import quote
 import anthropic
 import json
+import math
 import random
 import unicodedata
 import re
@@ -1202,14 +1203,33 @@ def _track_dedupe_key(track: dict) -> tuple:
 
 
 def _dedupe_tracks(tracks: list) -> list:
-    seen, out = set(), []
+    """같은 곡의 표기 변형을 하나로(앞에 온 것 유지). (2026-11-18) 버려지는 쪽의 인기 신호(청취자 수, 소스별 순위)는
+    남는 쪽에 합침 — Last.fm과 iTunes에서 같은 곡을 찾았으면 두 소스 신호를 다 써서 정렬 점수를 냄."""
+    kept: dict = {}
+    out = []
     for t in tracks:
         key = _track_dedupe_key(t)
-        if key in seen:
+        prev = kept.get(key)
+        if prev is None:
+            kept[key] = t
+            out.append(t)
             continue
-        seen.add(key)
-        out.append(t)
+        _merge_track_signals(prev, t)
     return out
+
+
+def _merge_track_signals(into: dict, other: dict) -> None:
+    """같은 곡으로 판단된 other의 인기 신호를 into에 합침: 소스별 순위는 더 높은 쪽, 청취자/조회수는 큰 쪽."""
+    for field, total_field in (("_lastfmPos", "_lastfmTotal"), ("_itunesPos", "_itunesTotal")):
+        if other.get(field) is not None and (into.get(field) is None or other[field] < into[field]):
+            into[field], into[total_field] = other[field], other.get(total_field)
+    if other.get("_youtubeViews") is not None and (into.get("_youtubeViews") or 0) < other["_youtubeViews"]:
+        into["_youtubeViews"] = other["_youtubeViews"]
+    try:
+        if int(other.get("listeners") or 0) > int(into.get("listeners") or 0):
+            into["listeners"] = other["listeners"]
+    except (TypeError, ValueError):
+        pass
 
 
 def _artist_keys(name: str) -> set:
@@ -1555,29 +1575,160 @@ def _track_title_match(q_key: str, roman_key: Optional[str], track: dict) -> Opt
     return None
 
 
-def _rank_title_matches(q: str, tracks: list) -> list:
-    """제목이 검색어(원문 또는 로마자)와 같거나 포함하는 곡을 맨 위로: 정확 일치 > 포함, 그 안에서 (한글 검색어면)
-    국내 곡 우선, 그다음 청취자 수 많은 순. 제목이 안 맞는 곡(아티스트 본인 곡 등)은 그 아래에 기존 순서 그대로."""
+# ---------------------------------------------------------------------------
+# (2026-11-18) 검색 곡 정렬 점수. 전엔 Last.fm이 준 순서(텍스트 관련도 순) 그대로라 인기곡이 위로 안 올라왔음.
+#
+#   최종 점수 = 제목 일치 가산점 + 인기 점수 + SERVICE_BONUS_WEIGHT × 서비스 가산점 − 영상 제목형 감점
+#
+#   제목 일치 가산점: 제목 == 검색어(원문 또는 로마자) → 1.0, 제목이 검색어를 포함 → 0.5, 아니면 0
+#                     (로마자 일치는 국내 아티스트 곡만 인정 — _track_title_match 참고)
+#   인기 점수(0~1)  : 곡에 "있는" 신호만으로 낸 가중 평균  Σ(wᵢ·sᵢ) / Σwᵢ  (신호가 하나도 없으면 0)
+#                     × 0.6 (RANK_ONLY_FACTOR) — 청취자/조회수 같은 절대 신호 없이 순위 신호만 있을 때
+#       신호                       정규화(0~1)                                   가중치 w
+#       lastfm_listeners  Last.fm 곡 청취자 수   log10(1+n) / log10(1+1,000,000)  (100만명 이상 1.0)   0.45
+#       youtube_views     유튜브 조회수          log10(1+n) / log10(1+1,000,000,000) (10억회 이상 1.0) 0.25
+#       itunes_rank       iTunes KR 검색 순위    1 - 순위/결과수  (1위 1.0)                            0.20
+#       lastfm_rank       Last.fm 검색 순위      1 - 순위/결과수  (1위 1.0)                            0.10
+#   - 청취자/조회수는 로그 스케일: 국내 곡은 수십~수만, 해외 히트곡은 수십만이라 선형이면 국내 곡이 전부 0 근처로 뭉개짐.
+#   - "있는 신호만" 평균: iTunes에서만 찾은 곡은 청취자 수가 없는데, 없는 신호를 0으로 치면 그런 곡이 늘 바닥으로 감.
+#     대신 순위는 "그 검색 결과 안에서" 상대값이라 iTunes 1위면 무조건 1.0이 됨 — 순위만 있는 곡은 0.6을 곱해서
+#     청취자 수가 실제로 많은 곡(예: JUSTHIS "IndiGO" 2.4만명)을 iTunes 1위라는 이유만으로 앞지르지 못하게 함.
+#   - 가산점(1.0/0.5)이 인기 점수 범위(0~1)와 같은 크기라, 제목이 정확히 맞는 곡은 거의 항상 위에 오고, 포함 일치는
+#     인기 점수가 0.5 이상 차이 나는 비일치 곡에는 밀릴 수 있음(= "제목 일치가 우선이지만 인기도 반영").
+#   - 유튜브 조회수: 지금은 값을 가져오는 경로가 없음(조회수를 얻으려면 YouTube API 쿼터를 새로 써야 해서 안 붙임).
+#     곡 dict에 "_youtubeViews"를 넣어주는 경로가 생기면 자동으로 반영됨.
+#   - 서비스 가산점(0~1): 나중에 우리 서비스 클릭/재생 수를 넣을 자리. 지금은 항상 0(_service_bonus 참고).
+#   - 영상 제목형 감점(0.3): 제목이 "RIIZE 라이즈 'Talk Saxy' MV"처럼 뮤비/직캠/라이브 영상 제목이면 뺌. 인기 신호를 넣고
+#     나서 "라이즈" 검색에서 이런 항목(청취자 103명)이 진짜 곡 "Insomnia"(6명)보다 위로 올라오는 걸 실측으로 확인해서 추가.
+# 신호는 곡 dict의 "_"로 시작하는 내부 필드로 들고 다니다가(_dedupe_tracks가 중복 곡의 신호를 합침), 응답 직전에
+# _strip_internal_fields로 지움 — 프론트 응답 형식은 그대로.
+TITLE_EXACT_BONUS = 1.0
+TITLE_CONTAINS_BONUS = 0.5
+POPULARITY_WEIGHTS = {
+    "lastfm_listeners": 0.45,
+    "youtube_views": 0.25,
+    "itunes_rank": 0.20,
+    "lastfm_rank": 0.10,
+}
+LISTENERS_LOG_CAP = 1_000_000
+YOUTUBE_VIEWS_LOG_CAP = 1_000_000_000
+SERVICE_BONUS_WEIGHT = 0.5
+RANK_ONLY_FACTOR = 0.6
+ABSOLUTE_POPULARITY_SIGNALS = ("lastfm_listeners", "youtube_views")
+VIDEO_TITLE_PENALTY = 0.3
+TRACK_SIGNAL_FIELDS = ("_lastfmPos", "_lastfmTotal", "_itunesPos", "_itunesTotal", "_youtubeViews")
+
+
+def _log_norm(value, cap: int) -> Optional[float]:
+    try:
+        n = float(value)
+    except (TypeError, ValueError):
+        return None
+    if n < 0:
+        return None
+    return min(1.0, math.log10(1 + n) / math.log10(1 + cap))
+
+
+def _rank_norm(pos, total) -> Optional[float]:
+    try:
+        pos, total = int(pos), int(total)
+    except (TypeError, ValueError):
+        return None
+    if total <= 0 or pos < 0:
+        return None
+    return max(0.0, 1 - pos / total)
+
+
+def popularity_signals(track: dict) -> dict:
+    """곡이 가진 인기 신호를 0~1로 정규화해서 {신호명: 값}으로 반환. 값이 없는 신호는 아예 빠짐."""
+    signals = {
+        "lastfm_listeners": _log_norm(track.get("listeners"), LISTENERS_LOG_CAP) if track.get("listeners") not in (None, "") else None,
+        "youtube_views": _log_norm(track.get("_youtubeViews"), YOUTUBE_VIEWS_LOG_CAP) if track.get("_youtubeViews") is not None else None,
+        "itunes_rank": _rank_norm(track.get("_itunesPos"), track.get("_itunesTotal")),
+        "lastfm_rank": _rank_norm(track.get("_lastfmPos"), track.get("_lastfmTotal")),
+    }
+    return {k: v for k, v in signals.items() if v is not None}
+
+
+def popularity_score(signals: dict, weights: Optional[dict] = None) -> float:
+    """있는 신호만으로 낸 가중 평균(0~1). 신호가 없으면 0. 절대 신호(청취자/조회수) 없이 순위뿐이면 × RANK_ONLY_FACTOR."""
+    weights = weights or POPULARITY_WEIGHTS
+    total_w = sum(weights[k] for k in signals if k in weights)
+    if total_w <= 0:
+        return 0.0
+    score = sum(weights[k] * v for k, v in signals.items() if k in weights) / total_w
+    if not any(k in signals for k in ABSOLUTE_POPULARITY_SIGNALS):
+        score *= RANK_ONLY_FACTOR
+    return score
+
+
+def title_match_bonus(tier: Optional[int]) -> float:
+    return {0: TITLE_EXACT_BONUS, 1: TITLE_CONTAINS_BONUS}.get(tier, 0.0)
+
+
+def video_title_penalty(title: str) -> float:
+    """곡 제목이 영상 제목형(MV/직캠/라이브/공식영상 표기, 따옴표 2개 이상)이면 감점. _looks_like_video_title과 달리
+    쉼표/길이 규칙은 안 씀 — "Love, Me" 같은 정상 곡 제목이 걸리기 때문."""
+    title = title or ""
+    if VIDEO_TITLE_ARTIST_PATTERN.search(title) or len(re.findall(r"['\"‘’“”]", title)) >= 2:
+        return VIDEO_TITLE_PENALTY
+    return 0.0
+
+
+def _service_bonus(track: dict) -> float:
+    """우리 서비스 클릭/재생 수 가산점(0~1) 자리. 지금은 0.
+    붙일 때: 예) 곡별 재생 수를 Redis/DB에서 읽어 _log_norm(plays, 캡)으로 0~1로 만들어 반환하면 됨 —
+    점수식의 SERVICE_BONUS_WEIGHT가 곱해져 더해짐. 호출이 많으니 곡마다 DB를 치지 말고 한 번에 읽어 캐싱할 것."""
+    return 0.0
+
+
+def track_rank_score(track: dict, tier: Optional[int], service_bonus_fn=_service_bonus) -> dict:
+    """곡 하나의 정렬 점수와 그 내역. 정렬뿐 아니라 로그/디버깅용으로 내역을 같이 돌려줌."""
+    signals = popularity_signals(track)
+    pop = popularity_score(signals)
+    title = title_match_bonus(tier)
+    try:
+        service = max(0.0, min(1.0, float(service_bonus_fn(track) or 0.0)))
+    except Exception as e:  # 가산점 계산 실패가 검색을 깨면 안 됨
+        print(f"[search-rank] 서비스 가산점 계산 실패(0으로 처리): {e}")
+        service = 0.0
+    penalty = video_title_penalty(track.get("name") or "")
+    total = title + pop + SERVICE_BONUS_WEIGHT * service - penalty
+    return {"total": round(total, 4), "title": title, "popularity": round(pop, 4), "service": service,
+            "penalty": penalty, "signals": {k: round(v, 3) for k, v in signals.items()}}
+
+
+def _rank_tracks(q: str, tracks: list, service_bonus_fn=_service_bonus, log: bool = False) -> list:
+    """검색 곡을 track_rank_score 내림차순으로 정렬(동점이면 기존 순서 유지)."""
     q_key = _fold_title(q)
-    if not q_key:
+    if not tracks:
         return tracks
     roman = _romanized_query(q)
     roman_key = _fold_title(roman) if roman else None
-    is_hangul = bool(HANGUL_PATTERN.search(q))
-    matched, rest = [], []
+    scored = []
     for idx, t in enumerate(tracks):
-        tier = _track_title_match(q_key, roman_key, t)
-        if tier is None:
-            rest.append(t)
-            continue
-        try:
-            listeners = int(t.get("listeners") or 0)
-        except (TypeError, ValueError):
-            listeners = 0
-        foreign = 1 if is_hangul and not _is_domestic_track_artist(t.get("artist") or "") else 0
-        matched.append(((tier, foreign, -listeners, idx), t))
-    matched.sort(key=lambda pair: pair[0])
-    return [t for _, t in matched] + rest
+        tier = _track_title_match(q_key, roman_key, t) if q_key else None
+        scored.append((track_rank_score(t, tier, service_bonus_fn), idx, t))
+    scored.sort(key=lambda x: (-x[0]["total"], x[1]))
+    if log:
+        for score, _, t in scored:
+            print(f"[search-rank] '{q}' {score['total']:.3f} = 제목 {score['title']} + 인기 {score['popularity']:.3f} "
+                  f"+ 서비스 {SERVICE_BONUS_WEIGHT}×{score['service']} - 감점 {score['penalty']} | 신호 {score['signals']} | {t.get('artist')} - {t.get('name')}")
+    return [t for _, _, t in scored]
+
+
+def _annotate_positions(tracks: list, pos_field: str, total_field: str) -> list:
+    """소스가 준 순서를 신호로 남김(이미 있으면 유지 — 같은 곡이 여러 번 거쳐도 처음 소스 순위를 씀)."""
+    total = len(tracks)
+    for i, t in enumerate(tracks):
+        if t.get(pos_field) is None:
+            t[pos_field] = i
+            t[total_field] = total
+    return tracks
+
+
+def _strip_internal_fields(tracks: list) -> list:
+    return [{k: v for k, v in t.items() if not k.startswith("_")} for t in tracks]
 
 
 def _apply_cached_korean_names(tracks: list) -> list:
@@ -1605,7 +1756,8 @@ def _apply_cached_korean_names(tracks: list) -> list:
 def _title_search_candidates(q: str, roman: Optional[str]) -> list:
     """곡 제목 검색 원본 후보(제목이 원문/로마자와 맞는 것만, 국내 여부 판단 전). 검색어 단위 캐싱.
     각 외부 호출은 따로 격리 — 하나가 실패/지연돼도 나머지 결과로 진행하고, 전부 실패하면 빈 목록."""
-    cache_key = f"search-title:v1:{q.lower().strip()}"
+    # v2: 후보에 소스별 순위 신호(_lastfmPos/_itunesPos) 추가 — v1 캐시엔 없어서 정렬 점수가 달라짐
+    cache_key = f"search-title:v2:{q.lower().strip()}"
     cached = get_cached(cache_key)
     if cached is not None:
         return cached.get("candidates") or []
@@ -1637,8 +1789,10 @@ def _title_search_candidates(q: str, roman: Optional[str]) -> list:
         if data is None:  # _itunes_search: 403/429/네트워크 실패 또는 쿨다운 중
             continue
         ok_sources += 1
+        # 소스가 준 순서(_lastfmPos/_itunesPos)를 인기 신호로 남김 — 필터 전 원래 순위 기준(track_rank_score 참고)
         if source == "lastfm-roman":
-            for item in data.get("results", {}).get("trackmatches", {}).get("track", []):
+            items = data.get("results", {}).get("trackmatches", {}).get("track", [])
+            for pos, item in enumerate(items):
                 raw.append({
                     "name": item.get("name") or "",
                     "artist": _clean_artist_name(item.get("artist") or ""),
@@ -1646,9 +1800,11 @@ def _title_search_candidates(q: str, roman: Optional[str]) -> list:
                     "url": item.get("url"),
                     "image": None,
                     "lastfmImages": item.get("image", []),
+                    "_lastfmPos": pos,
+                    "_lastfmTotal": len(items),
                 })
         else:
-            for item in data:
+            for pos, item in enumerate(data):
                 artwork = item.get("artworkUrl100")
                 raw.append({
                     "name": item.get("trackName") or "",
@@ -1657,6 +1813,8 @@ def _title_search_candidates(q: str, roman: Optional[str]) -> list:
                     "url": item.get("trackViewUrl"),
                     "image": artwork.replace("100x100bb", "600x600bb") if artwork else None,
                     "lastfmImages": [],
+                    "_itunesPos": pos,
+                    "_itunesTotal": len(data),
                 })
 
     candidates = []
@@ -1705,17 +1863,21 @@ def _title_search_tracks(q: str) -> list:
             if prev is None:
                 merged[key] = track
                 continue
-            # 같은 곡의 표기 변형 — 청취자 수는 많은 쪽(대표 표기), 이미지/링크는 있는 쪽 것을 씀
-            if int(track.get("listeners") or 0) > int(prev.get("listeners") or 0):
-                track["image"] = track.get("image") or prev.get("image")
-                merged[key] = track
-            elif not prev.get("image") and track.get("image"):
-                prev["image"] = track["image"]
+            # 같은 곡의 표기 변형 — 대표 표기는 청취자 수 많은 쪽, 인기 신호(소스별 순위 등)와 이미지는 양쪽을 합침
+            try:
+                track_is_primary = int(track.get("listeners") or 0) > int(prev.get("listeners") or 0)
+            except (TypeError, ValueError):
+                track_is_primary = False
+            primary, other = (track, prev) if track_is_primary else (prev, track)
+            _merge_track_signals(primary, other)
+            primary["image"] = primary.get("image") or other.get("image")
+            primary["lastfmImages"] = primary.get("lastfmImages") or other.get("lastfmImages")
+            merged[key] = primary
 
-        ranked = _rank_title_matches(q, list(merged.values()))
+        ranked = _rank_tracks(q, list(merged.values()))
         q_key = _fold_title(q)
         roman_key = _fold_title(roman) if roman else None
-        # _rank_title_matches는 안 맞는 곡도 뒤에 남기므로(국내 아닌 로마자 일치 등) 맞는 것만 추림
+        # 제목이 맞는 곡만 추림(국내가 아닌 로마자 일치 등은 제목 가산점을 못 받아 여기서 빠짐)
         selected = [t for t in ranked if _track_title_match(q_key, roman_key, t) is not None][:TITLE_SEARCH_MAX_TRACKS]
         if not selected:
             return []
@@ -1740,7 +1902,8 @@ def _title_search_tracks(q: str) -> list:
                 except Exception:
                     image = None
             out.append({"name": t["name"], "artist": t["artist"], "listeners": t.get("listeners"),
-                        "url": t.get("url"), "image": image})
+                        "url": t.get("url"), "image": image,
+                        **{f: t[f] for f in TRACK_SIGNAL_FIELDS if t.get(f) is not None}})
         out = _apply_cached_korean_names(out)
         print(f"[title-search] '{q}' -> 추가 후보 {[(t['artist'], t['name'], t['listeners']) for t in out]}")
         return out
@@ -1843,7 +2006,8 @@ def _search_by_query(q: str, x_session_id: Optional[str] = None):
     # v33: 라이즈 등 로마자 등록 그룹은 로마자 이름으로 검색(가짜 영상 제목형 아티스트 방지)
     # v34: (2026-11-18) 곡 제목 독립 검색(Last.fm 로마자 + iTunes KR) 병합과 제목 일치 우선 정렬 추가 — 안 올리면
     # "인디고"처럼 아티스트 곡으로만 채워진 채 캐싱된 결과가 새 로직을 안 탐.
-    cache_key = f"search:v34:{q.lower().strip()}"
+    # v35: (2026-11-18) 소스별 인기 신호를 합친 정렬 점수(track_rank_score)로 곡 순서를 정함 — 안 올리면 옛 순서가 남음.
+    cache_key = f"search:v35:{q.lower().strip()}"
     cached = get_cached(cache_key)
     if cached is not None:
         if x_session_id:
@@ -1991,11 +2155,15 @@ def _search_by_query(q: str, x_session_id: Optional[str] = None):
     # 부실 판단은 중복 제거 "전" 개수로 함 — 같은 곡의 표기 변형만 4개 온 경우("빌었어")는 Last.fm이 곡을
     # 잘 찾은 것이라 보조 소스를 부를 필요가 없음.
     lastfm_poor = _korean_results_poor(q, artists, tracks)
+    # (2026-11-18) 여기까지의 곡은 전부 Last.fm 검색 결과 — 그 순서를 정렬 점수의 lastfm_rank 신호로 남김
+    _annotate_positions(tracks, "_lastfmPos", "_lastfmTotal")
     artists, tracks = _drop_title_as_artist(q, _dedupe_artists(artists), _dedupe_tracks(tracks))
     aux_track_found = False
     is_tag_like_query = bool(_extract_genre_tag(q) or _extract_decade_tag(q))
     if not is_tag_like_query and lastfm_poor:
         aux = _aux_search_localized(q)
+        if aux["source"] == "itunes":
+            _annotate_positions(aux["tracks"], "_itunesPos", "_itunesTotal")  # iTunes 순위 → itunes_rank 신호
         if aux["tracks"] and aux["trusted"]:
             aux_track_found = True
             # Last.fm이 부실한 상황이니 보조 소스 곡을 앞에 두고, 검색어가 제목/아티스트에 들어간 곡을 위로.
@@ -2027,7 +2195,10 @@ def _search_by_query(q: str, x_session_id: Optional[str] = None):
             roman = _romanized_query(q)
             roman_key = _fold_title(roman) if roman else None
             title_exact_found = any(_track_title_match(q_key, roman_key, t) == 0 for t in title_tracks)
-        tracks = _rank_title_matches(q, tracks)
+    # (2026-11-18) 곡 순서 = 정렬 점수(제목 일치 가산점 + 소스별 인기 신호 가중 평균 + 서비스 가산점) 내림차순.
+    # 계산식/가중치는 track_rank_score 위 주석 참고. 아래 AI 추측/유튜브 폴백 곡은 "결과가 부실할 때의 정답 후보"라
+    # 점수와 무관하게 맨 앞에 붙임(기존 동작 유지).
+    tracks = _rank_tracks(q, tracks, log=True)
 
     TRACK_CONFIDENCE_LISTENER_THRESHOLD = 100
     TRACK_QUERY_SIMILARITY_THRESHOLD = 90
@@ -2224,7 +2395,7 @@ def _search_by_query(q: str, x_session_id: Optional[str] = None):
               f"원본 후보 {len(candidates)}개 -> 가사 필터 통과 {len(tag_tracks)}개")
 
     _fill_artist_images(artists)
-    tracks = _dedupe_tracks(tracks)
+    tracks = _strip_internal_fields(_dedupe_tracks(tracks))  # 정렬용 내부 신호(_lastfmPos 등)는 응답/캐시에서 뺌
 
     result = {
         "artists": artists,

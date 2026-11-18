@@ -1260,11 +1260,17 @@ export default function Home() {
   // 아티스트 카드를 누르면 그 아티스트의 전용 전체화면 페이지(ArtistPage)를 엶 —
   // 예전엔 아래에 곡 몇 개만 덧붙여서 검색 결과 맨 아래 "다른 곡"과 똑같은 목록이 중복으로 나왔음.
   const [artistPageName, setArtistPageName] = useState<string | null>(null);
+  // 아티스트 페이지 곡 조회용 정식 이름(검색 카드에서 열었을 때). 화면 제목은 artistPageName(한글 표시 이름)
+  const [artistPageLookup, setArtistPageLookup] = useState<string | null>(null);
+  // 아티스트 페이지 상단 프로필 사진(검색 카드에서 열었을 때 그 카드의 아티스트 사진)
+  const [artistPageImage, setArtistPageImage] = useState<string | null>(null);
 
-  function handleSelectArtist(artistName: string) {
+  function handleSelectArtist(artistName: string, officialName?: string, image?: string | null) {
     setError(null);
     setSelectedArtist(artistName);
     setArtistPageName(artistName);
+    setArtistPageLookup(officialName ?? null);
+    setArtistPageImage(image ?? null);
   }
 
   const moodSheetSwipeRef = useRef<{ x: number; y: number } | null>(null);
@@ -3317,6 +3323,8 @@ export default function Home() {
     {artistPageName && (
       <ArtistPage
         artistName={artistPageName}
+        lookupName={artistPageLookup}
+        imageUrl={artistPageImage}
         onClose={() => {
           setArtistPageName(null);
           if (artistOpenedFromLibraryRef.current) {

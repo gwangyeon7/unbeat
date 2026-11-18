@@ -34,7 +34,7 @@ type MobileSearchResultsProps = {
   artists: Artist[];
   artistNote?: string | null;
   isArtistFavorite: (artist: Artist) => boolean;
-  onSelectArtist: (artistName: string) => void;
+  onSelectArtist: (artistName: string, officialName?: string, image?: string | null) => void;
   onToggleFavoriteArtist: (artist: Artist) => void;
   // "전체"에서는 아티스트 다음에 이 순서대로(검색된 곡 → … → "OO의 다른 곡") 나옴
   songSections: SearchSongSection[];
@@ -163,7 +163,7 @@ export default function MobileSearchResults({
                 <div className="flex items-center rounded-xl bg-white/5 p-3">
                   <button
                     type="button"
-                    onClick={() => onSelectArtist(artist.name)}
+                    onClick={() => onSelectArtist(artist.name, artist.officialName, artist.image)}
                     className="flex min-w-0 flex-1 items-center gap-4 text-left"
                   >
                     {artistAvatar(artist, "h-20 w-20 text-2xl")}
@@ -185,7 +185,7 @@ export default function MobileSearchResults({
                 <li key={artist.name} className="flex w-24 shrink-0 flex-col items-center gap-1 text-center">
                   <button
                     type="button"
-                    onClick={() => onSelectArtist(artist.name)}
+                    onClick={() => onSelectArtist(artist.name, artist.officialName, artist.image)}
                     className="flex w-full flex-col items-center gap-2"
                   >
                     {artistAvatar(artist, "h-24 w-24 text-2xl")}

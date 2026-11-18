@@ -5,7 +5,8 @@ type ArtistCardProps = {
   artist: Artist;
   isSelected: boolean;
   isFavorite: boolean;
-  onSelect: (artistName: string) => void;
+  // officialName: 아티스트 페이지가 곡을 조회할 정식 이름(화면에는 artistName = 표시 이름)
+  onSelect: (artistName: string, officialName?: string, image?: string | null) => void;
   onToggleFavorite: (artist: Artist) => void;
 };
 
@@ -25,7 +26,7 @@ export default function ArtistCard({
       }`}
     >
       <button
-        onClick={() => onSelect(artist.name)}
+        onClick={() => onSelect(artist.name, artist.officialName, artist.image)}
         className="flex flex-1 items-center gap-3 text-left"
       >
         {artist.image ? (

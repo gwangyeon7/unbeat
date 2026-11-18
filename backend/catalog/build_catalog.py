@@ -522,6 +522,10 @@ def fetch_tracks(spec: dict) -> list:
             best, best_name, best_sum = tracks, name, float("inf")
         elif total > best_sum:
             best, best_name, best_sum = tracks, name, total
+    # (2026-11-18) 대표곡을 실제로 가져온 Last.fm 이름을 "조회용 이름"으로 남김 — 아티스트 페이지/추천도 같은 이름으로
+    # 조회해야 같은 곡이 나옴("아이유"로 조회하면 한글 제목, "IU"로 조회하면 영문 제목 / "라이즈"로 조회하면 방송 클립이
+    # 섞이고 "RIIZE"로 조회하면 깨끗함 — 2026-11-18 실측)
+    spec["lookup_name"] = best_name if best else None
     out = []
     for t in best:
         ko_title = None
@@ -868,6 +872,7 @@ def build() -> dict:
                                "listeners": t.get("listeners"), "url": t.get("url") or "", "image": t.get("image"),
                                "aliases": track_aliases.get(tid, [])})
     out_artists = [{"id": a["id"], "official": a["official"], "ko": a.get("ko"),
+                    "lookup": a.get("lookup_name") or a["official"],
                     "aliases": artist_aliases.get(a["id"], []), "image": a.get("image")}
                    for a in sorted(artists, key=lambda x: x["id"])]
     print(f"[build] 멜론 시드에서 새로 추가된 곡 {added}개, 자동 수집에서 새로 추가된 곡 {auto_stats['new_tracks']}개"

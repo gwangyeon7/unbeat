@@ -1628,6 +1628,7 @@ def _track_title_match(q_key: str, roman_key: Optional[str], track: dict) -> Opt
 # (2026-11-18) 검색 곡 정렬 점수. 전엔 Last.fm이 준 순서(텍스트 관련도 순) 그대로라 인기곡이 위로 안 올라왔음.
 #
 #   최종 점수 = 제목 일치 가산점 + 인기 점수 + SERVICE_BONUS_WEIGHT × 서비스 가산점 − 영상 제목형 감점
+#   (제목 일치 가산점 × 보정 배율 — 아티스트를 확실히 찾았을 때 다른 가수 동명 곡만, TITLE_BONUS_POP_REF_LISTENERS 참고)
 #
 #   제목 일치 가산점: 제목 == 검색어(원문 또는 로마자) → 1.0, 제목이 검색어를 포함 → 0.5, 아니면 0
 #                     (로마자 일치는 국내 아티스트 곡만 인정 — _track_title_match 참고)
@@ -1653,6 +1654,14 @@ def _track_title_match(q_key: str, roman_key: Optional[str], track: dict) -> Opt
 # _strip_internal_fields로 지움 — 프론트 응답 형식은 그대로.
 TITLE_EXACT_BONUS = 1.0
 TITLE_CONTAINS_BONUS = 0.5
+# (2026-11-18) 제목 일치 가산점 보정: 한글 검색어로 아티스트가 확실히 찾아졌을 때(_resolve_official_korean_artist 성공),
+# 그 아티스트가 아닌 다른 가수의 "동명 곡"은 가산점을 청취자 수에 비례해서만 줌:
+#   보정 배율 = min(1, Last.fm 청취자 수 / TITLE_BONUS_POP_REF_LISTENERS)   (청취자 수를 모르면 0)
+# "라이즈" -> 고그냥 "라이즈"(청취자 6명)는 배율 0.002라 RIIZE 곡 아래로, "인디고" -> 저스디스 "IndiGO"(23,944명)는
+# 배율 1이라 그대로 1위. 인기도 점수(로그 스케일 + 검색 순위)에 비례시키면 고그냥 곡이 Last.fm 검색 1위라서 인기도가
+# 0.30으로 높게 잡혀 여전히 1위였음 — 그래서 실제 청취자 수에 선형 비례. 아티스트 본인 곡은 보정하지 않음.
+# 영문 검색어("Hype Boy")는 같은 이름의 Last.fm 아티스트가 있어도 "확실히 찾음"으로 보지 않음(뉴진스 곡이 밀려나는 것 방지).
+TITLE_BONUS_POP_REF_LISTENERS = 3000
 POPULARITY_WEIGHTS = {
     "lastfm_listeners": 0.45,
     "youtube_views": 0.25,
@@ -1731,11 +1740,25 @@ def _service_bonus(track: dict) -> float:
     return 0.0
 
 
-def track_rank_score(track: dict, tier: Optional[int], service_bonus_fn=_service_bonus) -> dict:
-    """곡 하나의 정렬 점수와 그 내역. 정렬뿐 아니라 로그/디버깅용으로 내역을 같이 돌려줌."""
+def title_bonus_scale(track: dict, confirmed_artist_keys: Optional[set]) -> float:
+    """제목 일치 가산점 보정 배율(위 TITLE_BONUS_POP_REF_LISTENERS 주석). 아티스트가 확실하지 않으면 1(보정 없음)."""
+    if not confirmed_artist_keys:
+        return 1.0
+    if _artist_identity_keys(track.get("artist") or "") & confirmed_artist_keys:
+        return 1.0  # 찾은 아티스트 본인 곡
+    try:
+        listeners = int(track.get("listeners") or 0)
+    except (TypeError, ValueError):
+        listeners = 0
+    return min(1.0, listeners / TITLE_BONUS_POP_REF_LISTENERS)
+
+
+def track_rank_score(track: dict, tier: Optional[int], service_bonus_fn=_service_bonus, title_scale: float = 1.0) -> dict:
+    """곡 하나의 정렬 점수와 그 내역. 정렬뿐 아니라 로그/디버깅용으로 내역을 같이 돌려줌.
+    title_scale: 제목 일치 가산점 보정 배율(title_bonus_scale) — 기본 1이라 기존 호출은 그대로."""
     signals = popularity_signals(track)
     pop = popularity_score(signals)
-    title = title_match_bonus(tier)
+    title = round(title_match_bonus(tier) * title_scale, 4)
     try:
         service = max(0.0, min(1.0, float(service_bonus_fn(track) or 0.0)))
     except Exception as e:  # 가산점 계산 실패가 검색을 깨면 안 됨
@@ -1743,12 +1766,14 @@ def track_rank_score(track: dict, tier: Optional[int], service_bonus_fn=_service
         service = 0.0
     penalty = video_title_penalty(track.get("name") or "")
     total = title + pop + SERVICE_BONUS_WEIGHT * service - penalty
-    return {"total": round(total, 4), "title": title, "popularity": round(pop, 4), "service": service,
-            "penalty": penalty, "signals": {k: round(v, 3) for k, v in signals.items()}}
+    return {"total": round(total, 4), "title": title, "title_scale": round(title_scale, 4), "popularity": round(pop, 4),
+            "service": service, "penalty": penalty, "signals": {k: round(v, 3) for k, v in signals.items()}}
 
 
-def _rank_tracks(q: str, tracks: list, service_bonus_fn=_service_bonus, log: bool = False) -> list:
-    """검색 곡을 track_rank_score 내림차순으로 정렬(동점이면 기존 순서 유지)."""
+def _rank_tracks(q: str, tracks: list, service_bonus_fn=_service_bonus, log: bool = False,
+                 confirmed_artist_keys: Optional[set] = None) -> list:
+    """검색 곡을 track_rank_score 내림차순으로 정렬(동점이면 기존 순서 유지).
+    confirmed_artist_keys: 확실히 찾은 아티스트의 이름 키 — 있으면 다른 가수 동명 곡의 제목 가산점을 보정."""
     q_key = _fold_title(q)
     if not tracks:
         return tracks
@@ -1757,11 +1782,12 @@ def _rank_tracks(q: str, tracks: list, service_bonus_fn=_service_bonus, log: boo
     scored = []
     for idx, t in enumerate(tracks):
         tier = _track_title_match(q_key, roman_key, t) if q_key else None
-        scored.append((track_rank_score(t, tier, service_bonus_fn), idx, t))
+        scale = title_bonus_scale(t, confirmed_artist_keys) if tier is not None else 1.0
+        scored.append((track_rank_score(t, tier, service_bonus_fn, title_scale=scale), idx, t))
     scored.sort(key=lambda x: (-x[0]["total"], x[1]))
     if log:
         for score, _, t in scored:
-            print(f"[search-rank] '{q}' {score['total']:.3f} = 제목 {score['title']} + 인기 {score['popularity']:.3f} "
+            print(f"[search-rank] '{q}' {score['total']:.3f} = 제목 {score['title']}(배율 {score['title_scale']}) + 인기 {score['popularity']:.3f} "
                   f"+ 서비스 {SERVICE_BONUS_WEIGHT}×{score['service']} - 감점 {score['penalty']} | 신호 {score['signals']} | {t.get('artist')} - {t.get('name')}")
     return [t for _, _, t in scored]
 
@@ -2399,7 +2425,8 @@ def _search_by_query(q: str, x_session_id: Optional[str] = None):
     # "인디고"처럼 아티스트 곡으로만 채워진 채 캐싱된 결과가 새 로직을 안 탐.
     # v35: (2026-11-18) 소스별 인기 신호를 합친 정렬 점수(track_rank_score)로 곡 순서를 정함 — 안 올리면 옛 순서가 남음.
     # v36: (2026-11-18) 한글 검색어의 공식 아티스트(Deezer/iTunes/Last.fm 별칭) 병합, 곡 후보 8 -> 30곡 후 상위 10곡.
-    cache_key = f"search:v36:{q.lower().strip()}"
+    # v37: (2026-11-18) 아티스트를 확실히 찾았을 때 다른 가수 동명 곡의 제목 가산점을 청취자 수에 비례해 보정 — 안 올리면 옛 순서가 남음.
+    cache_key = f"search:v37:{q.lower().strip()}"
     cached = get_cached(cache_key)
     if cached is not None:
         if x_session_id:
@@ -2613,7 +2640,8 @@ def _search_by_query(q: str, x_session_id: Optional[str] = None):
     # (2026-11-18) 곡 순서 = 정렬 점수(제목 일치 가산점 + 소스별 인기 신호 가중 평균 + 서비스 가산점) 내림차순.
     # 계산식/가중치는 track_rank_score 위 주석 참고. 아래 AI 추측/유튜브 폴백 곡은 "결과가 부실할 때의 정답 후보"라
     # 점수와 무관하게 맨 앞에 붙임(기존 동작 유지).
-    tracks = _rank_tracks(q, tracks, log=True)
+    tracks = _rank_tracks(q, tracks, log=True,
+                          confirmed_artist_keys=set(official_artist["keys"]) if official_artist else None)
     # (2026-11-18) 후보를 30곡까지 늘렸으니 점수 상위 SEARCH_TRACK_RESULT_LIMIT곡만 남기고, 미뤄둔 이미지를 채움
     tracks = _fill_track_images(tracks[:SEARCH_TRACK_RESULT_LIMIT])
 

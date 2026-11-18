@@ -18,6 +18,7 @@ import requests
 import os
 
 from auth import get_user_from_auth_header
+from search_catalog import load_catalog
 
 # Last.fm의 artist.getCorrection은 영문 철자 간 편집 거리(edit distance) 기반이라
 # 한글 입력("아이위" 등)엔 아예 안 맞음 — 한글 오타와 영문 정식명("아이위" ↔ "IU")은
@@ -888,6 +889,17 @@ TRACK_IMAGE_CACHE_TTL_SECONDS = 60 * 60 * 24 * 30  # 30일 — 앨범 커버는 
 TRACK_IMAGE_NEGATIVE_CACHE_TTL_SECONDS = 60 * 30  # 30분
 
 
+def _track_image_cache_key(artist_name: str, track_name: str) -> str:
+    # v3: Deezer를 3순위로 추가(iTunes가 429/403으로 거절하고 Last.fm에도 없을 때 빈 이미지가 많았음)
+    # v4: 한글 아티스트명이면 Deezer 공식명으로 곡 검색을 한 번 더 함
+    return f"track-image:v4:{artist_name.lower().strip()}:{track_name.lower().strip()}"
+
+
+def cached_track_image(artist_name: str, track_name: str) -> Optional[str]:
+    """(2026-11-18) 캐시에 있는 곡 이미지만 돌려줌 — 외부 호출 없음(별칭표 즉시 응답용)."""
+    return (get_cached(_track_image_cache_key(artist_name, track_name)) or {}).get("url")
+
+
 def resolve_track_image(artist_name: str, track_name: str, images: list) -> Optional[str]:
     """
     "카드 이미지가 그냥 가수 프로필 사진처럼 보인다"는 피드백으로 우선순위를 바꿈 — 원래는
@@ -903,9 +915,7 @@ def resolve_track_image(artist_name: str, track_name: str, images: list) -> Opti
     큐 등 여러 엔드포인트에서 반복해서 조회되는 경우가 많으므로, 한 번 찾은 이미지는 Redis에
     캐싱해서 재사용 — 같은 곡을 다시 조회할 땐 iTunes를 아예 안 부르게 됨.
     """
-    # v3: Deezer를 3순위로 추가(iTunes가 429/403으로 거절하고 Last.fm에도 없을 때 빈 이미지가 많았음)
-    # v4: 한글 아티스트명이면 Deezer 공식명으로 곡 검색을 한 번 더 함
-    cache_key = f"track-image:v4:{artist_name.lower().strip()}:{track_name.lower().strip()}"
+    cache_key = _track_image_cache_key(artist_name, track_name)
     cached = get_cached(cache_key)
     if cached is not None:
         return cached.get("url")
@@ -1025,9 +1035,18 @@ def fetch_top_track_cover(artist_name: str) -> Optional[str]:
     return track_image(tracks[0]) if tracks else None
 
 
+def _artist_image_cache_key(artist_name: str) -> str:
+    return f"artist-image:v2:{artist_name.lower().strip()}"
+
+
+def cached_artist_image(artist_name: str) -> Optional[str]:
+    """(2026-11-18) 캐시에 있는 아티스트 이미지만 돌려줌 — 외부 호출 없음(별칭표 즉시 응답용)."""
+    return (get_cached(_artist_image_cache_key(artist_name)) or {}).get("url")
+
+
 def resolve_artist_image(artist_name: str) -> Optional[str]:
     # 찾았을 때만 30일, 못 찾았을 때는 30분만 캐싱(§51과 같은 이유 — 일시적 실패가 굳지 않게)
-    cache_key = f"artist-image:v2:{artist_name.lower().strip()}"
+    cache_key = _artist_image_cache_key(artist_name)
     cached = get_cached(cache_key)
     if cached is not None:
         return cached.get("url")
@@ -2184,11 +2203,62 @@ def _fill_track_images(tracks: list) -> list:
     return tracks
 
 
+# (2026-11-18) 별칭표(alias 카탈로그) — 검색어가 backend/catalog/catalog.json의 별칭과 정확히 같으면(정규화 후) 외부 호출
+# 없이 즉시 응답(search_catalog.py 주석 참고). 서버 시작 시 한 번만 읽음 — 파일이 없거나 깨져도 빈 카탈로그가 되어
+# 모든 검색이 기존 파이프라인으로 감. 별칭표를 고친 뒤엔 서버를 재시작해야 반영됨.
+# 응답의 "source"("catalog"/"pipeline")는 측정용 표시 필드 — 프론트는 모르는 필드를 무시하므로 영향 없음.
+# 캐시 키는 따로 안 둠: 별칭표 조회 자체가 메모리 사전 조회라 Redis보다 빠르고, 기존 search:vNN 캐시보다 앞에서 처리됨.
+ALIAS_CATALOG = load_catalog()
+_search_log_executor = ThreadPoolExecutor(max_workers=2)
+
+
+def _log_search_async(x_session_id: Optional[str], q: str, artists: list, tracks: list) -> None:
+    """검색 로그/최근 검색어 저장을 응답 뒤로 미룸 — 별칭표 응답의 목표(100ms 이하)를 DB 왕복이 깎아먹지 않게."""
+    if not x_session_id:
+        return
+
+    def run():
+        try:
+            log_event(x_session_id, "search", q, result_count=len(artists) + len(tracks))
+            push_search_history(x_session_id, q, image=_first_search_thumbnail(artists, tracks))
+        except Exception as e:
+            print(f"[catalog] 검색 로그 저장 실패(무시): {e}")
+
+    _search_log_executor.submit(run)
+
+
+def _search_from_catalog(q: str, x_session_id: Optional[str] = None) -> Optional[dict]:
+    """별칭표에 있으면 /search와 같은 형식의 응답, 없거나 조회 중 오류면 None(기존 파이프라인으로 진행).
+    이미지는 별칭표에 저장된 값, 없으면 기존 이미지 캐시(Redis)만 확인 — 외부 이미지 조회는 하지 않음."""
+    try:
+        hit = ALIAS_CATALOG.lookup(q, artist_image=cached_artist_image, track_image=cached_track_image)
+    except Exception as e:
+        print(f"[catalog] '{q}' 조회 실패 — 기존 파이프라인으로 진행: {e}")
+        return None
+    if hit is None:
+        return None
+    print(f"[catalog] '{q}' 별칭표 일치: 아티스트 {hit['matched']['artists']}, 곡 {hit['matched']['tracks']}")
+    _log_search_async(x_session_id, q, hit["artists"], hit["tracks"])
+    return {
+        "artists": hit["artists"],
+        "tracks": hit["tracks"],
+        "tagTracks": [],
+        "correctedArtistName": None,
+        "aiGuessedQuery": None,
+        "youtubeFallbackUsed": False,
+        "cached": False,
+        "source": "catalog",
+    }
+
+
 @app.get("/search")
 def search(q: str, artist: Optional[str] = None, x_session_id: Optional[str] = Header(default=None)):
     if artist and artist.strip():
         return _search_exact_pick(q.strip(), artist.strip(), x_session_id)
-    return _search_by_query(q, x_session_id)
+    catalog_result = _search_from_catalog(q, x_session_id)
+    if catalog_result is not None:
+        return catalog_result
+    return {**_search_by_query(q, x_session_id), "source": "pipeline"}
 
 
 def _search_by_query(q: str, x_session_id: Optional[str] = None):

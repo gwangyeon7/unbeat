@@ -58,7 +58,7 @@ def strip_paren(s: str) -> str:
     return "".join(out)
 
 
-VIDEO_MARKERS = ("mv", "방송", "비하인드", "직캠", "라이브", "live", "킬링보이스", "커버", "cover", "reaction", "리액션")
+VIDEO_MARKERS = ("mv", "방송", "비하인드", "직캠", "라이브", "live", "킬링보이스", "커버", "cover", "reaction", "리액션", "응원법")
 
 
 def looks_like_video(s: str) -> bool:

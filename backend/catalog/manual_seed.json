@@ -1,0 +1,48 @@
+{
+  "_comment": [
+    "별칭표 수동 시드. build_catalog.py가 main.py의 수동 아티스트 목록 + search_eval/queries.csv와 합쳐 catalog.json을 만든다.",
+    "artists: official(정식 이름)과 ko(한글명)를 직접 지정한 아티스트. resolve=false면 외부 조회로 정식 이름을 바꾸지 않음.",
+    "  lastfm_name: 대표곡을 가져올 Last.fm 아티스트 이름(없으면 official/ko 중 청취자 많은 쪽).",
+    "tracks: 사람들이 치는 검색어(한글 발음 표기 포함)를 aliases에 적는다. artist는 위/수동 목록의 아티스트 이름(정식/한글/별칭 아무거나).",
+    "  영어 제목 그 자체(Whiplash, Ditto, Indigo)는 별칭에 넣지 않음 — 다른 가수의 같은 제목 곡을 못 찾게 되기 때문.",
+    "  그런 검색어는 기존 파이프라인이 처리하고, 여기엔 한글 발음/아티스트+제목 조합만 넣는다."
+  ],
+  "artists": [
+    {"official": "인디고", "ko": "인디고", "aliases": ["인디고"], "resolve": false, "lastfm_name": "인디고",
+     "note": "국내 인디 밴드. 저스디스 'IndiGO'와는 별개 항목(같은 검색어 '인디고'에 둘 다 걸림)"},
+    {"official": "JUSTHIS", "ko": "저스디스", "aliases": ["저스디스", "justhis"], "resolve": false, "lastfm_name": "JUSTHIS"},
+    {"official": "Girls' Generation", "ko": "소녀시대", "aliases": ["소녀시대", "snsd", "girls generation"], "resolve": false,
+     "note": "자동 조회가 2PM으로 잘못 잡음(2026-11-18 생성 결과 검토)"},
+    {"official": "i-dle", "ko": "아이들", "aliases": ["아이들", "여자아이들", "(여자)아이들", "(G)I-DLE", "gidle", "g-idle"],
+     "resolve": false, "lastfm_name": "(G)I-DLE", "note": "자동 조회가 '여자아이들'을 멤버 솔로(SOYEON)로 잡음"},
+    {"official": "NCT", "ko": "엔시티", "aliases": ["엔시티", "nct"], "resolve": false,
+     "note": "자동 조회가 'NCT 127 127'이라는 잘못된 이름을 만듦"},
+    {"official": "NCT 127", "ko": "엔시티 127", "aliases": ["엔시티 127", "nct 127", "nct127"], "resolve": false},
+    {"official": "BIG Naughty", "ko": "빅나티", "aliases": ["빅나티", "서동현"], "resolve": false,
+     "note": "멜론 표기 'BIG Naughty (서동현)'의 괄호는 한글 독음이 아니라 본명 — 한글명은 빅나티"},
+    {"official": "YOASOBI", "ko": null, "aliases": ["요아소비"], "resolve": false,
+     "note": "J-POP 한글 발음 별칭. ko는 비워 둠(공식 한글명이 아니라 발음 표기라 화면엔 YOASOBI로 표시)"},
+    {"official": "Kenshi Yonezu", "ko": null, "aliases": ["요네즈 켄시", "요네즈켄시"], "resolve": false},
+    {"official": "aimyon", "ko": null, "aliases": ["아이묭"], "resolve": false},
+    {"official": "OFFICIAL HIGE DANDISM", "ko": null, "aliases": ["오피셜히게단디즘", "오피셜 히게 단디즘", "히게단"], "resolve": false},
+    {"official": "back number", "ko": null, "aliases": ["백넘버", "백 넘버"], "resolve": false},
+    {"official": "King Gnu", "ko": null, "aliases": ["킹누"], "resolve": false},
+    {"official": "imase", "ko": null, "aliases": ["이마세"], "resolve": false},
+    {"official": "Mrs. GREEN APPLE", "ko": null, "aliases": ["미세스그린애플", "미세스 그린 애플"], "resolve": false},
+    {"official": "RADWIMPS", "ko": null, "aliases": ["라드윔프스", "래드윔프스"], "resolve": false}
+  ],
+  "tracks": [
+    {"title": "METEOR", "artist": "창모", "ko_title": null,
+     "aliases": ["메테오", "미티어", "창모 메테오", "창모 METEOR"]},
+    {"title": "Whiplash", "artist": "aespa", "ko_title": null,
+     "aliases": ["위플래시", "에스파 위플래시", "에스파 Whiplash", "aespa 위플래시", "aespa Whiplash"]},
+    {"title": "밤편지", "artist": "아이유", "ko_title": null,
+     "aliases": ["밤편지", "아이유 밤편지", "IU 밤편지"]},
+    {"title": "IndiGO", "artist": "저스디스", "ko_title": null,
+     "aliases": ["인디고", "저스디스 인디고", "저스디스 IndiGO", "JUSTHIS IndiGO"]},
+    {"title": "Hype Boy", "artist": "뉴진스", "ko_title": null,
+     "aliases": ["하입보이", "뉴진스 하입보이", "뉴진스 Hype Boy", "NewJeans Hype Boy"]},
+    {"title": "Ditto", "artist": "뉴진스", "ko_title": null,
+     "aliases": ["디토", "뉴진스 디토", "뉴진스 Ditto", "NewJeans Ditto"]}
+  ]
+}

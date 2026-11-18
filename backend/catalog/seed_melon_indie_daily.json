@@ -1,0 +1,518 @@
+{
+ "_meta": {
+  "source": "멜론 인디 일간차트 화면을 사람이 직접 옮겨 적은 시드(자동 수집 아님)",
+  "captured_at": "2026-11-18",
+  "note": "89위 Kautiun은 화면 글자가 작아 오독 가능성 있음."
+ },
+ "tracks": [
+  {
+   "rank": 1,
+   "title": "생각을 멈추다 보면",
+   "artist": "최유리"
+  },
+  {
+   "rank": 2,
+   "title": "사랑하게 될 거야",
+   "artist": "한로로"
+  },
+  {
+   "rank": 3,
+   "title": "0+0",
+   "artist": "한로로"
+  },
+  {
+   "rank": 4,
+   "title": "주저하는 연인들을 위해",
+   "artist": "잔나비"
+  },
+  {
+   "rank": 5,
+   "title": "입춘",
+   "artist": "한로로"
+  },
+  {
+   "rank": 6,
+   "title": "여름아 부탁해",
+   "artist": "볼빨간사춘기"
+  },
+  {
+   "rank": 7,
+   "title": "Flower",
+   "artist": "오반(OVAN)"
+  },
+  {
+   "rank": 8,
+   "title": "시작의 아이 ○",
+   "artist": "박다혜,마크툽 (MAKTUB)"
+  },
+  {
+   "rank": 9,
+   "title": "눈을 감아도(2026)",
+   "artist": "순순희(지환)"
+  },
+  {
+   "rank": 10,
+   "title": "숲",
+   "artist": "최유리"
+  },
+  {
+   "rank": 11,
+   "title": "인사",
+   "artist": "범진"
+  },
+  {
+   "rank": 12,
+   "title": "영원은 그렇듯",
+   "artist": "리도어 (Redoor)"
+  },
+  {
+   "rank": 13,
+   "title": "슬픈 초대장",
+   "artist": "순순희(지환)"
+  },
+  {
+   "rank": 14,
+   "title": "사랑할 수밖에",
+   "artist": "볼빨간사춘기"
+  },
+  {
+   "rank": 15,
+   "title": "가을밤에 든 생각",
+   "artist": "잔나비"
+  },
+  {
+   "rank": 16,
+   "title": "시작의 아이",
+   "artist": "마크툽 (MAKTUB)"
+  },
+  {
+   "rank": 17,
+   "title": "좋아해.. (바른연애 길잡이 X 죠지)",
+   "artist": "죠지"
+  },
+  {
+   "rank": 18,
+   "title": "yours",
+   "artist": "데이먼스 이어 (Damons year)"
+  },
+  {
+   "rank": 19,
+   "title": "좋은 밤 좋은 꿈",
+   "artist": "너드커넥션 (Nerd Connection)"
+  },
+  {
+   "rank": 20,
+   "title": "선물",
+   "artist": "멜로망스"
+  },
+  {
+   "rank": 21,
+   "title": "잘 지내자, 우리",
+   "artist": "최유리"
+  },
+  {
+   "rank": 22,
+   "title": "오래된 노래",
+   "artist": "스탠딩 에그"
+  },
+  {
+   "rank": 23,
+   "title": "해요 (2022)",
+   "artist": "#안녕"
+  },
+  {
+   "rank": 24,
+   "title": "친구라는 핑계로 (Prod. 링크뮤직)",
+   "artist": "김건"
+  },
+  {
+   "rank": 25,
+   "title": "그라데이션",
+   "artist": "10CM"
+  },
+  {
+   "rank": 26,
+   "title": "고백",
+   "artist": "멜로망스"
+  },
+  {
+   "rank": 27,
+   "title": "오늘도 빛나는 너에게 (To You M...",
+   "artist": "마크툽 (MAKTUB)",
+   "truncated": true
+  },
+  {
+   "rank": 28,
+   "title": "Way Back Home",
+   "artist": "숀 (SHAUN)"
+  },
+  {
+   "rank": 29,
+   "title": "한시 오분 (1:05)",
+   "artist": "검정치마"
+  },
+  {
+   "rank": 30,
+   "title": "너의 번호를 누르고 (Prod. 영화처...",
+   "artist": "#안녕",
+   "truncated": true
+  },
+  {
+   "rank": 31,
+   "title": "나의 사춘기에게",
+   "artist": "볼빨간사춘기"
+  },
+  {
+   "rank": 32,
+   "title": "TOMBOY",
+   "artist": "혁오 (HYUKOH)"
+  },
+  {
+   "rank": 33,
+   "title": "여행",
+   "artist": "볼빨간사춘기"
+  },
+  {
+   "rank": 34,
+   "title": "안아줘",
+   "artist": "정준일"
+  },
+  {
+   "rank": 35,
+   "title": "스토커",
+   "artist": "10CM"
+  },
+  {
+   "rank": 36,
+   "title": "고백",
+   "artist": "델리스파이스"
+  },
+  {
+   "rank": 37,
+   "title": "EVERYTHING",
+   "artist": "검정치마"
+  },
+  {
+   "rank": 38,
+   "title": "첫사랑",
+   "artist": "백아"
+  },
+  {
+   "rank": 39,
+   "title": "그대가 내 안에 박혔다(그내박)",
+   "artist": "순순희(기태)"
+  },
+  {
+   "rank": 40,
+   "title": "뜨거운 여름밤은 가고 남은 건 볼품...",
+   "artist": "잔나비",
+   "truncated": true
+  },
+  {
+   "rank": 41,
+   "title": "사랑하긴 했었나요 스쳐가는 인연...",
+   "artist": "잔나비",
+   "truncated": true
+  },
+  {
+   "rank": 42,
+   "title": "우리 사랑은 필름 같았으면 해요",
+   "artist": "그_냥"
+  },
+  {
+   "rank": 43,
+   "title": "민들레 (single ver.)",
+   "artist": "우효"
+  },
+  {
+   "rank": 44,
+   "title": "어떻게 지내 (Prod. By VAN.C)",
+   "artist": "오반(OVAN)"
+  },
+  {
+   "rank": 45,
+   "title": "바라봐줘요",
+   "artist": "죠지"
+  },
+  {
+   "rank": 46,
+   "title": "너는 내 세상이었어",
+   "artist": "볼빨간사춘기"
+  },
+  {
+   "rank": 47,
+   "title": "사랑으로",
+   "artist": "wave to earth"
+  },
+  {
+   "rank": 48,
+   "title": "그댄 행복에 살텐데 (2022)",
+   "artist": "최유리"
+  },
+  {
+   "rank": 49,
+   "title": "우주를 줄게",
+   "artist": "볼빨간사춘기"
+  },
+  {
+   "rank": 50,
+   "title": "너를 생각해",
+   "artist": "주시크 (Joosiq)"
+  },
+  {
+   "rank": 51,
+   "title": "시간을 달리네",
+   "artist": "한로로"
+  },
+  {
+   "rank": 52,
+   "title": "살기 위해서",
+   "artist": "순순희"
+  },
+  {
+   "rank": 53,
+   "title": "조용히 완전히 영원히",
+   "artist": "너드커넥션 (Nerd Connection)"
+  },
+  {
+   "rank": 54,
+   "title": "꿈속에 너 (Feat. 전상근)",
+   "artist": "에이치코드 (H:CODE)"
+  },
+  {
+   "rank": 55,
+   "title": "서툰 이별을 하려해 (Feat.전상근)",
+   "artist": "윤토벤"
+  },
+  {
+   "rank": 56,
+   "title": "찰나가 영원이 될 때 (The Eternal...",
+   "artist": "마크툽 (MAKTUB)",
+   "truncated": true
+  },
+  {
+   "rank": 57,
+   "title": "josee!",
+   "artist": "데이먼스 이어 (Damons year)"
+  },
+  {
+   "rank": 58,
+   "title": "널 떠올리는 중이야",
+   "artist": "PATEKO (파테코),Jayci yucca,Ki...",
+   "truncated": true
+  },
+  {
+   "rank": 59,
+   "title": "Antifreeze",
+   "artist": "검정치마"
+  },
+  {
+   "rank": 60,
+   "title": "위잉위잉",
+   "artist": "혁오 (HYUKOH)"
+  },
+  {
+   "rank": 61,
+   "title": "조금 취했어 (Prod. 2soo)",
+   "artist": "임재현"
+  },
+  {
+   "rank": 62,
+   "title": "Mondegreen",
+   "artist": "데이먼스 이어 (Damons year)"
+  },
+  {
+   "rank": 63,
+   "title": "썸 탈꺼야",
+   "artist": "볼빨간사춘기"
+  },
+  {
+   "rank": 64,
+   "title": "은방울",
+   "artist": "DANIEL"
+  },
+  {
+   "rank": 65,
+   "title": "아크라포빅",
+   "artist": "하모 (hamo)"
+  },
+  {
+   "rank": 66,
+   "title": "보고 싶어질 때면",
+   "artist": "PATEKO (파테코),Kid Wine"
+  },
+  {
+   "rank": 67,
+   "title": "Marry Me",
+   "artist": "마크툽 (MAKTUB),구윤회"
+  },
+  {
+   "rank": 68,
+   "title": "좋다고 말해",
+   "artist": "볼빨간사춘기"
+  },
+  {
+   "rank": 69,
+   "title": "초록을거머쥔우리는",
+   "artist": "잔나비"
+  },
+  {
+   "rank": 70,
+   "title": "꿈과 책과 힘과 벽",
+   "artist": "잔나비"
+  },
+  {
+   "rank": 71,
+   "title": "나만, 봄",
+   "artist": "볼빨간사춘기"
+  },
+  {
+   "rank": 72,
+   "title": "나랑 아니면",
+   "artist": "검정치마"
+  },
+  {
+   "rank": 73,
+   "title": "seasons",
+   "artist": "wave to earth"
+  },
+  {
+   "rank": 74,
+   "title": "Love story",
+   "artist": "볼빨간사춘기"
+  },
+  {
+   "rank": 75,
+   "title": "오늘",
+   "artist": "오왠 (O.WHEN)"
+  },
+  {
+   "rank": 76,
+   "title": "하고 싶은 말",
+   "artist": "최열음"
+  },
+  {
+   "rank": 77,
+   "title": "She (Hidden Track No.V 1월 선...",
+   "artist": "잔나비",
+   "truncated": true
+  },
+  {
+   "rank": 78,
+   "title": "같애 (Feat. SHIRT)",
+   "artist": "g0nny (거니)"
+  },
+  {
+   "rank": 79,
+   "title": "폰서트",
+   "artist": "10CM"
+  },
+  {
+   "rank": 80,
+   "title": "동그라미",
+   "artist": "최유리"
+  },
+  {
+   "rank": 81,
+   "title": "이렇게 좋아해 본 적이 없어요",
+   "artist": "CHEEZE (치즈)"
+  },
+  {
+   "rank": 82,
+   "title": "나만 안되는 연애",
+   "artist": "볼빨간사춘기"
+  },
+  {
+   "rank": 83,
+   "title": "안았어야해 (Feat. Futuristic Sw...",
+   "artist": "JAEHA (재하)",
+   "truncated": true
+  },
+  {
+   "rank": 84,
+   "title": "고백",
+   "artist": "뜨거운 감자"
+  },
+  {
+   "rank": 85,
+   "title": "챠우챠우-아무리 애를 쓰고 막아 ...",
+   "artist": "델리스파이스",
+   "truncated": true
+  },
+  {
+   "rank": 86,
+   "title": "You(=I)",
+   "artist": "볼빨간사춘기"
+  },
+  {
+   "rank": 87,
+   "title": "봄 그리고 너",
+   "artist": "마틴스미스"
+  },
+  {
+   "rank": 88,
+   "title": "남이 될 수 있을까",
+   "artist": "볼빨간사춘기,스무살"
+  },
+  {
+   "rank": 89,
+   "title": "ed",
+   "artist": "Kautiun"
+  },
+  {
+   "rank": 90,
+   "title": "사랑이라 했던 말 속에서",
+   "artist": "can't be blue"
+  },
+  {
+   "rank": 91,
+   "title": "bad",
+   "artist": "wave to earth"
+  },
+  {
+   "rank": 92,
+   "title": "내가 더 사랑한단 이유로",
+   "artist": "방쏭"
+  },
+  {
+   "rank": 93,
+   "title": "김철수 씨 이야기",
+   "artist": "허회경"
+  },
+  {
+   "rank": 94,
+   "title": "F.U.Y",
+   "artist": "데이먼스 이어 (Damons year)"
+  },
+  {
+   "rank": 95,
+   "title": "정류장",
+   "artist": "한로로"
+  },
+  {
+   "rank": 96,
+   "title": "춘몽",
+   "artist": "헌서 (HYUN SEO)"
+  },
+  {
+   "rank": 97,
+   "title": "봄이 좋냐??",
+   "artist": "10CM"
+  },
+  {
+   "rank": 98,
+   "title": "폭죽과 풍선들",
+   "artist": "검정치마"
+  },
+  {
+   "rank": 99,
+   "title": "사랑은 은하수 다방에서",
+   "artist": "10CM"
+  },
+  {
+   "rank": 100,
+   "title": "그렇게 살아가는 것",
+   "artist": "허회경"
+  }
+ ]
+}

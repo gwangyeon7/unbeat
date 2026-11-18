@@ -1,0 +1,51 @@
+query,type,expected,artist,note
+라이즈,artist,RIIZE|라이즈,,그룹명 한글 검색. 가짜 영상 제목형 아티스트가 아닌 정식 아티스트
+인디고,track,IndiGO,저스디스|JUSTHIS,곡 제목 검색 - 저스디스 IndiGO가 상위에 나와야 함
+인디고,artist,인디고|indigo,,같은 검색어의 아티스트 쪽 정답(둘 다 나와야 함)
+메테오,track,METEOR|메테오,창모|CHANGMO,창모 METEOR (한글 발음으로 친 곡 제목)
+창모,artist,CHANGMO|창모,,로마자 등록 아티스트
+혁오,artist,HYUKOH|혁오,,
+잔나비,artist,JANNABI|잔나비,,
+투어스,artist,TWS|투어스,,신인 그룹
+아일릿,artist,ILLIT|아일릿,,신인 그룹
+보이넥스트도어,artist,BOYNEXTDOOR|보이넥스트도어,,
+키스오브라이프,artist,KISS OF LIFE|키스오브라이프,,
+하츠투하츠,artist,Hearts2Hearts|하츠투하츠,,
+아이유,artist,아이유|IU,,기존에 잘 되던 검색(퇴보 확인용)
+뉴진스,artist,뉴진스|NewJeans,,기존에 잘 되던 검색(퇴보 확인용)
+헤이즈,artist,헤이즈|Heize,,기존에 잘 되던 검색(퇴보 확인용)
+스트레이 키즈,artist,Stray Kids|스트레이 키즈,,
+에스파,artist,aespa|에스파,,
+르세라핌,artist,LE SSERAFIM|르세라핌,,
+아이브,artist,IVE|아이브,,
+블랙핑크,artist,BLACKPINK|블랙핑크,,
+방탄소년단,artist,BTS|방탄소년단,,
+세븐틴,artist,SEVENTEEN|세븐틴,,
+임영웅,artist,임영웅|Lim Young Woong,,영문 표기도 정답
+악뮤,artist,AKMU|악뮤|악동뮤지션,,
+10cm,artist,10cm|십센치,,
+밤편지,track,밤편지,아이유|IU,아이유 원곡 (커버/라이브 영상은 오답)
+Hype Boy,track,Hype Boy,뉴진스|NewJeans,뉴진스 곡
+Ditto,track,Ditto,뉴진스|NewJeans,뉴진스 곡
+Whiplash,track,Whiplash,에스파|aespa,에스파 곡
+위플래시,track,Whiplash|위플래시,에스파|aespa,한글 발음으로 친 곡 제목 (MV/방송 클립은 오답)
+한로로,artist,한로로|HANRORO,,멜론 인디/TOP100 시드 — 한글명 인디 아티스트
+검정치마,artist,검정치마|The Black Skirts,,멜론 인디 시드
+볼빨간사춘기,artist,볼빨간사춘기|BOL4,,멜론 TOP100/인디 시드
+에픽하이,artist,에픽하이|EPIK HIGH|Epik High,,멜론 랩 시드 (시드 표기 "에픽하이 (EPIK HIGH)")
+창모 아름다워,track,아름다워,창모|CHANGMO,아티스트+곡 조합 검색 (멜론 랩 시드)
+요아소비,artist,YOASOBI|요아소비,,J-POP 한글 발음 별칭
+요네즈 켄시,artist,Kenshi Yonezu|요네즈 켄시|米津玄師,,J-POP 한글 발음 별칭(띄어쓰기 포함)
+잔나비 주저하는 연인들을 위해,track,주저하는 연인들을 위해,잔나비|JANNABI,아티스트+곡 조합 검색 (멜론 인디/TOP100 시드)
+고백,track,고백,,모호한 검색어 - 같은 제목 여러 곡(멜로망스/델리스파이스/뜨거운 감자). 별칭표가 단정하지 않고 파이프라인으로 넘겨야 함
+아이묭,artist,aimyon|아이묭|あいみょん,,J-POP 한글 발음 별칭
+백넘버,artist,back number|백넘버,,J-POP 한글 발음 별칭
+킹누,artist,King Gnu|킹누,,J-POP 한글 발음 별칭
+이마세,artist,imase|이마세,,J-POP 한글 발음 별칭
+미세스그린애플,artist,Mrs. GREEN APPLE|미세스그린애플,,J-POP 한글 발음 별칭
+릴러말즈,artist,릴러말즈|Leellamarz,,시드 표기 "릴러말즈 (Leellamarz)" 한글/영문 쌍
+리센느,artist,RESCENE|리센느,,시드 표기 "RESCENE (리센느)" 영문/한글 쌍
+노스탈지아,track,노스탈지아,BIG Naughty|빅나티|서동현,멜론 랩 1위 곡 제목
+오피셜히게단디즘,artist,OFFICIAL HIGE DANDISM|Official髭男dism|오피셜히게단디즘,,J-POP 한글 발음 별칭
+사랑하게 될 거야,track,사랑하게 될 거야,한로로|HANRORO,띄어쓰기 있는 한글 곡 제목 (멜론 인디 시드)
+최유리,artist,최유리|Choi Yu Ree,,멜론 인디 1위 아티스트

@@ -1,0 +1,524 @@
+{
+ "_meta": {
+  "source": "멜론 랩/힙합 일간차트 화면을 사람이 직접 옮겨 적은 시드(자동 수집 아님)",
+  "captured_at": "2026-11-18",
+  "note": "10위는 캡처에 없어 빠짐. 별칭은 artist의 괄호 표기(예: 릴러말즈 (Leellamarz), 창모 (CHANGMO))에서 추출 가능."
+ },
+ "tracks": [
+  {
+   "rank": 1,
+   "title": "노스탈지아",
+   "artist": "BIG Naughty (서동현)"
+  },
+  {
+   "rank": 2,
+   "title": "BiiiG",
+   "artist": "BIGBANG (빅뱅)"
+  },
+  {
+   "rank": 3,
+   "title": "HOME SWEET HOME (feat. 태...",
+   "artist": "G-DRAGON",
+   "truncated": true
+  },
+  {
+   "rank": 4,
+   "title": "봄날",
+   "artist": "방탄소년단"
+  },
+  {
+   "rank": 5,
+   "title": "Love Love Love (Feat. Yoong ...",
+   "artist": "에픽하이 (EPIK HIGH)",
+   "truncated": true
+  },
+  {
+   "rank": 6,
+   "title": "미장센",
+   "artist": "에픽하이 (EPIK HIGH),다비치"
+  },
+  {
+   "rank": 7,
+   "title": "하루 하루",
+   "artist": "BIGBANG (빅뱅)"
+  },
+  {
+   "rank": 8,
+   "title": "ROSE (Feat. Skinny Brown, H...",
+   "artist": "양홍원",
+   "truncated": true
+  },
+  {
+   "rank": 9,
+   "title": "거짓말",
+   "artist": "BIGBANG (빅뱅)"
+  },
+  {
+   "rank": 11,
+   "title": "WDA (Whole Different Animal)...",
+   "artist": "aespa",
+   "truncated": true
+  },
+  {
+   "rank": 12,
+   "title": "거리에서 (Feat. ASH ISLAND)",
+   "artist": "릴러말즈 (Leellamarz)"
+  },
+  {
+   "rank": 13,
+   "title": "Body to Body",
+   "artist": "방탄소년단"
+  },
+  {
+   "rank": 14,
+   "title": "And July (Feat. DEAN, DJ Friz)",
+   "artist": "헤이즈 (Heize)"
+  },
+  {
+   "rank": 15,
+   "title": "살다보니",
+   "artist": "조선힙합_official"
+  },
+  {
+   "rank": 16,
+   "title": "우산 (Feat. 윤하)",
+   "artist": "에픽하이 (EPIK HIGH)"
+  },
+  {
+   "rank": 17,
+   "title": "시차 (We Are) (Feat. 로꼬 & GR...",
+   "artist": "우원재",
+   "truncated": true
+  },
+  {
+   "rank": 18,
+   "title": "어땠을까 (Feat. 박정현)",
+   "artist": "싸이 (PSY)"
+  },
+  {
+   "rank": 19,
+   "title": "Small girl (feat. 도경수(D.O.))",
+   "artist": "이영지"
+  },
+  {
+   "rank": 20,
+   "title": "Y (Please Tell Me Why)",
+   "artist": "프리스타일"
+  },
+  {
+   "rank": 21,
+   "title": "It's You (Feat. NO:EL)",
+   "artist": "한요한"
+  },
+  {
+   "rank": 22,
+   "title": "예술이야",
+   "artist": "싸이 (PSY)"
+  },
+  {
+   "rank": 23,
+   "title": "죽일 놈 (Guilty)",
+   "artist": "다이나믹 듀오"
+  },
+  {
+   "rank": 24,
+   "title": "Ballerino",
+   "artist": "리쌍"
+  },
+  {
+   "rank": 25,
+   "title": "죽을 만큼 아파서 (Feat. 멜로우)",
+   "artist": "MC몽"
+  },
+  {
+   "rank": 26,
+   "title": "헤어지지 못하는 여자, 떠나가지 못...",
+   "artist": "리쌍",
+   "truncated": true
+  },
+  {
+   "rank": 27,
+   "title": "하지하지마",
+   "artist": "GOT7 (갓세븐)"
+  },
+  {
+   "rank": 28,
+   "title": "마지막 인사",
+   "artist": "BIGBANG (빅뱅)"
+  },
+  {
+   "rank": 29,
+   "title": "POWER",
+   "artist": "G-DRAGON"
+  },
+  {
+   "rank": 30,
+   "title": "삐딱하게 (Crooked)",
+   "artist": "G-DRAGON"
+  },
+  {
+   "rank": 31,
+   "title": "Hooligan",
+   "artist": "방탄소년단"
+  },
+  {
+   "rank": 32,
+   "title": "그땐 그땐 그땐",
+   "artist": "Supreme Team,영준"
+  },
+  {
+   "rank": 33,
+   "title": "살아보니 그렇더라",
+   "artist": "국악딴따라"
+  },
+  {
+   "rank": 34,
+   "title": "TICK TOCK (Feat. ZICO) (Pro...",
+   "artist": "김하온 (HAON),Nosun,Raf Sand...",
+   "truncated": true
+  },
+  {
+   "rank": 35,
+   "title": "FLYING HIGH WITH U",
+   "artist": "빈첸"
+  },
+  {
+   "rank": 36,
+   "title": "Officially Missing You",
+   "artist": "긱스 (Geeks)"
+  },
+  {
+   "rank": 37,
+   "title": "2.0",
+   "artist": "방탄소년단"
+  },
+  {
+   "rank": 38,
+   "title": "OHAYO MY NIGHT",
+   "artist": "디핵 (D-Hack),PATEKO (파테코)"
+  },
+  {
+   "rank": 39,
+   "title": "춤 (CHOOM)",
+   "artist": "BABYMONSTER"
+  },
+  {
+   "rank": 40,
+   "title": "자니 (Feat. Dynamic Duo)",
+   "artist": "프라이머리"
+  },
+  {
+   "rank": 41,
+   "title": "너에게 쓰는 편지 (Feat. 린)",
+   "artist": "MC몽"
+  },
+  {
+   "rank": 42,
+   "title": "로맨틱 겨울 (Feat. 김진호 Of SG...",
+   "artist": "김진표",
+   "truncated": true
+  },
+  {
+   "rank": 43,
+   "title": "KISS KISS KISS (Feat. 선우 (T...",
+   "artist": "NOWIMYOUNG (나우아임영),Ro...",
+   "truncated": true
+  },
+  {
+   "rank": 44,
+   "title": "뜨거운 안녕 (Feat. 성시경)",
+   "artist": "싸이 (PSY)"
+  },
+  {
+   "rank": 45,
+   "title": "METEOR",
+   "artist": "창모 (CHANGMO)"
+  },
+  {
+   "rank": 46,
+   "title": "Trip (Feat. Hannah)",
+   "artist": "릴러말즈 (Leellamarz)"
+  },
+  {
+   "rank": 47,
+   "title": "SPOT! (feat. JENNIE)",
+   "artist": "지코 (ZICO)"
+  },
+  {
+   "rank": 48,
+   "title": "뱅뱅뱅 (BANG BANG BANG)",
+   "artist": "BIGBANG (빅뱅)"
+  },
+  {
+   "rank": 49,
+   "title": "Summer (Feat. BE'O (비오))",
+   "artist": "Paul Blanco"
+  },
+  {
+   "rank": 50,
+   "title": "고백(Go Back) (Feat.정인)",
+   "artist": "다이나믹 듀오"
+  },
+  {
+   "rank": 51,
+   "title": "? (물음표) (Feat. 최자 Of 다이나...",
+   "artist": "프라이머리",
+   "truncated": true
+  },
+  {
+   "rank": 52,
+   "title": "띠로리 (DDI RO RI)",
+   "artist": "MEOVV (미야오)"
+  },
+  {
+   "rank": 53,
+   "title": "시간이 들겠지 (Feat. Colde)",
+   "artist": "로꼬"
+  },
+  {
+   "rank": 54,
+   "title": "LOVE me",
+   "artist": "BE'O (비오)"
+  },
+  {
+   "rank": 55,
+   "title": "Rainy day (Feat. ASH ISLAND...",
+   "artist": "PATEKO (파테코)",
+   "truncated": true
+  },
+  {
+   "rank": 56,
+   "title": "어떻게 지내 (Prod. By VAN.C)",
+   "artist": "오반(OVAN)"
+  },
+  {
+   "rank": 57,
+   "title": "WICKED",
+   "artist": "ALLDAY PROJECT"
+  },
+  {
+   "rank": 58,
+   "title": "내 생애 가장 행복한 시간 (Feat. ...",
+   "artist": "MC몽",
+   "truncated": true
+  },
+  {
+   "rank": 59,
+   "title": "우연히 봄",
+   "artist": "로꼬,유주 (YUJU)"
+  },
+  {
+   "rank": 60,
+   "title": "Nerdy Love (Feat. 백예린)",
+   "artist": "pH-1"
+  },
+  {
+   "rank": 61,
+   "title": "Skrr (feat. 지젤 of aespa)",
+   "artist": "김하온 (HAON)"
+  },
+  {
+   "rank": 62,
+   "title": "Jasmine",
+   "artist": "DPR LIVE"
+  },
+  {
+   "rank": 63,
+   "title": "I Love U Oh Thank U (Feat. 김...",
+   "artist": "MC몽",
+   "truncated": true
+  },
+  {
+   "rank": 64,
+   "title": "Bk Love",
+   "artist": "MC 스나이퍼"
+  },
+  {
+   "rank": 65,
+   "title": "회전목마 (Feat. Zion.T, 원슈타인)...",
+   "artist": "sokodomo",
+   "truncated": true
+  },
+  {
+   "rank": 66,
+   "title": "한여름밤의 꿈",
+   "artist": "San E (산이),레이나"
+  },
+  {
+   "rank": 67,
+   "title": "EDENMATE+",
+   "artist": "양홍원"
+  },
+  {
+   "rank": 68,
+   "title": "사랑을 했다 (LOVE SCENARIO)",
+   "artist": "iKON"
+  },
+  {
+   "rank": 69,
+   "title": "GO!",
+   "artist": "CORTIS (코르티스)"
+  },
+  {
+   "rank": 70,
+   "title": "사이렌 Remix (Feat. UNEDUC...",
+   "artist": "호미들",
+   "truncated": true
+  },
+  {
+   "rank": 71,
+   "title": "Aqua Man",
+   "artist": "빈지노 (Beenzino)"
+  },
+  {
+   "rank": 72,
+   "title": "하라는 랩",
+   "artist": "다이나믹 듀오"
+  },
+  {
+   "rank": 73,
+   "title": "비 오는 날 듣기 좋은 노래 (Feat. ...",
+   "artist": "에픽하이 (EPIK HIGH)",
+   "truncated": true
+  },
+  {
+   "rank": 74,
+   "title": "사계",
+   "artist": "양홍원"
+  },
+  {
+   "rank": 75,
+   "title": "내 기쁨은 너가 벤틀리를 끄는 거야",
+   "artist": "김승민"
+  },
+  {
+   "rank": 76,
+   "title": "미안해서 미안해 (Feat. G.NA)",
+   "artist": "김진표"
+  },
+  {
+   "rank": 77,
+   "title": "존재만으로",
+   "artist": "원슈타인"
+  },
+  {
+   "rank": 78,
+   "title": "문득",
+   "artist": "BE'O (비오)"
+  },
+  {
+   "rank": 79,
+   "title": "화",
+   "artist": "Panda Gomm,양홍원"
+  },
+  {
+   "rank": 80,
+   "title": "Aliens",
+   "artist": "방탄소년단"
+  },
+  {
+   "rank": 81,
+   "title": "GONE (Feat. Paloalto) (Prod. ...",
+   "artist": "릴러말즈 (Leellamarz),TOIL",
+   "truncated": true
+  },
+  {
+   "rank": 82,
+   "title": "눈물 (Feat. 유진 Of 더 씨야)",
+   "artist": "리쌍"
+  },
+  {
+   "rank": 83,
+   "title": "우리서로사랑하지는말자",
+   "artist": "기리보이"
+  },
+  {
+   "rank": 84,
+   "title": "Igloo",
+   "artist": "KISS OF LIFE"
+  },
+  {
+   "rank": 85,
+   "title": "악몽",
+   "artist": "ASH ISLAND"
+  },
+  {
+   "rank": 86,
+   "title": "아름다워",
+   "artist": "창모 (CHANGMO)"
+  },
+  {
+   "rank": 87,
+   "title": "Pink Venom",
+   "artist": "BLACKPINK"
+  },
+  {
+   "rank": 88,
+   "title": "Alone (Feat. 이하이)",
+   "artist": "쿠기 (Coogie)"
+  },
+  {
+   "rank": 89,
+   "title": "검정색하트 (Feat. Leellamarz, B...",
+   "artist": "TOIL",
+   "truncated": true
+  },
+  {
+   "rank": 90,
+   "title": "MOONWALK",
+   "artist": "Panda Gomm,양홍원"
+  },
+  {
+   "rank": 91,
+   "title": "수취인 불명",
+   "artist": "프리스타일"
+  },
+  {
+   "rank": 92,
+   "title": "가슴에 살아 (Feat. 나르샤 Of Bro...",
+   "artist": "언터쳐블",
+   "truncated": true
+  },
+  {
+   "rank": 93,
+   "title": "last day",
+   "artist": "Royal 44"
+  },
+  {
+   "rank": 94,
+   "title": "Stay With Me",
+   "artist": "찬열 (CHANYEOL),펀치 (Punch)"
+  },
+  {
+   "rank": 95,
+   "title": "AEAO",
+   "artist": "다이나믹 듀오,DJ Premier"
+  },
+  {
+   "rank": 96,
+   "title": "아크라포빅",
+   "artist": "하모 (hamo)"
+  },
+  {
+   "rank": 97,
+   "title": "연애소설 (Feat. 아이유)",
+   "artist": "에픽하이 (EPIK HIGH)"
+  },
+  {
+   "rank": 98,
+   "title": "VVS (Feat. JUSTHIS) (Prod. G...",
+   "artist": "미란이 (MIRANI),먼치맨(MUNCH...",
+   "truncated": true
+  },
+  {
+   "rank": 99,
+   "title": "One (Feat. 지선)",
+   "artist": "에픽하이 (EPIK HIGH)"
+  },
+  {
+   "rank": 100,
+   "title": "아는사람 얘기",
+   "artist": "San E (산이)"
+  }
+ ]
+}

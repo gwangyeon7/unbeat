@@ -657,6 +657,8 @@ def lastfm_get(params: dict):
     타임아웃/연결 실패를 기존 "Last.fm API 요청 실패"와 같은 HTTPException으로 변환해서, 이미
     HTTPException만 잡고 있던 호출부(예: _resolve_single_curated_track)들이 그대로 정상 동작하게 함.
     """
+    # (2026-11-18) 로그에 요청 파라미터를 찍을 때 api_key가 평문으로 같이 출력되던 문제 — 로그용 사본에선 키를 뺌
+    log_params = {**params, "format": "json"}
     params = {
         **params,
         "api_key": LASTFM_API_KEY,
@@ -665,10 +667,10 @@ def lastfm_get(params: dict):
     try:
         res = requests.get(LASTFM_BASE_URL, params=params, timeout=5)
     except requests.exceptions.RequestException as e:
-        print(f"[lastfm] 요청 타임아웃/연결 실패 params={params}: {e}")
+        print(f"[lastfm] 요청 타임아웃/연결 실패 params={log_params}: {e}")
         raise HTTPException(status_code=504, detail="Last.fm API 응답 지연")
     if res.status_code != 200:
-        print(f"[lastfm] 요청 실패 ({res.status_code}) params={params}: {res.text[:200]}")
+        print(f"[lastfm] 요청 실패 ({res.status_code}) params={log_params}: {res.text[:200]}")
         raise HTTPException(status_code=res.status_code, detail="Last.fm API 요청 실패")
     # Last.fm 응답이 charset을 안 알려줘서 requests가 인코딩을 잘못 추측하는 경우가 있음 -> UTF-8로 고정
     res.encoding = "utf-8"
@@ -677,7 +679,7 @@ def lastfm_get(params: dict):
         # "국내 인기 차트" 행이 화면에서 통째로 안 뜨는 문제를 진단하기 위해 추가.
         # geo.getTopTracks에 country 값이 Last.fm이 인식 못 하는 국가명이면 여기서 에러가 나는데,
         # 프론트는 .catch()로 조용히 빈 배열 처리하니 백엔드 터미널에 안 찍히면 원인을 알 방법이 없었음.
-        print(f"[lastfm] API 오류 params={params}: {data}")
+        print(f"[lastfm] API 오류 params={log_params}: {data}")
         raise HTTPException(status_code=400, detail=data.get("message", "Last.fm API 오류"))
     return data
 

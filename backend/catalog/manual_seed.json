@@ -20,6 +20,8 @@
     {"official": "NCT 127", "ko": "엔시티 127", "aliases": ["엔시티 127", "nct 127", "nct127"], "resolve": false},
     {"official": "BIG Naughty", "ko": "빅나티", "aliases": ["빅나티", "서동현"], "resolve": false,
      "note": "멜론 표기 'BIG Naughty (서동현)'의 괄호는 한글 독음이 아니라 본명 — 한글명은 빅나티"},
+    {"official": "JINYOUNG", "ko": "진영", "aliases": ["진영"], "resolve": false,
+     "note": "멜론 시드 artist_en이 'JINYOUNG (GOT7)' — 소속 그룹 표기는 이름에 넣지 않음"},
     {"official": "YOASOBI", "ko": null, "aliases": ["요아소비"], "resolve": false,
      "note": "J-POP 한글 발음 별칭. ko는 비워 둠(공식 한글명이 아니라 발음 표기라 화면엔 YOASOBI로 표시)"},
     {"official": "Kenshi Yonezu", "ko": null, "aliases": ["요네즈 켄시", "요네즈켄시"], "resolve": false},

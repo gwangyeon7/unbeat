@@ -288,11 +288,28 @@ def _first_search_thumbnail(artists: list, tracks: list) -> Optional[str]:
     return None
 
 
-def _build_track_results(track_matches: list) -> list:
+def _build_track_results(track_matches: list, enrich_limit: Optional[int] = None) -> list:
     # (속도 개선, 2026-10-22) 검색이 너무 느리다는 피드백(5-1) — 원래는 곡마다 iTunes 이미지 조회
     # (resolve_track_image, 건당 최대 3초)를 리스트 컴프리헨션 안에서 "순서대로" 불러서 최대 8곡
     # 분량의 대기가 그대로 누적됐음(캐시가 죽어있으면 매 검색마다 반복). 스레드풀로 동시에 조회.
+    # (2026-11-18) enrich_limit: /search가 후보를 30곡으로 늘리면서, 이미지 조회와 Claude 한글 보완은 기존처럼 앞쪽
+    # enrich_limit곡(=예전 후보 수 8)에만 하고, 나머지는 캐시된 한글 이름만 붙여 둠(유료 호출/지연이 안 늘게).
+    # 나머지 곡의 이미지는 정렬 후 상위 N곡에 든 것만 _fill_track_images로 채움("_imageArgs"에 조회 인자 보관).
     items = [item for item in track_matches if not _is_junk_track_match(item)]
+    if enrich_limit is not None and len(items) > enrich_limit:
+        head = _build_track_results(items[:enrich_limit]) if enrich_limit > 0 else []
+        tail = []
+        for item in items[enrich_limit:]:
+            artist = _clean_artist_name(item.get("artist", ""))
+            tail.append({
+                "name": item["name"],
+                "artist": artist,
+                "listeners": item.get("listeners"),
+                "url": item.get("url"),
+                "image": None,
+                "_imageArgs": [artist, item["name"], item.get("image", [])],
+            })
+        return head + _apply_cached_korean_names(tail)
 
     def build(item):
         return {
@@ -967,26 +984,35 @@ def auth_me(authorization: Optional[str] = Header(default=None)):
 DEEZER_ARTIST_SEARCH_URL = "https://api.deezer.com/search/artist"
 
 
+def _deezer_artist_search(query: str, limit: int = 1) -> Optional[list]:
+    """Deezer 아티스트 검색(키 불필요). 실패(상태코드/네트워크/타임아웃 4초)면 None, 결과 없음이면 []."""
+    try:
+        res = requests.get(DEEZER_ARTIST_SEARCH_URL, params={"q": query, "limit": limit}, timeout=4)
+        if res.status_code != 200:
+            print(f"[deezer-artist] {query}: 상태코드 {res.status_code}")
+            return None
+        return res.json().get("data") or []
+    except Exception as e:
+        print(f"[deezer-artist] {query}: 예외 - {e}")
+        return None
+
+
+def _deezer_picture(item: dict) -> Optional[str]:
+    url = (item or {}).get("picture_big")
+    # 사진이 없는 아티스트는 해시 자리가 빈 기본 이미지 주소(".../artist//500x500...")를 줌
+    if not url or "/artist//" in url:
+        return None
+    return url
+
+
 def fetch_deezer_artist_picture(artist_name: str) -> Optional[str]:
     """
     Last.fm엔 아티스트 사진이 거의 없어서 Deezer 공개 API(키 불필요)의 아티스트 사진을 씀.
     예전엔 유튜브 채널 프로필 이미지를 썼는데 search.list가 호출당 쿼터 100이라 교체함.
     "빅뱅"->BIGBANG, "아일릿"->ILLIT처럼 한글 검색어도 맞는 아티스트로 매칭되는 걸 확인함.
     """
-    try:
-        res = requests.get(DEEZER_ARTIST_SEARCH_URL, params={"q": artist_name, "limit": 1}, timeout=4)
-        if res.status_code != 200:
-            print(f"[deezer-artist] {artist_name}: 상태코드 {res.status_code}")
-            return None
-        items = res.json().get("data") or []
-    except Exception as e:
-        print(f"[deezer-artist] {artist_name}: 예외 - {e}")
-        return None
-    url = items[0].get("picture_big") if items else None
-    # 사진이 없는 아티스트는 해시 자리가 빈 기본 이미지 주소(".../artist//500x500...")를 줌
-    if not url or "/artist//" in url:
-        return None
-    return url
+    items = _deezer_artist_search(artist_name, limit=1)
+    return _deezer_picture(items[0]) if items else None
 
 
 def fetch_top_track_cover(artist_name: str) -> Optional[str]:
@@ -1265,15 +1291,17 @@ def _query_in_track(query: str, track: dict) -> bool:
     return all(tok in haystack for tok in tokens)
 
 
-def _korean_results_poor(q: str, artists: list, tracks: list) -> bool:
+def _korean_results_poor(q: str, artists: list, tracks: list, artist_found: bool = False) -> bool:
     """한글 검색어에 대한 Last.fm 결과가 부실한지: 곡이 AUX_MIN_TRACKS개 미만이거나, 곡 제목/아티스트에도
-    아티스트 이름에도 검색어가 전혀 안 들어있으면(= 검색어와 무관한 결과뿐이면) 부실로 봄."""
+    아티스트 이름에도 검색어가 전혀 안 들어있으면(= 검색어와 무관한 결과뿐이면) 부실로 봄.
+    artist_found: 공식 아티스트(_resolve_official_korean_artist)를 찾았으면 이름이 "RIIZE"처럼 검색어를 안 담아도
+    관련 아티스트가 있는 것으로 봄."""
     if not HANGUL_PATTERN.search(q):
         return False
     if len(tracks) < AUX_MIN_TRACKS:
         return True
     relevant_track = any(_query_in_track(q, t) for t in tracks)
-    relevant_artist = any(_norm_key(q) in _norm_key(a.get("name", "")) for a in artists)
+    relevant_artist = artist_found or any(_norm_key(q) in _norm_key(a.get("name", "")) for a in artists)
     return not (relevant_track or relevant_artist)
 
 
@@ -1913,6 +1941,249 @@ def _title_search_tracks(q: str) -> list:
         return []
 
 
+# ---------------------------------------------------------------------------
+# (2026-11-18) 한글 검색어의 "공식 아티스트" 찾기 — 아티스트 후보를 Last.fm artist.search에만 의존해서, 한글 표기와
+# 최신 K팝에 약한 Last.fm이 "RIIZE 라이즈 'D" 같은 영상 제목형 가짜 항목이나 "키스오브라이프"(82명, 사진 없음) 같은
+# 조각난 별칭 항목만 주던 문제. 수동 목록(KNOWN_KOREAN_ARTIST_NAMES 등)으로 땜질하던 걸 일반화함:
+#   1) Last.fm 결과 안의 별칭 표기("RIIZE (라이즈)", "KISS OF LIFE 키스오브라이프", "혁오 hyukoh")에서
+#      "한글 부분 == 검색어"인 항목의 로마자 부분을 공식 이름 후보로 뽑음(청취자 수로 가중) — 수동 목록 불필요.
+#   2) Deezer 아티스트 검색(검색어 그대로 + 위 로마자 후보)과 iTunes KR musicArtist 검색 결과 중, 이름이 검색어(한글
+#      부분)나 로마자 후보와 맞는 것을 공식 아티스트로 채택(Deezer 팬 수 최대). Deezer는 "라이즈" -> "Ryze"처럼
+#      발음만 비슷한 엉뚱한 아티스트를 1위로 주기도 해서, 근거(별칭/한글 일치) 없이 1위를 그대로 믿지 않음.
+#   3) 공식 이름은 Deezer(사진 포함) > iTunes > Last.fm 별칭의 원래 표기 순. 같은 아티스트의 Last.fm 별칭 항목들은
+#      공식 항목 하나로 합치고 청취자 수를 합산(프론트가 1위의 50% 미만 아티스트를 숨기므로 합산값으로 표시 보장).
+# 기존 수동 목록은 안전장치로만 남김(로마자 후보가 Last.fm에서 하나도 안 나올 때 KOREAN_ARTIST_NAME_OVERRIDES의
+# 로마자 이름을 후보로 씀). Claude 같은 유료 API는 부르지 않음.
+OFFICIAL_ARTIST_CACHE_TTL_SECONDS = 60 * 60 * 24
+OFFICIAL_ARTIST_NEGATIVE_CACHE_TTL_SECONDS = 60 * 30
+OFFICIAL_ARTIST_FETCH_DEADLINE_SECONDS = 3.5
+OFFICIAL_ARTIST_WAIT_SECONDS = 7.0
+# 한글 검색어에서 아티스트 이름으로 보기 어려운 표기: 따옴표(곡명 인용), MV, 유튜브 자동 채널 "Topic", 직캠 등.
+# 영문 검색어엔 안 씀(Guns N' Roses 같은 정상 이름이 있어서) — 한국 아티스트 이름엔 따옴표가 거의 없음.
+FAKE_KOREAN_ARTIST_PATTERN = re.compile(r"['\"‘’“”]|\bM/?V\b|\bTopic\b|\(4K\)|직캠|fancam|\b\d{6}\b", re.IGNORECASE)
+
+
+def _hangul_latin_keys(name: str) -> tuple:
+    """'RIIZE (라이즈)' -> ('라이즈', 'riize'). 한글만 모은 키와 나머지(영문/숫자)만 모은 키."""
+    hangul = "".join(re.findall(r"[가-힣]", name or ""))
+    latin = _norm_key(re.sub(r"[가-힣]", "", name or ""))
+    return hangul, latin
+
+
+def _artist_identity_keys(name: str) -> set:
+    """같은 아티스트 판별용 키: _artist_keys(전체/괄호 앞/괄호 안) + 한글 부분 + 로마자 부분."""
+    hangul, latin = _hangul_latin_keys(name)
+    return _artist_keys(name) | {k for k in (hangul, latin) if len(k) >= 2}
+
+
+def _is_fake_korean_artist(name: str) -> bool:
+    return bool(FAKE_KOREAN_ARTIST_PATTERN.search(name or "")) or _looks_like_video_title(name or "")
+
+
+def _latin_display(name: str) -> str:
+    """'RIIZE (라이즈)' -> 'RIIZE', 'KISS OF LIFE 키스오브라이프' -> 'KISS OF LIFE'."""
+    return re.sub(r"\s+", " ", re.sub(r"[가-힣()\[\]]", " ", name or "")).strip(" -,/")
+
+
+def _resolve_official_korean_artist(q: str, fallback_latin: Optional[str] = None) -> Optional[dict]:
+    """한글 검색어의 공식 아티스트. 반환: {"artist": {name, mbid, image, listeners}, "keys": [같은 아티스트 키들]} 또는 None.
+    외부 호출은 각각 격리(실패/지연 시 그 소스만 빠짐)하고, 무슨 일이 있어도 예외를 밖으로 안 던짐."""
+    q_key = _norm_key(q)
+    if not q_key or not HANGUL_PATTERN.search(q):
+        return None
+    cache_key = f"search-official-artist:v1:{q.lower().strip()}"
+    try:
+        cached = get_cached(cache_key)
+        if cached is not None:
+            return cached.get("result")
+
+        executor = ThreadPoolExecutor(max_workers=3)
+        jobs = {
+            "lastfm": executor.submit(lastfm_get, {"method": "artist.search", "artist": q, "limit": 10}),
+            "deezer": executor.submit(_deezer_artist_search, q, 10),
+            "itunes": executor.submit(
+                _itunes_search, {"term": q, "country": "KR", "entity": "musicArtist", "lang": "ko_kr", "limit": 5}),
+        }
+        wait(list(jobs.values()), timeout=OFFICIAL_ARTIST_FETCH_DEADLINE_SECONDS)
+        executor.shutdown(wait=False)
+        results, failed = {}, []
+        for source, future in jobs.items():
+            try:
+                results[source] = future.result(timeout=0) if future.done() else None
+            except Exception as e:
+                print(f"[official-artist] '{q}' {source} 실패(건너뜀): {getattr(e, 'detail', e)}")
+                results[source] = None
+            if results[source] is None:
+                failed.append(source)
+
+        # 1) Last.fm 별칭 항목에서 로마자 공식 이름 후보 모으기(청취자 수 가중)
+        lastfm_matches = ((results.get("lastfm") or {}).get("results", {}) or {}).get("artistmatches", {}).get("artist", [])
+        belonging = []  # 같은 아티스트로 보이는 Last.fm 항목들(가짜 제외)
+        alias_weight, alias_display = {}, {}
+        for item in lastfm_matches:
+            name = item.get("name") or ""
+            if _is_fake_korean_artist(name) or _is_junk_artist_match(item):
+                continue
+            hangul, latin = _hangul_latin_keys(name)
+            if hangul != q_key:
+                continue
+            belonging.append(item)
+            if len(latin) >= 2:
+                listeners = int(item.get("listeners") or 0)
+                if listeners >= alias_weight.get(latin, -1):
+                    alias_display[latin] = _latin_display(name)
+                alias_weight[latin] = alias_weight.get(latin, 0) + listeners
+        if not alias_weight and fallback_latin:  # 안전장치: 수동 목록의 로마자 이름
+            alias_weight[_norm_key(fallback_latin)] = 0
+            alias_display[_norm_key(fallback_latin)] = fallback_latin
+        aliases = sorted(alias_weight, key=lambda k: -alias_weight[k])
+
+        def name_matches(name: str) -> bool:
+            hangul, latin = _hangul_latin_keys(name)
+            keys = _artist_identity_keys(name)
+            return hangul == q_key or bool(keys & set(aliases)) or (latin and latin in aliases)
+
+        # 2) Deezer/iTunes에서 근거가 있는 후보만 채택
+        deezer_items = [d for d in (results.get("deezer") or []) if name_matches(d.get("name") or "")]
+        if not deezer_items and aliases:
+            extra = _deezer_artist_search(alias_display[aliases[0]], 5) or []
+            deezer_items = [d for d in extra if _norm_key(d.get("name") or "") in aliases]
+        itunes_names = [
+            _clean_artist_name(i.get("artistName") or "") for i in (results.get("itunes") or [])
+        ]
+        itunes_match = next((n for n in itunes_names if n and name_matches(n)), None)
+        if not deezer_items and not aliases and itunes_names and itunes_names[0]:
+            # Last.fm에 아무 근거가 없는 새 아티스트: iTunes KR 1위를 Deezer에서 같은 이름으로 다시 찾아 교차 확인
+            confirm = _deezer_artist_search(itunes_names[0], 3) or []
+            deezer_items = [d for d in confirm if _norm_key(d.get("name") or "") == _norm_key(itunes_names[0])]
+            if deezer_items:
+                itunes_match = itunes_names[0]
+
+        best_deezer = max(deezer_items, key=lambda d: int(d.get("nb_fan") or 0)) if deezer_items else None
+        if best_deezer:
+            official_name = (best_deezer.get("name") or "").strip()
+        elif itunes_match:
+            official_name = itunes_match
+        elif aliases:
+            official_name = alias_display[aliases[0]]
+        else:
+            official_name = None
+
+        result = None
+        if official_name:
+            keys = {q_key, _norm_key(official_name)} | set(aliases) | _artist_identity_keys(official_name)
+            top_lastfm = max(belonging, key=lambda i: int(i.get("listeners") or 0)) if belonging else {}
+            result = {
+                "artist": {
+                    "name": official_name,
+                    "mbid": top_lastfm.get("mbid") or None,
+                    "image": _deezer_picture(best_deezer) if best_deezer else None,
+                    "listeners": str(sum(int(i.get("listeners") or 0) for i in belonging)),
+                },
+                "keys": sorted(k for k in keys if k),
+                "counted": sorted({_norm_key(i.get("name") or "") for i in belonging}),  # 청취자 합산에 이미 넣은 항목
+                "source": "deezer" if best_deezer else ("itunes" if itunes_match == official_name else "lastfm-alias"),
+            }
+        print(f"[official-artist] '{q}' aliases={aliases[:3]} deezer={[d.get('name') for d in deezer_items][:3]} "
+              f"itunes={itunes_match!r} -> {result and (result['artist']['name'], result['source'])} (실패 소스: {failed})")
+        ttl = OFFICIAL_ARTIST_CACHE_TTL_SECONDS if (result and not failed) else OFFICIAL_ARTIST_NEGATIVE_CACHE_TTL_SECONDS
+        if result or len(failed) < len(jobs):  # 전부 실패했으면 캐싱 안 함(일시 장애를 굳히지 않음)
+            set_cached(cache_key, {"result": result}, ttl=ttl)
+        return result
+    except Exception as e:
+        print(f"[official-artist] '{q}' 처리 중 예외(무시하고 진행): {e}")
+        return None
+
+
+def _merge_official_artist(q: str, official: Optional[dict], artists: list) -> list:
+    """공식 아티스트를 맨 앞에 두고, 같은 아티스트의 Last.fm 별칭 항목은 거기에 합침(청취자 수 합산).
+    한글 검색어면 영상 제목형 가짜 아티스트("RIIZE 라이즈 'D", "... - Topic")도 여기서 걸러냄."""
+    if not HANGUL_PATTERN.search(q or ""):
+        return artists
+    artists = [a for a in artists if not _is_fake_korean_artist(a.get("name") or "")]
+    if not official:
+        return artists
+    keys = set(official["keys"])
+    merged = dict(official["artist"])
+    others, belonging_listeners = [], {}
+    for a in artists:
+        if _artist_identity_keys(a.get("name") or "") & keys:
+            belonging_listeners[a["name"]] = int(a.get("listeners") or 0)
+            merged["mbid"] = merged.get("mbid") or a.get("mbid")
+            merged["image"] = merged.get("image") or a.get("image")
+        else:
+            others.append(a)
+    total = int(merged.get("listeners") or 0)
+    counted = set(official.get("counted") or [])
+    for name, n in belonging_listeners.items():  # 공식 해석 때 이미 합산한 항목은 다시 안 더함
+        if _norm_key(name) not in counted:
+            total += n
+    top_other = max((int(a.get("listeners") or 0) for a in others), default=0)
+    merged["listeners"] = str(max(total, top_other))
+    return [merged] + others
+
+
+def _drop_swapped_scrobbles(q: str, official: Optional[dict], tracks: list) -> list:
+    """공식 아티스트를 찾은 한글 검색어에서, 아티스트/제목이 뒤바뀐 스크로블과 영상 제목형 항목을 걸러냄.
+    곡 후보를 30곡으로 늘리자 "hype boy – 뉴진스", "Impossible – RIIZE ライズ 라이즈", "Kiss of Life – KISS OF LIFE
+    (키스오브라이프)"처럼 제목 칸에 아티스트 이름이 들어간 항목이 들어와, 제목 일치 가산점으로 1위에 오르고
+    _drop_title_as_artist가 진짜 뉴진스 곡을 전부 지우는 문제가 실측으로 나옴.
+    뒤바뀜 판정: 제목의 한글 부분이 검색어(=아티스트명)와 같고, 아티스트 칸이 공식 아티스트이거나 공식 아티스트의
+    다른 곡 제목과 같을 때. 다른 가수가 검색어와 같은 제목으로 낸 곡("고그냥 – 라이즈")은 남김."""
+    if not official or not HANGUL_PATTERN.search(q or ""):
+        return tracks
+    q_key = _norm_key(q)
+    keys = set(official["keys"])
+    official_titles = {
+        _norm_key(_strip_paren(t.get("name") or "")) for t in tracks
+        if _artist_identity_keys(t.get("artist") or "") & keys
+    }
+    out = []
+    for t in tracks:
+        artist, name = t.get("artist") or "", t.get("name") or ""
+        title_is_artist_name = _hangul_latin_keys(name)[0] == q_key
+        artist_is_official = bool(_artist_identity_keys(artist) & keys)
+        swapped = title_is_artist_name and (artist_is_official or _norm_key(_strip_paren(artist)) in official_titles)
+        # 쉼표 규칙(_looks_like_video_title)은 안 씀 — "A, B" 협업곡 아티스트 표기가 정상적으로 많음
+        fake_artist = bool(FAKE_KOREAN_ARTIST_PATTERN.search(artist)) or bool(re.match(r"^[♪♩♬♫★☆▶]", artist))
+        # 방송 클립("으르렁 (원곡: EXO) (RIIZE - Growl), MBC 250130 방송")도 후보가 늘면서 상위로 올라와서 같이 거름
+        broadcast_clip = bool(re.search(r"\b\d{6}\s*방송", name))
+        if swapped or fake_artist or broadcast_clip:
+            print(f"[search-swapped-filter] 걸러짐({'뒤바뀜' if swapped else ('가짜 아티스트' if fake_artist else '방송 클립')}): "
+                  f"{artist!r} - {name!r}")
+            continue
+        out.append(t)
+    return out
+
+
+# (2026-11-18) 곡 후보 확대: Last.fm track.search를 8곡 -> 30곡으로 받고, 같은 정렬 점수(_rank_tracks)로 정렬한 뒤
+# 상위 SEARCH_TRACK_RESULT_LIMIT곡만 내려줌. 8곡일 땐 인기곡이 후보에 아예 못 들어오는 경우가 많았음.
+# 이미지/Claude 한글 보완은 앞 SEARCH_TRACK_ENRICH_LIMIT곡(예전과 같은 8곡)에만 — 유료 호출 수는 예전과 같음.
+SEARCH_TRACK_CANDIDATE_LIMIT = 30
+SEARCH_TRACK_ENRICH_LIMIT = 8
+SEARCH_TRACK_RESULT_LIMIT = 10
+SEARCH_TRACK_IMAGE_DEADLINE_SECONDS = 2.5
+
+
+def _fill_track_images(tracks: list) -> list:
+    """정렬 후 살아남은 곡 중 이미지 조회를 미뤄둔 것("_imageArgs")만 resolve_track_image로 채움(최대 2.5초 대기 —
+    못 끝낸 곡은 이미지 없이 내려주고, 조회는 백그라운드로 끝나 캐시에 남음)."""
+    targets = [(i, t) for i, t in enumerate(tracks) if t.get("_imageArgs") and not t.get("image")]
+    if not targets:
+        return tracks
+    executor = ThreadPoolExecutor(max_workers=min(len(targets), 10))
+    futures = {i: executor.submit(resolve_track_image, *t["_imageArgs"]) for i, t in targets}
+    wait(list(futures.values()), timeout=SEARCH_TRACK_IMAGE_DEADLINE_SECONDS)
+    executor.shutdown(wait=False)
+    for i, future in futures.items():
+        if future.done():
+            try:
+                tracks[i]["image"] = future.result(timeout=0)
+            except Exception:
+                pass
+    return tracks
+
+
 @app.get("/search")
 def search(q: str, artist: Optional[str] = None, x_session_id: Optional[str] = Header(default=None)):
     if artist and artist.strip():
@@ -2007,7 +2278,8 @@ def _search_by_query(q: str, x_session_id: Optional[str] = None):
     # v34: (2026-11-18) 곡 제목 독립 검색(Last.fm 로마자 + iTunes KR) 병합과 제목 일치 우선 정렬 추가 — 안 올리면
     # "인디고"처럼 아티스트 곡으로만 채워진 채 캐싱된 결과가 새 로직을 안 탐.
     # v35: (2026-11-18) 소스별 인기 신호를 합친 정렬 점수(track_rank_score)로 곡 순서를 정함 — 안 올리면 옛 순서가 남음.
-    cache_key = f"search:v35:{q.lower().strip()}"
+    # v36: (2026-11-18) 한글 검색어의 공식 아티스트(Deezer/iTunes/Last.fm 별칭) 병합, 곡 후보 8 -> 30곡 후 상위 10곡.
+    cache_key = f"search:v36:{q.lower().strip()}"
     cached = get_cached(cache_key)
     if cached is not None:
         if x_session_id:
@@ -2060,9 +2332,19 @@ def _search_by_query(q: str, x_session_id: Optional[str] = None):
     # 미리 백그라운드로 던져놓고 아티스트 쪽과 동시에 기다림 — Last.fm 왕복 1회분 단축.
     _search_executor = ThreadPoolExecutor(max_workers=1)
     track_future = _search_executor.submit(
-        lastfm_get, {"method": "track.search", "track": q, "limit": 8}
+        lastfm_get, {"method": "track.search", "track": q, "limit": SEARCH_TRACK_CANDIDATE_LIMIT}
     )
     _search_executor.shutdown(wait=False)
+
+    # (2026-11-18) 한글 검색어면 공식 아티스트 찾기도 아티스트 검색과 동시에 시작(_resolve_official_korean_artist 주석).
+    # 수동 목록의 로마자 이름(effective_artist_query가 바뀐 경우)은 Last.fm 별칭이 하나도 없을 때의 안전장치로만 넘김.
+    official_future = None
+    if HANGUL_PATTERN.search(q):
+        _official_executor = ThreadPoolExecutor(max_workers=1)
+        official_future = _official_executor.submit(
+            _resolve_official_korean_artist, q, effective_artist_query if effective_artist_query != q else None
+        )
+        _official_executor.shutdown(wait=False)
 
     # (2026-11-18) 곡 제목 독립 검색도 아티스트 검색과 무관하니 같이 미리 던져둠(위 _title_search_tracks 주석 참고).
     # 장르/연대 판별로 건너뛰지 않음 — _extract_genre_tag가 "인디고"를 "인디"(indie)로 잡아버려서, 정작 고치려던
@@ -2091,10 +2373,18 @@ def _search_by_query(q: str, x_session_id: Optional[str] = None):
             print(f"[search-correction] '{q}' 교정 시도 실패 (무시하고 진행): {e}")
 
     artists = _build_artist_results(artist_matches)
+    official_artist = None
+    if official_future is not None:
+        try:
+            official_artist = official_future.result(timeout=OFFICIAL_ARTIST_WAIT_SECONDS)
+        except Exception as e:
+            print(f"[official-artist] '{q}' 대기 초과/실패 — 기존 아티스트 결과로 진행: {e!r}")
+        artists = _merge_official_artist(q, official_artist, artists)
 
     track_data = track_future.result()
     track_matches = track_data.get("results", {}).get("trackmatches", {}).get("track", [])
-    tracks = _build_track_results(track_matches)
+    tracks = _build_track_results(track_matches, enrich_limit=SEARCH_TRACK_ENRICH_LIMIT)
+    tracks = _drop_swapped_scrobbles(q, official_artist, tracks)
 
     # 아티스트/곡 둘 다 하나도 못 찾았고, 띄어쓰기가 하나도 없는 한글 검색어라면(§45) —
     # Last.fm 자체가 한글 띄어쓰기에 민감해서("꽃이피고지듯이"는 0건, "꽃이 피고 지듯이"는
@@ -2154,10 +2444,15 @@ def _search_by_query(q: str, x_session_id: Optional[str] = None):
     # (Claude/유튜브 쿼터 비용이 늘지 않음). 장르/연대 검색("2010년대 kpop")은 태그 모음용이라 제외.
     # 부실 판단은 중복 제거 "전" 개수로 함 — 같은 곡의 표기 변형만 4개 온 경우("빌었어")는 Last.fm이 곡을
     # 잘 찾은 것이라 보조 소스를 부를 필요가 없음.
-    lastfm_poor = _korean_results_poor(q, artists, tracks)
+    lastfm_poor = _korean_results_poor(q, artists, tracks, artist_found=bool(official_artist))
     # (2026-11-18) 여기까지의 곡은 전부 Last.fm 검색 결과 — 그 순서를 정렬 점수의 lastfm_rank 신호로 남김
     _annotate_positions(tracks, "_lastfmPos", "_lastfmTotal")
-    artists, tracks = _drop_title_as_artist(q, _dedupe_artists(artists), _dedupe_tracks(tracks))
+    if official_artist:
+        # 검색어가 공식 아티스트 이름으로 확인됐으면 "검색어는 곡 제목"이라는 가정(_drop_title_as_artist)을 적용하지 않음 —
+        # 다른 가수의 동명 곡 하나 때문에 그 아티스트의 곡이 전부 지워지는 걸 막음
+        artists, tracks = _dedupe_artists(artists), _dedupe_tracks(tracks)
+    else:
+        artists, tracks = _drop_title_as_artist(q, _dedupe_artists(artists), _dedupe_tracks(tracks))
     aux_track_found = False
     is_tag_like_query = bool(_extract_genre_tag(q) or _extract_decade_tag(q))
     if not is_tag_like_query and lastfm_poor:
@@ -2174,7 +2469,7 @@ def _search_by_query(q: str, x_session_id: Optional[str] = None):
             tracks = _dedupe_tracks(tracks + aux["tracks"])
         if aux["artists"] and aux["trusted"]:
             q_key = _norm_key(q)
-            lastfm_artist_relevant = any(q_key in _norm_key(a.get("name", "")) for a in artists)
+            lastfm_artist_relevant = bool(official_artist) or any(q_key in _norm_key(a.get("name", "")) for a in artists)
             # 기존 아티스트가 검색어와 무관하면 보조 소스 아티스트로 교체(프론트는 청취자 수 1위의 50% 미만을
             # 숨기는데 보조 소스엔 청취자 수가 없어서, 섞어두면 정작 맞는 아티스트가 가려짐)
             artists = _dedupe_artists(artists + aux["artists"]) if lastfm_artist_relevant else aux["artists"]
@@ -2199,6 +2494,8 @@ def _search_by_query(q: str, x_session_id: Optional[str] = None):
     # 계산식/가중치는 track_rank_score 위 주석 참고. 아래 AI 추측/유튜브 폴백 곡은 "결과가 부실할 때의 정답 후보"라
     # 점수와 무관하게 맨 앞에 붙임(기존 동작 유지).
     tracks = _rank_tracks(q, tracks, log=True)
+    # (2026-11-18) 후보를 30곡까지 늘렸으니 점수 상위 SEARCH_TRACK_RESULT_LIMIT곡만 남기고, 미뤄둔 이미지를 채움
+    tracks = _fill_track_images(tracks[:SEARCH_TRACK_RESULT_LIMIT])
 
     TRACK_CONFIDENCE_LISTENER_THRESHOLD = 100
     TRACK_QUERY_SIMILARITY_THRESHOLD = 90

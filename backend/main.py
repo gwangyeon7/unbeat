@@ -11,6 +11,7 @@ from urllib.parse import quote
 import anthropic
 import json
 import random
+import unicodedata
 import re
 import requests
 import os
@@ -90,6 +91,16 @@ KNOWN_KOREAN_ARTIST_NAMES = [
     "슈퍼주니어", "동방신기", "소녀시대", "에이핑크", "다비치", "볼빨간사춘기",
     "악동뮤지션", "적재", "폴킴", "헤이즈", "크러쉬", "딘", "자이언티",
     "정은지", "양요섭", "허각", "임영웅", "청하", "선미", "화사",
+]
+
+# 한글 이름으로 자주 검색되는데 위 목록에 없던 팀/가수 — 없으면 철자가 비슷한 다른 아티스트로
+# 잘못 교정됨(예: 라이즈 -> 헤이즈). 실사용에서 놓친 이름을 발견할 때마다 여기에 추가.
+EXTRA_KOREAN_ARTIST_NAMES = [
+    "라이즈", "엔믹스", "제로베이스원", "에이티즈", "투어스", "보이넥스트도어", "아일릿",
+    "키스오브라이프", "하츠투하츠", "베이비몬스터", "트레저", "스테이씨", "케플러", "비비",
+    "10cm", "잔나비", "혁오", "데이식스", "마마무", "에픽하이", "지코", "창모", "싸이",
+    "태연", "백예린", "성시경", "아이들", "(여자)아이들", "오마이걸", "여자친구", "엑소",
+    "엔시티", "엔시티 드림", "엔시티 127", "더보이즈", "아스트로", "빅스", "비투비",
 ]
 
 # 무드 탐색 결과를 국내/해외로 나눌 때 쓰는 판별 기준. 국적을 알려주는 API가 따로 없어서
@@ -323,11 +334,23 @@ GENRE_KEYWORDS = {
 DECADE_PATTERN = re.compile(r"(\d{2,4})\s*(?:년대|s)\b", re.IGNORECASE)
 
 
+_GENRE_SUFFIXES = ("", "음악", "노래", "곡", "추천", "모음", "플리", "플레이리스트")
+
+
 def _extract_genre_tag(query: str) -> Optional[str]:
+    # (수정, 2026-11-18) 부분 문자열로 찾으면 "인디고"의 "인디", "락커"의 "락"처럼 다른 낱말 안의
+    # 글자를 장르로 오인함. 검색어를 띄어쓰기로 나눈 낱말 단위로, 장르 낱말이거나 "발라드추천"/
+    # "힙합음악"처럼 장르+흔한 접미사인 경우에만 장르로 인정함.
     lowered = query.lower()
+    tokens = lowered.split()
     for keyword in sorted(GENRE_KEYWORDS, key=len, reverse=True):
-        if keyword in lowered:
-            return GENRE_KEYWORDS[keyword]
+        if " " in keyword:
+            if keyword in lowered:
+                return GENRE_KEYWORDS[keyword]
+            continue
+        for token in tokens:
+            if any(token == keyword + suffix for suffix in _GENRE_SUFFIXES):
+                return GENRE_KEYWORDS[keyword]
     return None
 
 
@@ -1415,6 +1438,318 @@ def _rank_by_query(q: str, tracks: list) -> list:
     return sorted(tracks, key=lambda t: 0 if _query_in_track(q, t) else 1)
 
 
+# ---------------------------------------------------------------------------
+# (2026-11-18) 곡 제목 독립 검색 — "인디고" 검색 시 아티스트 인디고의 곡만 나오고, 정작 사용자가 찾던
+# 저스디스(JUSTHIS) 등의 "IndiGO"는 안 나오던 문제. 원인: (1) 곡 후보가 Last.fm track.search(q) 한 번뿐인데
+# Last.fm이 그 자리를 동명 아티스트의 곡으로 채움, (2) 한글 "인디고"로는 영문 제목 "IndiGO"에 매칭될 길이 없음,
+# (3) 결과가 "부실"하지 않다고 판정돼 iTunes 보조 검색(_aux_search)도 안 불림.
+# 그래서 아티스트 검색 결과와 무관하게 곡 제목 검색을 따로 돌림:
+#   - Last.fm track.search(로마자 검색어, 50개) — 키는 기존 LASTFM_API_KEY, 추가 비용 없음
+#   - iTunes Search API song 검색(country=KR, 원문/로마자) — 키 불필요, 기존 쿨다운(_itunes_search) 공유
+# 로마자 변환은 외부 API 없이 국어의 로마자 표기법 규칙으로 직접 함(아래 _romanize_hangul). 변환이 틀릴 수
+# 있으니("라이즈" -> "raijeu") 원래 검색어 결과를 대체하지 않고, 제목이 일치하는 곡을 "추가"만 함.
+# 한글 검색어의 로마자 일치 곡은 국내 아티스트 곡만 채택 — 한글로 "인디고"를 친 사람이 찾는 건 88rising의
+# "Indigo"(청취자 19만)가 아니라 국내 곡일 가능성이 높고, 해외 동명 곡까지 넣으면 "메테오" -> 이탈리아
+# 가수의 "METEO"처럼 기존에 잘 되던 검색어 위로 엉뚱한 곡이 올라옴.
+# Claude 같은 유료 API는 이 경로에서 새로 부르지 않음 — 한글 제목/아티스트명은 이미 캐시에 있는 것만 적용.
+TITLE_SEARCH_CACHE_TTL_SECONDS = 60 * 60 * 6
+TITLE_SEARCH_PARTIAL_CACHE_TTL_SECONDS = 60 * 30  # 일부 소스(주로 iTunes 403/429)가 실패했을 땐 짧게만
+TITLE_SEARCH_FETCH_DEADLINE_SECONDS = 3.5  # 외부 검색 호출들을 기다리는 최대 시간(넘으면 끝난 것만 씀)
+TITLE_SEARCH_IMAGE_DEADLINE_SECONDS = 2.0  # 커버 이미지 조회 최대 대기(못 끝내면 이미지 없이 내려줌)
+TITLE_SEARCH_WAIT_SECONDS = 6.0  # /search 본체가 이 작업 전체를 기다리는 최대 시간
+TITLE_SEARCH_LASTFM_LIMIT = 50  # "indigo"는 해외 동명 곡이 많아 JUSTHIS "IndiGO"가 28위쯤에 있음
+TITLE_SEARCH_ITUNES_LIMIT = 25
+TITLE_SEARCH_MAX_TRACKS = 6
+
+_RR_INITIALS = ["g", "kk", "n", "d", "tt", "r", "m", "b", "pp", "s", "ss", "", "j", "jj", "ch", "k", "t", "p", "h"]
+_RR_MEDIALS = ["a", "ae", "ya", "yae", "eo", "e", "yeo", "ye", "o", "wa", "wae", "oe", "yo", "u", "wo", "we", "wi",
+               "yu", "eu", "ui", "i"]
+_RR_FINALS = ["", "k", "k", "k", "n", "n", "n", "t", "l", "k", "m", "l", "l", "l", "p", "l", "m", "p", "p", "t", "t",
+              "ng", "t", "t", "k", "t", "p", "t"]
+# 받침 뒤에 'ㅇ'으로 시작하는 음절이 오면 받침이 다음 음절 첫소리로 넘어감(연음): "음악" -> "eumak"
+_RR_LIAISON = {1: "g", 2: "kk", 4: "n", 7: "d", 8: "r", 16: "m", 17: "b", 19: "s", 20: "ss", 22: "j", 23: "ch",
+               24: "k", 25: "t", 26: "p", 27: ""}
+
+
+def _romanize_hangul(text: str) -> str:
+    """국어의 로마자 표기법 기본 규칙(+연음)으로 한글을 로마자로 바꿈. "인디고" -> "indigo", "메테오" -> "meteo".
+    외래어 원래 철자를 복원하는 건 아니라서 "라이즈" -> "raijeu"처럼 틀릴 수 있음 — 그래서 검색어 "추가"용으로만 씀."""
+    syllables = []
+    for ch in text:
+        code = ord(ch) - 0xAC00
+        syllables.append((code // 588, (code % 588) // 28, code % 28) if 0 <= code < 11172 else ch)
+    out = []
+    for i, syl in enumerate(syllables):
+        if isinstance(syl, str):
+            out.append(syl)
+            continue
+        initial, medial, final = syl
+        prev = syllables[i - 1] if i > 0 else None
+        if initial == 11 and isinstance(prev, tuple) and prev[2] in _RR_LIAISON:
+            pass  # 첫소리는 앞 음절 받침이 넘어와서 이미 붙어 있음
+        elif initial == 5 and isinstance(prev, tuple) and _RR_FINALS[prev[2]] == "l":
+            out.append("l")  # ㄹㄹ -> ll ("빨래" -> ppallae)
+        else:
+            out.append(_RR_INITIALS[initial])
+        out.append(_RR_MEDIALS[medial])
+        nxt = syllables[i + 1] if i + 1 < len(syllables) else None
+        if final and isinstance(nxt, tuple) and nxt[0] == 11 and final in _RR_LIAISON:
+            out.append(_RR_LIAISON[final])
+        else:
+            out.append(_RR_FINALS[final])
+    return "".join(out)
+
+
+def _romanized_query(q: str) -> Optional[str]:
+    """띄어쓰기 없는 순수 한글 검색어만 로마자 검색어를 만듦(외래어 제목 "인디고"/"메테오" 같은 경우가 목적 —
+    "블랙핑크 뚜두뚜두"처럼 여러 단어인 검색어는 로마자로 바꿔도 맞을 일이 거의 없어서 호출을 아낌)."""
+    q = (q or "").strip()
+    if not q or " " in q or not re.fullmatch(r"[가-힣0-9]+", q):
+        return None
+    roman = _romanize_hangul(q)
+    return roman if len(roman) >= 3 else None
+
+
+def _fold_title(s: str) -> str:
+    """_norm_key + 악센트 제거("Índigo" -> "indigo"). 한글은 NFKD로 자모 분해됐다가 NFC로 다시 합쳐짐."""
+    decomposed = unicodedata.normalize("NFKD", s or "")
+    stripped = "".join(c for c in decomposed if not unicodedata.combining(c))
+    return _norm_key(unicodedata.normalize("NFC", stripped))
+
+
+def _title_tier(title: str, key: str, min_contains_len: int) -> Optional[int]:
+    """제목이 key와 정확히 같으면 0, key를 포함하면 1, 아니면 None. 괄호 부가정보("(feat. ...)")는 빼고도 비교.
+    "포함"은 영상 제목형("RIIZE 라이즈 'Insomnia' MV")이면 인정 안 함 — 위로 끌어올리면 오히려 결과가 나빠짐."""
+    if not key:
+        return None
+    full = _fold_title(title)
+    core = _fold_title(_strip_paren(title)) or full
+    if key in (core, full):
+        return 0
+    if len(key) >= min_contains_len and key in full and not _looks_like_video_title(title):
+        return 1
+    return None
+
+
+def _is_domestic_track_artist(artist: str) -> bool:
+    """국내 아티스트 판별(_is_domestic_artist 확장): 한글 이름/로마자 목록 + 한글 표기 매핑 + 이미 캐시된 한글 이름.
+    캐시 조회만 하고 Claude는 부르지 않음."""
+    if not artist:
+        return False
+    if _is_domestic_artist(artist) or artist.strip().lower() in KOREAN_ARTIST_NAME_OVERRIDES:
+        return True
+    cached = get_cached(_korean_artist_cache_key(artist))
+    return bool(cached and cached.get("name"))
+
+
+def _track_title_match(q_key: str, roman_key: Optional[str], track: dict) -> Optional[int]:
+    """검색어(원문)와 제목 일치 등급. 원문으로 안 맞으면 로마자로 비교하되, 로마자 일치는 국내 아티스트 곡만 인정."""
+    title = track.get("name") or ""
+    tier = _title_tier(title, q_key, min_contains_len=2)
+    if tier is not None:
+        return tier
+    if roman_key:
+        tier = _title_tier(title, roman_key, min_contains_len=4)
+        if tier is not None and _is_domestic_track_artist(track.get("artist") or ""):
+            return tier
+    return None
+
+
+def _rank_title_matches(q: str, tracks: list) -> list:
+    """제목이 검색어(원문 또는 로마자)와 같거나 포함하는 곡을 맨 위로: 정확 일치 > 포함, 그 안에서 (한글 검색어면)
+    국내 곡 우선, 그다음 청취자 수 많은 순. 제목이 안 맞는 곡(아티스트 본인 곡 등)은 그 아래에 기존 순서 그대로."""
+    q_key = _fold_title(q)
+    if not q_key:
+        return tracks
+    roman = _romanized_query(q)
+    roman_key = _fold_title(roman) if roman else None
+    is_hangul = bool(HANGUL_PATTERN.search(q))
+    matched, rest = [], []
+    for idx, t in enumerate(tracks):
+        tier = _track_title_match(q_key, roman_key, t)
+        if tier is None:
+            rest.append(t)
+            continue
+        try:
+            listeners = int(t.get("listeners") or 0)
+        except (TypeError, ValueError):
+            listeners = 0
+        foreign = 1 if is_hangul and not _is_domestic_track_artist(t.get("artist") or "") else 0
+        matched.append(((tier, foreign, -listeners, idx), t))
+    matched.sort(key=lambda pair: pair[0])
+    return [t for _, t in matched] + rest
+
+
+def _apply_cached_korean_names(tracks: list) -> list:
+    """_apply_korean_titles와 같은 표기("한글 제목 (원제)", 한글 아티스트명)를 쓰되 캐시/고정 매핑만 사용(Claude 호출 없음)."""
+    out = []
+    for t in tracks:
+        artist, name = t.get("artist") or "", t.get("name") or ""
+        updated = dict(t)
+        if artist and not HANGUL_PATTERN.search(artist):
+            ko_artist = KOREAN_ARTIST_NAME_OVERRIDES.get(artist.strip().lower())
+            if not ko_artist:
+                cached = get_cached(_korean_artist_cache_key(artist))
+                ko_artist = cached.get("name") if cached else None
+            if ko_artist and ko_artist.lower() != artist.strip().lower():
+                updated["artist"] = ko_artist
+        if name and artist and not HANGUL_PATTERN.search(name):
+            cached = get_cached(_korean_title_cache_key(artist, name))
+            ko_title = cached.get("title") if cached else None
+            if ko_title:
+                updated["name"] = f"{ko_title} ({name})"
+        out.append(updated)
+    return out
+
+
+def _title_search_candidates(q: str, roman: Optional[str]) -> list:
+    """곡 제목 검색 원본 후보(제목이 원문/로마자와 맞는 것만, 국내 여부 판단 전). 검색어 단위 캐싱.
+    각 외부 호출은 따로 격리 — 하나가 실패/지연돼도 나머지 결과로 진행하고, 전부 실패하면 빈 목록."""
+    cache_key = f"search-title:v1:{q.lower().strip()}"
+    cached = get_cached(cache_key)
+    if cached is not None:
+        return cached.get("candidates") or []
+
+    executor = ThreadPoolExecutor(max_workers=3)
+    jobs = {"itunes": executor.submit(
+        _itunes_search, {"term": q, "country": "KR", "entity": "song", "limit": TITLE_SEARCH_ITUNES_LIMIT})}
+    if roman:
+        jobs["lastfm-roman"] = executor.submit(
+            lastfm_get, {"method": "track.search", "track": roman, "limit": TITLE_SEARCH_LASTFM_LIMIT})
+        jobs["itunes-roman"] = executor.submit(
+            _itunes_search, {"term": roman, "country": "KR", "entity": "song", "limit": TITLE_SEARCH_ITUNES_LIMIT})
+    wait(list(jobs.values()), timeout=TITLE_SEARCH_FETCH_DEADLINE_SECONDS)
+    executor.shutdown(wait=False)
+
+    q_key = _fold_title(q)
+    roman_key = _fold_title(roman) if roman else None
+    raw: list = []
+    ok_sources = 0
+    for source, future in jobs.items():
+        if not future.done():
+            print(f"[title-search] '{q}' {source} 시간 초과 — 건너뜀")
+            continue
+        try:
+            data = future.result(timeout=0)
+        except Exception as e:  # Last.fm HTTPException(504 등)/네트워크 오류 — 이 소스만 건너뜀
+            print(f"[title-search] '{q}' {source} 실패(건너뜀): {getattr(e, 'detail', e)}")
+            continue
+        if data is None:  # _itunes_search: 403/429/네트워크 실패 또는 쿨다운 중
+            continue
+        ok_sources += 1
+        if source == "lastfm-roman":
+            for item in data.get("results", {}).get("trackmatches", {}).get("track", []):
+                raw.append({
+                    "name": item.get("name") or "",
+                    "artist": _clean_artist_name(item.get("artist") or ""),
+                    "listeners": item.get("listeners"),
+                    "url": item.get("url"),
+                    "image": None,
+                    "lastfmImages": item.get("image", []),
+                })
+        else:
+            for item in data:
+                artwork = item.get("artworkUrl100")
+                raw.append({
+                    "name": item.get("trackName") or "",
+                    "artist": _clean_artist_name(item.get("artistName") or ""),
+                    "listeners": None,
+                    "url": item.get("trackViewUrl"),
+                    "image": artwork.replace("100x100bb", "600x600bb") if artwork else None,
+                    "lastfmImages": [],
+                })
+
+    candidates = []
+    for t in raw:
+        if not t["name"] or not t["artist"]:
+            continue
+        if AUX_JUNK_ARTIST_PATTERN.search(t["artist"]) or AUX_JUNK_TITLE_PATTERN.search(t["name"]):
+            continue
+        tier = _title_tier(t["name"], q_key, 2)
+        if tier is None and roman_key:
+            tier = _title_tier(t["name"], roman_key, 4)
+        if tier is None or _is_junk_track_match(t):
+            continue
+        candidates.append(t)
+
+    if ok_sources:
+        ttl = TITLE_SEARCH_CACHE_TTL_SECONDS if ok_sources == len(jobs) else TITLE_SEARCH_PARTIAL_CACHE_TTL_SECONDS
+        set_cached(cache_key, {"candidates": candidates}, ttl=ttl)
+    print(f"[title-search] '{q}' roman={roman!r} 소스 {ok_sources}/{len(jobs)} 성공, 제목 일치 후보 {len(candidates)}개")
+    return candidates
+
+
+def _title_search_tracks(q: str) -> list:
+    """곡 제목 독립 검색 결과(최대 TITLE_SEARCH_MAX_TRACKS곡, /search의 tracks와 같은 형식). 실패해도 예외 없이 []."""
+    try:
+        roman = _romanized_query(q)
+        candidates = _title_search_candidates(q, roman)
+        if not candidates:
+            return []
+
+        # 같은 아티스트가 "JUSTHIS"와 "저스디스 (JUSTHIS)"로 따로 등록된 경우가 많음 — 한글 표기가 붙은 쪽에서
+        # 별칭을 모아 로마자 이름도 국내 아티스트로 알아보고(국내 판별 목록에 없는 가수도 잡힘) 한글 이름으로 통일.
+        alias_to_korean = {}
+        for t in candidates:
+            if HANGUL_PATTERN.search(t["artist"]):
+                ko_name = _strip_paren(t["artist"])
+                if HANGUL_PATTERN.search(ko_name):
+                    for k in _artist_keys(t["artist"]):
+                        alias_to_korean.setdefault(k, ko_name)
+        merged = {}
+        for t in candidates:
+            ko_name = next((alias_to_korean[k] for k in _artist_keys(t["artist"]) if k in alias_to_korean), None)
+            track = {**t, "artist": ko_name or t["artist"]}
+            key = (_norm_key(track["artist"]), _fold_title(_strip_paren(track["name"])) or _fold_title(track["name"]))
+            prev = merged.get(key)
+            if prev is None:
+                merged[key] = track
+                continue
+            # 같은 곡의 표기 변형 — 청취자 수는 많은 쪽(대표 표기), 이미지/링크는 있는 쪽 것을 씀
+            if int(track.get("listeners") or 0) > int(prev.get("listeners") or 0):
+                track["image"] = track.get("image") or prev.get("image")
+                merged[key] = track
+            elif not prev.get("image") and track.get("image"):
+                prev["image"] = track["image"]
+
+        ranked = _rank_title_matches(q, list(merged.values()))
+        q_key = _fold_title(q)
+        roman_key = _fold_title(roman) if roman else None
+        # _rank_title_matches는 안 맞는 곡도 뒤에 남기므로(국내 아닌 로마자 일치 등) 맞는 것만 추림
+        selected = [t for t in ranked if _track_title_match(q_key, roman_key, t) is not None][:TITLE_SEARCH_MAX_TRACKS]
+        if not selected:
+            return []
+
+        # 커버 이미지: iTunes 결과는 이미 있음. Last.fm 결과만 기존 resolve_track_image(캐시 우선)로 보완하되 최대
+        # TITLE_SEARCH_IMAGE_DEADLINE_SECONDS만 기다림 — 못 끝낸 건 이미지 없이 내려주고 다음 검색부터 캐시로 채워짐.
+        executor = ThreadPoolExecutor(max_workers=min(len(selected), 6))
+        futures = {
+            i: executor.submit(resolve_track_image, t["artist"], t["name"], t.get("lastfmImages") or [])
+            for i, t in enumerate(selected) if not t.get("image")
+        }
+        if futures:
+            wait(list(futures.values()), timeout=TITLE_SEARCH_IMAGE_DEADLINE_SECONDS)
+        executor.shutdown(wait=False)
+        out = []
+        for i, t in enumerate(selected):
+            image = t.get("image")
+            future = futures.get(i)
+            if future is not None and future.done():
+                try:
+                    image = future.result(timeout=0)
+                except Exception:
+                    image = None
+            out.append({"name": t["name"], "artist": t["artist"], "listeners": t.get("listeners"),
+                        "url": t.get("url"), "image": image})
+        out = _apply_cached_korean_names(out)
+        print(f"[title-search] '{q}' -> 추가 후보 {[(t['artist'], t['name'], t['listeners']) for t in out]}")
+        return out
+    except Exception as e:
+        # 부가 기능 — 무슨 일이 있어도 /search 본체는 기존 결과로 계속 진행
+        print(f"[title-search] '{q}' 처리 중 예외(무시하고 진행): {e}")
+        return []
+
+
 @app.get("/search")
 def search(q: str, artist: Optional[str] = None, x_session_id: Optional[str] = Header(default=None)):
     if artist and artist.strip():
@@ -1504,7 +1839,11 @@ def _search_by_query(q: str, x_session_id: Optional[str] = None):
     # 중간 수정 때 혼선으로 건너뜀, 동작엔 영향 없음).
     # v31: (2026-11-16) 영상 제목형 가짜 아티스트 필터, 정규화 중복 제거, 한글 검색어 보조 소스(iTunes)
     # 추가 — 이 키를 안 올리면 "메테오"처럼 예전에 쓰레기 결과로 캐싱된 검색어가 새 로직을 안 탐.
-    cache_key = f"search:v31:{q.lower().strip()}"
+    # v32: (2026-11-18) 한글 아티스트 오교정(라이즈->헤이즈) 수정 — 안 올리면 잘못 교정된 결과가 캐시에 남음.
+    # v33: 라이즈 등 로마자 등록 그룹은 로마자 이름으로 검색(가짜 영상 제목형 아티스트 방지)
+    # v34: (2026-11-18) 곡 제목 독립 검색(Last.fm 로마자 + iTunes KR) 병합과 제목 일치 우선 정렬 추가 — 안 올리면
+    # "인디고"처럼 아티스트 곡으로만 채워진 채 캐싱된 결과가 새 로직을 안 탐.
+    cache_key = f"search:v34:{q.lower().strip()}"
     cached = get_cached(cache_key)
     if cached is not None:
         if x_session_id:
@@ -1534,10 +1873,24 @@ def _search_by_query(q: str, x_session_id: Optional[str] = None):
     corrected_artist_name = None
     effective_artist_query = q
     if HANGUL_PATTERN.search(q):
-        match = fuzzy_process.extractOne(q, KNOWN_KOREAN_ARTIST_NAMES, score_cutoff=65)
+        # (버그 수정, 2026-11-18) "라이즈"가 후보 목록에 없어서 철자가 비슷한 "헤이즈"로 잘못 교정되던
+        # 문제 — 한글 표기 매핑(KOREAN_ARTIST_NAME_OVERRIDES)에 있는 이름도 후보에 함께 넣어서, 정확히
+        # 일치하는 이름은 교정 없이 그대로 검색되게 함(정확 일치가 가장 높은 점수라 오교정이 안 됨).
+        known_names = list(
+            dict.fromkeys(KNOWN_KOREAN_ARTIST_NAMES + list(KOREAN_ARTIST_NAME_OVERRIDES.values()) + EXTRA_KOREAN_ARTIST_NAMES)
+        )
+        match = fuzzy_process.extractOne(q, known_names, score_cutoff=65)
         if match and match[0] != q:
             effective_artist_query = match[0]
             corrected_artist_name = match[0]
+        # (2026-11-18) "라이즈"를 Last.fm에 한글 그대로 검색하면 "RIIZE 라이즈 'D" 같은 영상 제목형
+        # 가짜 아티스트가 먼저 나오고 진짜 "RIIZE"는 안 나옴 — 로마자로 등록된 그룹은 알려진 로마자
+        # 이름으로 검색함. 한글로 검색해도 잘 나오는 기존 목록(KNOWN_KOREAN_ARTIST_NAMES)은 건드리지 않음.
+        if effective_artist_query not in KNOWN_KOREAN_ARTIST_NAMES:
+            for latin, ko in KOREAN_ARTIST_NAME_OVERRIDES.items():
+                if ko == effective_artist_query:
+                    effective_artist_query = latin
+                    break
 
     # (속도 개선, 2026-10-22) track.search는 artist.search 결과와 무관(검색어 q만 사용)하므로
     # 미리 백그라운드로 던져놓고 아티스트 쪽과 동시에 기다림 — Last.fm 왕복 1회분 단축.
@@ -1546,6 +1899,13 @@ def _search_by_query(q: str, x_session_id: Optional[str] = None):
         lastfm_get, {"method": "track.search", "track": q, "limit": 8}
     )
     _search_executor.shutdown(wait=False)
+
+    # (2026-11-18) 곡 제목 독립 검색도 아티스트 검색과 무관하니 같이 미리 던져둠(위 _title_search_tracks 주석 참고).
+    # 장르/연대 판별로 건너뛰지 않음 — _extract_genre_tag가 "인디고"를 "인디"(indie)로 잡아버려서, 정작 고치려던
+    # 검색어가 제외됐었음. 진짜 장르 검색어("2010년대 kpop")는 제목이 일치하는 곡이 없으니 추가되는 것도 없음.
+    _title_executor = ThreadPoolExecutor(max_workers=1)
+    title_future = _title_executor.submit(_title_search_tracks, q)
+    _title_executor.shutdown(wait=False)
 
     artist_data = lastfm_get({"method": "artist.search", "artist": effective_artist_query, "limit": 5})
     artist_matches = artist_data.get("results", {}).get("artistmatches", {}).get("artist", [])
@@ -1651,6 +2011,24 @@ def _search_by_query(q: str, x_session_id: Optional[str] = None):
             # 숨기는데 보조 소스엔 청취자 수가 없어서, 섞어두면 정작 맞는 아티스트가 가려짐)
             artists = _dedupe_artists(artists + aux["artists"]) if lastfm_artist_relevant else aux["artists"]
 
+    # (2026-11-18) 곡 제목 독립 검색 결과를 합치고, 제목이 검색어(원문/로마자)와 같거나 포함하는 곡을 위로.
+    # 아티스트 칸은 건드리지 않음("인디고" 검색 시 아티스트 인디고는 그대로). 기다림은 최대 TITLE_SEARCH_WAIT_SECONDS —
+    # 넘기면 이번 응답엔 빼고(작업은 백그라운드로 끝나 캐시에 남음) 기존 결과로 진행.
+    title_exact_found = False
+    if title_future is not None:
+        try:
+            title_tracks = title_future.result(timeout=TITLE_SEARCH_WAIT_SECONDS)
+        except Exception as e:
+            print(f"[title-search] '{q}' 대기 초과/실패 — 이번 응답에선 제외: {e!r}")
+            title_tracks = []
+        if title_tracks:
+            tracks = _dedupe_tracks(title_tracks + tracks)
+            q_key = _fold_title(q)
+            roman = _romanized_query(q)
+            roman_key = _fold_title(roman) if roman else None
+            title_exact_found = any(_track_title_match(q_key, roman_key, t) == 0 for t in title_tracks)
+        tracks = _rank_title_matches(q, tracks)
+
     TRACK_CONFIDENCE_LISTENER_THRESHOLD = 100
     TRACK_QUERY_SIMILARITY_THRESHOLD = 90
 
@@ -1663,6 +2041,9 @@ def _search_by_query(q: str, x_session_id: Optional[str] = None):
     if aux_track_found:
         # 보조 소스는 청취자 수가 없어 위 기준으론 항상 "저신뢰"가 되지만, iTunes가 한글 별칭으로 매칭해준
         # 정식 발매곡(또는 제목이 정확히 같은 Deezer 곡)이라 신뢰함 — 그래야 AI 추측/유튜브 폴백이 불필요하게 안 불림.
+        tracks_low_confidence = False
+    if title_exact_found:
+        # 제목이 검색어와 정확히 같은 실존 곡(Last.fm/iTunes)을 찾았으면 AI 추측/유튜브 폴백이 필요 없음
         tracks_low_confidence = False
     print(f"[search-confidence] '{q}' -> tracks_low_confidence={tracks_low_confidence}, "
           f"tracks={[(t.get('artist'), t.get('name'), t.get('listeners')) for t in tracks]}")

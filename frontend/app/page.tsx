@@ -1001,22 +1001,39 @@ export default function Home() {
   // 보여주고 새 곡을 추천받는 방식을 우선 시도하도록 바꿈(§38, 이 프로젝트 첫 유료 API) — 백엔드에
   // ANTHROPIC_API_KEY가 없거나 호출이 실패하면 조용히 기존 아티스트 기반 방식으로 폴백한다.
   useEffect(() => {
-    if (favoriteTracks.length === 0) {
-      if (chartTracks.length > 0) setQuickPickTracks(shuffleArray(chartTracks).slice(0, 15));
+    // 처음 쓰는 사람(즐겨찾기도 재생 기록도 거의 없음)에겐 한국 사용자가 대부분이라 국내 인기
+    // 차트(유튜브 KR)를 주로, 글로벌은 몇 곡만 섞어서 보여줌.
+    function chartBasedPicks(): Track[] {
+      const kr = shuffleArray(krChartTracks).slice(0, 11);
+      const global = shuffleArray(chartTracks).slice(0, 4);
+      const mixed = shuffleArray([...kr, ...global]);
+      return mixed.length > 0 ? mixed : shuffleArray(chartTracks).slice(0, 15);
+    }
+
+    // 즐겨찾기가 없어도 곡을 몇 곡 이상 들었으면(재생 기록) 그걸 취향으로 보고 AI 추천을 받음 —
+    // "듣다 보면 내 취향에 맞춰 바뀌는" 효과.
+    const seeds =
+      favoriteTracks.length > 0
+        ? favoriteTracks.map((t) => ({ artist: t.artistName, name: t.trackName }))
+        : recentPlays.slice(0, 15).map((t) => ({ artist: t.artist, name: t.name }));
+    const hasRecentSeeds = favoriteTracks.length === 0 && recentPlays.length >= 3;
+
+    if (favoriteTracks.length === 0 && !hasRecentSeeds) {
+      if (chartTracks.length > 0 || krChartTracks.length > 0) setQuickPickTracks(chartBasedPicks());
       return;
     }
 
     function fallbackToArtistBased() {
-      const favoriteArtists = [...new Set(favoriteTracks.map((t) => t.artistName))];
-      const pickedArtist = favoriteArtists[Math.floor(Math.random() * favoriteArtists.length)];
+      const seedArtists = [...new Set(seeds.map((s) => s.artist))];
+      const pickedArtist = seedArtists[Math.floor(Math.random() * seedArtists.length)];
       recommendByArtist(pickedArtist)
         .then((data) => setQuickPickTracks(shuffleArray(data.tracks).slice(0, 15)))
         .catch(() => {
-          if (chartTracks.length > 0) setQuickPickTracks(shuffleArray(chartTracks).slice(0, 15));
+          if (chartTracks.length > 0 || krChartTracks.length > 0) setQuickPickTracks(chartBasedPicks());
         });
     }
 
-    getAiQuickPicks(favoriteTracks.map((t) => ({ artist: t.artistName, name: t.trackName })))
+    getAiQuickPicks(seeds)
       .then((data) => {
         if (data.tracks.length > 0) {
           setQuickPickTracks(shuffleArray(data.tracks).slice(0, 15));
@@ -1027,7 +1044,10 @@ export default function Home() {
       .catch(fallbackToArtistBased);
     // favoriteTracks/chartTracks가 나중에 채워지면(비동기 로딩) 그때 다시 계산되게 의존성에 둠 —
     // 매 렌더마다 다시 섞이면 스크롤/재생 중에도 계속 바뀌어 버리니, 두 값이 실제로 바뀔 때만.
-  }, [favoriteTracks, chartTracks]);
+    // recentPlays는 곡을 들을 때마다 바뀌어 매번 다시 섞이면 안 되니, 시작 시 로드된 값만 쓰도록
+    // 길이가 0에서 생기는 경우(비동기 로딩)만 반영함.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [favoriteTracks, chartTracks, krChartTracks, recentPlays.length > 0]);
 
   // (UI 재구조화, 2026-10-14) "검색창(전체화면)을 벗어나도 메인 화면에 검색 결과가 그대로
   // 섞여서 나온다"는 피드백 — 지금까지는 검색 결과가 홈 화면 스크롤 중간에 그냥 끼워져서,
@@ -1045,11 +1065,7 @@ export default function Home() {
   // - 곡 제목으로 검색한 경우: 기존처럼 "검색된 곡" + "OO의 다른 곡"을 따로 보여줌.
   function buildMobileSongSections() {
     const norm = (s: string) => s.trim().toLowerCase();
-    const searchNote = youtubeFallbackUsed
-      ? "Last.fm에 없어서 유튜브에서 찾았어요"
-      : aiGuessedQuery
-        ? `AI 추측: ${aiGuessedQuery}로 검색됨`
-        : null;
+    const searchNote = null;
     const artistNames = new Set(cleanSearchArtists(artists).map((a) => norm(a.name)));
     const matched = searchTracks.filter((t) => artistNames.has(norm(t.artist))).length;
     const isArtistSearch =
@@ -2684,16 +2700,6 @@ export default function Home() {
         <div className="w-full max-w-xl">
           <p className="mb-2 text-xl font-bold text-white">
             검색된 곡
-            {aiGuessedQuery && (
-              <span className="ml-1 text-xs font-normal text-white/30">
-                (AI 추측: <span className="text-white/50">{aiGuessedQuery}</span>로 검색됨)
-              </span>
-            )}
-            {youtubeFallbackUsed && (
-              <span className="ml-1 text-xs font-normal text-white/30">
-                (Last.fm에 없어서 유튜브에서 찾았어요 · 첫 곡은 청취자 수 등 정보 없음)
-              </span>
-            )}
           </p>
           <TrackList
             tracks={searchTracks}

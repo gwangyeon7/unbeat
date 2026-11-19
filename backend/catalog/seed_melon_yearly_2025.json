@@ -1,0 +1,350 @@
+{
+ "_meta": {
+  "source": "멜론 2025 연간 차트(1~50위 + 연간차트 해설 글의 곡 목록)를 사람이 직접 보고 옮겨 적은 시드 데이터(자동 수집 아님)",
+  "captured_at": "2026-11-19",
+  "note": "1~50위는 연간 순위. 51번부터는 해설 글에 나온 곡들(순위 아님).",
+  "suggested_aliases_confident": {}
+ },
+ "tracks": [
+  {
+   "rank": 1,
+   "title": "Drowning",
+   "artist": "WOODZ"
+  },
+  {
+   "rank": 2,
+   "title": "HOME SWEET HOME (feat. 태양, 대성)",
+   "artist": "G-DRAGON"
+  },
+  {
+   "rank": 3,
+   "title": "Whiplash",
+   "artist": "aespa"
+  },
+  {
+   "rank": 4,
+   "title": "나는 반딧불",
+   "artist": "황가람"
+  },
+  {
+   "rank": 5,
+   "title": "모르시나요(PROD.로코베리)",
+   "artist": "조째즈"
+  },
+  {
+   "rank": 6,
+   "title": "APT.",
+   "artist": "로제 (ROSÉ), Bruno Mars"
+  },
+  {
+   "rank": 7,
+   "title": "REBEL HEART",
+   "artist": "IVE (아이브)"
+  },
+  {
+   "rank": 8,
+   "title": "HAPPY",
+   "artist": "DAY6 (데이식스)"
+  },
+  {
+   "rank": 9,
+   "title": "TOO BAD (feat. Anderson .Paak)",
+   "artist": "G-DRAGON"
+  },
+  {
+   "rank": 10,
+   "title": "너에게 닿기를",
+   "artist": "10CM"
+  },
+  {
+   "rank": 11,
+   "title": "like JENNIE",
+   "artist": "제니 (JENNIE)"
+  },
+  {
+   "rank": 12,
+   "title": "오늘만 I LOVE YOU",
+   "artist": "BOYNEXTDOOR"
+  },
+  {
+   "rank": 13,
+   "title": "toxic till the end",
+   "artist": "로제 (ROSÉ)"
+  },
+  {
+   "rank": 14,
+   "title": "내게 사랑이 뭐냐고 물어본다면",
+   "artist": "로이킴"
+  },
+  {
+   "rank": 15,
+   "title": "천상연",
+   "artist": "이창섭"
+  },
+  {
+   "rank": 16,
+   "title": "소나기",
+   "artist": "이클립스 (ECLIPSE)"
+  },
+  {
+   "rank": 17,
+   "title": "한 페이지가 될 수 있게",
+   "artist": "DAY6 (데이식스)"
+  },
+  {
+   "rank": 18,
+   "title": "어제보다 슬픈 오늘",
+   "artist": "우디 (Woody)"
+  },
+  {
+   "rank": 19,
+   "title": "청춘만화",
+   "artist": "이무진"
+  },
+  {
+   "rank": 20,
+   "title": "Welcome to the Show",
+   "artist": "DAY6 (데이식스)"
+  },
+  {
+   "rank": 21,
+   "title": "어떻게 이별까지 사랑하겠어, 널 사랑하는 거지",
+   "artist": "AKMU (악뮤)"
+  },
+  {
+   "rank": 22,
+   "title": "Supernova",
+   "artist": "aespa"
+  },
+  {
+   "rank": 23,
+   "title": "FAMOUS",
+   "artist": "ALLDAY PROJECT"
+  },
+  {
+   "rank": 24,
+   "title": "시작의 아이",
+   "artist": "미크툽 (MAKTUB)"
+  },
+  {
+   "rank": 25,
+   "title": "예뻤어",
+   "artist": "DAY6 (데이식스)"
+  },
+  {
+   "rank": 26,
+   "title": "POWER",
+   "artist": "G-DRAGON"
+  },
+  {
+   "rank": 27,
+   "title": "뛰어(JUMP)",
+   "artist": "BLACKPINK"
+  },
+  {
+   "rank": 28,
+   "title": "DRIP",
+   "artist": "BABYMONSTER"
+  },
+  {
+   "rank": 29,
+   "title": "그대만 있다면 (여름날 우리 X 너드커넥션 (Nerd Connection))",
+   "artist": "너드커넥션 (Nerd Connection)"
+  },
+  {
+   "rank": 30,
+   "title": "내 이름 맑음",
+   "artist": "QWER"
+  },
+  {
+   "rank": 31,
+   "title": "슬픈 초대장",
+   "artist": "순순희(지환)"
+  },
+  {
+   "rank": 32,
+   "title": "Love wins all",
+   "artist": "아이유"
+  },
+  {
+   "rank": 33,
+   "title": "너의 모든 순간",
+   "artist": "성시경"
+  },
+  {
+   "rank": 34,
+   "title": "ATTITUDE",
+   "artist": "IVE (아이브)"
+  },
+  {
+   "rank": 35,
+   "title": "Flower",
+   "artist": "오반(OVAN)"
+  },
+  {
+   "rank": 36,
+   "title": "고민중독",
+   "artist": "QWER"
+  },
+  {
+   "rank": 37,
+   "title": "첫 만남은 계획대로 되지 않아",
+   "artist": "TWS (투어스)"
+  },
+  {
+   "rank": 38,
+   "title": "UP (KARINA Solo)",
+   "artist": "aespa"
+  },
+  {
+   "rank": 39,
+   "title": "청혼하지 않을 이유를 못 찾았어",
+   "artist": "이무진"
+  },
+  {
+   "rank": 40,
+   "title": "모든 날, 모든 순간 (Every day, Every Moment)",
+   "artist": "폴킴"
+  },
+  {
+   "rank": 41,
+   "title": "주저하는 연인들을 위해",
+   "artist": "잔나비"
+  },
+  {
+   "rank": 42,
+   "title": "비의 랩소디",
+   "artist": "임재현"
+  },
+  {
+   "rank": 43,
+   "title": "Magnetic",
+   "artist": "아일릿(ILLIT)"
+  },
+  {
+   "rank": 44,
+   "title": "How Sweet",
+   "artist": "NewJeans"
+  },
+  {
+   "rank": 45,
+   "title": "에피소드",
+   "artist": "이무진"
+  },
+  {
+   "rank": 46,
+   "title": "사랑인가 봐",
+   "artist": "멜로망스"
+  },
+  {
+   "rank": 47,
+   "title": "I AM",
+   "artist": "IVE (아이브)"
+  },
+  {
+   "rank": 48,
+   "title": "다정히 내 이름을 부르면",
+   "artist": "경서예지, 전건호"
+  },
+  {
+   "rank": 49,
+   "title": "나는 아픈 건 딱 질색이니까",
+   "artist": "i-dle (아이들)"
+  },
+  {
+   "rank": 50,
+   "title": "헤어지자 말해요",
+   "artist": "박재정"
+  },
+  {
+   "rank": 51,
+   "title": "눈이 오잖아 (Feat.헤이즈)",
+   "artist": "이무진"
+  },
+  {
+   "rank": 52,
+   "title": "WICKED",
+   "artist": "ALLDAY PROJECT"
+  },
+  {
+   "rank": 53,
+   "title": "I DO ME",
+   "artist": "KiiKii (키키)"
+  },
+  {
+   "rank": 54,
+   "title": "The Chase",
+   "artist": "Hearts2Hearts (하츠투하츠)"
+  },
+  {
+   "rank": 55,
+   "title": "STYLE",
+   "artist": "Hearts2Hearts (하츠투하츠)"
+  },
+  {
+   "rank": 56,
+   "title": "Sticky",
+   "artist": "KISS OF LIFE"
+  },
+  {
+   "rank": 57,
+   "title": "Igloo",
+   "artist": "KISS OF LIFE"
+  },
+  {
+   "rank": 58,
+   "title": "HANDS UP",
+   "artist": "MEOVV (미야오)"
+  },
+  {
+   "rank": 59,
+   "title": "빌려온 고양이 (Do the Dance)",
+   "artist": "아일릿(ILLIT)"
+  },
+  {
+   "rank": 60,
+   "title": "Mantra",
+   "artist": "제니 (JENNIE)"
+  },
+  {
+   "rank": 61,
+   "title": "number one girl",
+   "artist": "로제 (ROSÉ)"
+  },
+  {
+   "rank": 62,
+   "title": "녹아내려요",
+   "artist": "DAY6 (데이식스)"
+  },
+  {
+   "rank": 63,
+   "title": "Congratulations",
+   "artist": "DAY6 (데이식스)"
+  },
+  {
+   "rank": 64,
+   "title": "Dirty Work",
+   "artist": "aespa"
+  },
+  {
+   "rank": 65,
+   "title": "Armageddon",
+   "artist": "aespa"
+  },
+  {
+   "rank": 66,
+   "title": "Rich Man",
+   "artist": "aespa"
+  },
+  {
+   "rank": 67,
+   "title": "무제(無題) (Untitled, 2014)",
+   "artist": "G-DRAGON"
+  },
+  {
+   "rank": 68,
+   "title": "TAKE ME",
+   "artist": "G-DRAGON"
+  }
+ ]
+}

@@ -1,0 +1,467 @@
+{
+ "_meta": {
+  "source": "멜론 검색 화면을 직접 보고 옮겨 적은 시드(사용자 취향곡)",
+  "captured_at": "2026-11-19",
+  "note": "Inst. 버전과 중복 곡 제외. 영문명 미확인 아티스트는 비워 둠.",
+  "suggested_aliases_confident": {
+   "요네즈 켄시": [
+    "Kenshi Yonezu"
+   ],
+   "요아소비": [
+    "YOASOBI"
+   ],
+   "윤마치": [
+    "MRCH"
+   ],
+   "유우리": [
+    "Yuuri"
+   ],
+   "노벨브라이트": [
+    "Novelbright"
+   ]
+  }
+ },
+ "tracks": [
+  {
+   "title": "Hello Mr. My Yesterday (명탐정 코난 10기 주제가 한국어버전)",
+   "artist": "애쉬그레이",
+   "artist_en": "",
+   "artist_ko": "애쉬그레이",
+   "rank": 1
+  },
+  {
+   "title": "Butter-Fly",
+   "artist": "전영호",
+   "artist_en": "",
+   "artist_ko": "전영호",
+   "rank": 2
+  },
+  {
+   "title": "Brave Heart",
+   "artist": "전영호",
+   "artist_en": "",
+   "artist_ko": "전영호",
+   "rank": 3
+  },
+  {
+   "title": "날 막지마!",
+   "artist": "전영호",
+   "artist_en": "",
+   "artist_ko": "전영호",
+   "rank": 4
+  },
+  {
+   "title": "Butter-Fly (우리들의 War Game Ver.)",
+   "artist": "전영호",
+   "artist_en": "",
+   "artist_ko": "전영호",
+   "rank": 5
+  },
+  {
+   "title": "Butter-Fly (Ballad Ver.)",
+   "artist": "전영호",
+   "artist_en": "",
+   "artist_ko": "전영호",
+   "rank": 6
+  },
+  {
+   "title": "며느리 전성시대 Title",
+   "artist": "전영호",
+   "artist_en": "",
+   "artist_ko": "전영호",
+   "rank": 7
+  },
+  {
+   "title": "초록",
+   "artist": "윤마치 (MRCH)",
+   "artist_en": "MRCH",
+   "artist_ko": "윤마치",
+   "rank": 8
+  },
+  {
+   "title": "다큐멘터리",
+   "artist": "윤마치 (MRCH)",
+   "artist_en": "MRCH",
+   "artist_ko": "윤마치",
+   "rank": 9
+  },
+  {
+   "title": "항복",
+   "artist": "윤마치 (MRCH)",
+   "artist_en": "MRCH",
+   "artist_ko": "윤마치",
+   "rank": 10
+  },
+  {
+   "title": "나쁜 영원",
+   "artist": "윤마치 (MRCH)",
+   "artist_en": "MRCH",
+   "artist_ko": "윤마치",
+   "rank": 11
+  },
+  {
+   "title": "좋은 예감",
+   "artist": "윤마치 (MRCH)",
+   "artist_en": "MRCH",
+   "artist_ko": "윤마치",
+   "rank": 12
+  },
+  {
+   "title": "Color It",
+   "artist": "윤마치 (MRCH)",
+   "artist_en": "MRCH",
+   "artist_ko": "윤마치",
+   "rank": 13
+  },
+  {
+   "title": "Love is a magic",
+   "artist": "윤마치 (MRCH)",
+   "artist_en": "MRCH",
+   "artist_ko": "윤마치",
+   "rank": 14
+  },
+  {
+   "title": "Peachy",
+   "artist": "윤마치 (MRCH)",
+   "artist_en": "MRCH",
+   "artist_ko": "윤마치",
+   "rank": 15
+  },
+  {
+   "title": "비행소녀",
+   "artist": "윤마치 (MRCH)",
+   "artist_en": "MRCH",
+   "artist_ko": "윤마치",
+   "rank": 16
+  },
+  {
+   "title": "Rainbow",
+   "artist": "윤마치 (MRCH)",
+   "artist_en": "MRCH",
+   "artist_ko": "윤마치",
+   "rank": 17
+  },
+  {
+   "title": "夜に駆ける",
+   "artist": "YOASOBI",
+   "artist_en": "YOASOBI",
+   "artist_ko": "요아소비",
+   "rank": 18
+  },
+  {
+   "title": "たぶん",
+   "artist": "YOASOBI",
+   "artist_en": "YOASOBI",
+   "artist_ko": "요아소비",
+   "rank": 19
+  },
+  {
+   "title": "アイドル",
+   "artist": "YOASOBI",
+   "artist_en": "YOASOBI",
+   "artist_ko": "요아소비",
+   "rank": 20
+  },
+  {
+   "title": "群青",
+   "artist": "YOASOBI",
+   "artist_en": "YOASOBI",
+   "artist_ko": "요아소비",
+   "rank": 21
+  },
+  {
+   "title": "怪物",
+   "artist": "YOASOBI",
+   "artist_en": "YOASOBI",
+   "artist_ko": "요아소비",
+   "rank": 22
+  },
+  {
+   "title": "Idol",
+   "artist": "YOASOBI",
+   "artist_en": "YOASOBI",
+   "artist_ko": "요아소비",
+   "rank": 23
+  },
+  {
+   "title": "あの夢をなぞって",
+   "artist": "YOASOBI",
+   "artist_en": "YOASOBI",
+   "artist_ko": "요아소비",
+   "rank": 24
+  },
+  {
+   "title": "The Bloom",
+   "artist": "YOASOBI",
+   "artist_en": "YOASOBI",
+   "artist_ko": "요아소비",
+   "rank": 25
+  },
+  {
+   "title": "친구라는 핑계로 (Prod. 링크뮤직)",
+   "artist": "김건",
+   "artist_en": "",
+   "artist_ko": "김건",
+   "rank": 26
+  },
+  {
+   "title": "이별하는 방법을 몰라서 (Prod. 링크뮤직)",
+   "artist": "김건",
+   "artist_en": "",
+   "artist_ko": "김건",
+   "rank": 27
+  },
+  {
+   "title": "행복했던 순간들엔 항상 네가 있었어",
+   "artist": "김건",
+   "artist_en": "",
+   "artist_ko": "김건",
+   "rank": 28
+  },
+  {
+   "title": "네가 올 것 같아서",
+   "artist": "김건",
+   "artist_en": "",
+   "artist_ko": "김건",
+   "rank": 29
+  },
+  {
+   "title": "금지된 사랑",
+   "artist": "김건",
+   "artist_en": "",
+   "artist_ko": "김건",
+   "rank": 30
+  },
+  {
+   "title": "지금 그대로",
+   "artist": "김건",
+   "artist_en": "",
+   "artist_ko": "김건",
+   "rank": 31
+  },
+  {
+   "title": "세상에 없는 날",
+   "artist": "김건",
+   "artist_en": "",
+   "artist_ko": "김건",
+   "rank": 32
+  },
+  {
+   "title": "소중한 사람",
+   "artist": "김건",
+   "artist_en": "",
+   "artist_ko": "김건",
+   "rank": 33
+  },
+  {
+   "title": "가지 마라",
+   "artist": "김건",
+   "artist_en": "",
+   "artist_ko": "김건",
+   "rank": 34
+  },
+  {
+   "title": "Lemon",
+   "artist": "Kenshi Yonezu",
+   "artist_en": "Kenshi Yonezu",
+   "artist_ko": "요네즈 켄시",
+   "rank": 35
+  },
+  {
+   "title": "IRIS OUT",
+   "artist": "Kenshi Yonezu",
+   "artist_en": "Kenshi Yonezu",
+   "artist_ko": "요네즈 켄시",
+   "rank": 36
+  },
+  {
+   "title": "JANE DOE",
+   "artist": "Kenshi Yonezu",
+   "artist_en": "Kenshi Yonezu",
+   "artist_ko": "요네즈 켄시",
+   "rank": 37
+  },
+  {
+   "title": "KICK BACK",
+   "artist": "Kenshi Yonezu",
+   "artist_en": "Kenshi Yonezu",
+   "artist_ko": "요네즈 켄시",
+   "rank": 38
+  },
+  {
+   "title": "LADY",
+   "artist": "Kenshi Yonezu",
+   "artist_en": "Kenshi Yonezu",
+   "artist_ko": "요네즈 켄시",
+   "rank": 39
+  },
+  {
+   "title": "打上花火 / Uchiagehanabi",
+   "artist": "Kenshi Yonezu",
+   "artist_en": "Kenshi Yonezu",
+   "artist_ko": "요네즈 켄시",
+   "rank": 40
+  },
+  {
+   "title": "Loser",
+   "artist": "Kenshi Yonezu",
+   "artist_en": "Kenshi Yonezu",
+   "artist_ko": "요네즈 켄시",
+   "rank": 41
+  },
+  {
+   "title": "Sayonara, Mata Itsuka!",
+   "artist": "Kenshi Yonezu",
+   "artist_en": "Kenshi Yonezu",
+   "artist_ko": "요네즈 켄시",
+   "rank": 42
+  },
+  {
+   "title": "Kanden",
+   "artist": "Kenshi Yonezu",
+   "artist_en": "Kenshi Yonezu",
+   "artist_ko": "요네즈 켄시",
+   "rank": 43
+  },
+  {
+   "title": "灰色と青 / Haiiroto Ao",
+   "artist": "Kenshi Yonezu",
+   "artist_en": "Kenshi Yonezu",
+   "artist_ko": "요네즈 켄시",
+   "rank": 44
+  },
+  {
+   "title": "BETELGEUSE",
+   "artist": "Yuuri",
+   "artist_en": "Yuuri",
+   "artist_ko": "유우리",
+   "rank": 45
+  },
+  {
+   "title": "Dried Flower",
+   "artist": "Yuuri",
+   "artist_en": "Yuuri",
+   "artist_ko": "유우리",
+   "rank": 46
+  },
+  {
+   "title": "Leo",
+   "artist": "Yuuri",
+   "artist_en": "Yuuri",
+   "artist_ko": "유우리",
+   "rank": 47
+  },
+  {
+   "title": "Curtain Call",
+   "artist": "Yuuri",
+   "artist_en": "Yuuri",
+   "artist_ko": "유우리",
+   "rank": 48
+  },
+  {
+   "title": "Billimillion",
+   "artist": "Yuuri",
+   "artist_en": "Yuuri",
+   "artist_ko": "유우리",
+   "rank": 49
+  },
+  {
+   "title": "Shutter",
+   "artist": "Yuuri",
+   "artist_en": "Yuuri",
+   "artist_ko": "유우리",
+   "rank": 50
+  },
+  {
+   "title": "Natsune",
+   "artist": "Yuuri",
+   "artist_en": "Yuuri",
+   "artist_ko": "유우리",
+   "rank": 51
+  },
+  {
+   "title": "Peter Pan",
+   "artist": "Yuuri",
+   "artist_en": "Yuuri",
+   "artist_ko": "유우리",
+   "rank": 52
+  },
+  {
+   "title": "Christmas Eve",
+   "artist": "Yuuri",
+   "artist_en": "Yuuri",
+   "artist_ko": "유우리",
+   "rank": 53
+  },
+  {
+   "title": "Walking with You",
+   "artist": "Novelbright",
+   "artist_en": "Novelbright",
+   "artist_ko": "노벨브라이트",
+   "rank": 54
+  },
+  {
+   "title": "Aitoka Koitoka",
+   "artist": "Novelbright",
+   "artist_en": "Novelbright",
+   "artist_ko": "노벨브라이트",
+   "rank": 55
+  },
+  {
+   "title": "Evening Primrose",
+   "artist": "Novelbright",
+   "artist_en": "Novelbright",
+   "artist_ko": "노벨브라이트",
+   "rank": 56
+  },
+  {
+   "title": "Sound of Snow",
+   "artist": "Novelbright",
+   "artist_en": "Novelbright",
+   "artist_ko": "노벨브라이트",
+   "rank": 57
+  },
+  {
+   "title": "Yumehanabi",
+   "artist": "Novelbright",
+   "artist_en": "Novelbright",
+   "artist_ko": "노벨브라이트",
+   "rank": 58
+  },
+  {
+   "title": "My Savior",
+   "artist": "Novelbright",
+   "artist_en": "Novelbright",
+   "artist_ko": "노벨브라이트",
+   "rank": 59
+  },
+  {
+   "title": "Transparent",
+   "artist": "Novelbright",
+   "artist_en": "Novelbright",
+   "artist_ko": "노벨브라이트",
+   "rank": 60
+  },
+  {
+   "title": "El Dorado",
+   "artist": "Novelbright",
+   "artist_en": "Novelbright",
+   "artist_ko": "노벨브라이트",
+   "rank": 61
+  },
+  {
+   "title": "seeker",
+   "artist": "Novelbright",
+   "artist_en": "Novelbright",
+   "artist_ko": "노벨브라이트",
+   "rank": 62
+  },
+  {
+   "title": "Ivy",
+   "artist": "Novelbright",
+   "artist_en": "Novelbright",
+   "artist_ko": "노벨브라이트",
+   "rank": 63
+  }
+ ]
+}

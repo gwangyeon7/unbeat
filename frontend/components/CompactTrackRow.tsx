@@ -2,7 +2,9 @@
 
 import Image from "next/image";
 import { useState } from "react";
+import { createPortal } from "react-dom";
 import { useQueueActions } from "@/lib/queueContext";
+import { thumbUrl } from "@/lib/imageSize";
 
 type CompactTrackRowProps = {
   title: string;
@@ -17,6 +19,8 @@ type CompactTrackRowProps = {
   // 있으면 ⋮ 메뉴에 "다음에 재생" / "대기열에 추가"가 생김 — 듣고 싶은 곡을 미리 넣어두는 용도
   onPlayNext?: () => void;
   onAddToQueue?: () => void;
+  // 검색한 곡 한 줄을 크게 보여줄 때: 썸네일/글자를 키우고 ⋮ 왼쪽에 동그란 재생 버튼을 둠
+  large?: boolean;
 };
 
 // 유튜브 뮤직 "빠른 선곡"/"다시 듣기"처럼 작은 정사각 썸네일 + 2줄 텍스트로 된 가로 한 줄.
@@ -35,6 +39,7 @@ export default function CompactTrackRow({
   onViewArtist,
   onPlayNext,
   onAddToQueue,
+  large = false,
 }: CompactTrackRowProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   // props로 직접 안 받았으면 page.tsx가 제공한 대기열 기능을 씀(모든 곡 목록에 같은 메뉴가 생김)
@@ -61,9 +66,20 @@ export default function CompactTrackRow({
       }}
       className="group flex min-w-0 cursor-pointer items-center gap-3 rounded-md p-1 text-left hover:bg-white/5"
     >
-      <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded bg-gradient-to-br from-accent/30 to-white/5">
+      <div
+        className={`relative shrink-0 overflow-hidden rounded bg-gradient-to-br from-accent/30 to-white/5 ${
+          large ? "h-16 w-16" : "h-12 w-12"
+        }`}
+      >
         {image ? (
-          <Image src={image} alt={title} fill sizes="48px" className="object-cover" unoptimized />
+          <Image
+            src={thumbUrl(image, large ? 250 : 120) ?? image}
+            alt={title}
+            fill
+            sizes={large ? "64px" : "48px"}
+            className="object-cover"
+            unoptimized
+          />
         ) : (
           <div className="flex h-full w-full items-center justify-center">
             <svg
@@ -84,9 +100,24 @@ export default function CompactTrackRow({
         )}
       </div>
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium">{title}</p>
-        <p className="truncate text-xs text-white/50">{subtitle}</p>
+        <p className={`truncate font-medium ${large ? "text-base font-bold" : "text-sm"}`}>{title}</p>
+        <p className={`truncate text-white/50 ${large ? "text-sm" : "text-xs"}`}>{subtitle}</p>
       </div>
+      {large && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onPlay();
+          }}
+          aria-label="재생"
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-black active:bg-white/80"
+        >
+          <svg viewBox="0 0 24 24" fill="currentColor" className="h-5 w-5" aria-hidden="true">
+            <path d="M8 5v14l11-7z" />
+          </svg>
+        </button>
+      )}
       <button
         type="button"
         onClick={(e) => {
@@ -103,17 +134,19 @@ export default function CompactTrackRow({
         </svg>
       </button>
 
-      {menuOpen && (
+      {menuOpen && typeof document !== "undefined" && createPortal(
         // 시트 밖/안 어디를 눌러도 이벤트가 뒤의 행(재생)으로 새지 않게 stopPropagation.
+        // (2026-11-19) body로 직접 그림 — 검색 결과처럼 z-40 전체화면 안에서 열면 그 안에 갇혀서 미니 플레이어/하단바가
+        // 시트 아래쪽(맨 아래 항목)을 덮던 문제. 시트는 항상 미니 플레이어·하단바보다 위.
         <div
-          className="animate-slide-up-in fixed inset-0 z-[60] flex items-end justify-center bg-black/60"
+          className="animate-slide-up-in fixed inset-0 z-[70] flex items-end justify-center bg-black/60"
           onClick={(e) => {
             e.stopPropagation();
             setMenuOpen(false);
           }}
         >
           <div
-            className="w-full max-w-xl rounded-t-2xl border-t border-white/10 bg-neutral-900 pb-6"
+            className="w-full max-w-xl rounded-t-2xl border-t border-white/10 bg-neutral-900 pb-[max(1.5rem,env(safe-area-inset-bottom))]"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center gap-3 border-b border-white/10 px-4 py-3">
@@ -184,7 +217,8 @@ export default function CompactTrackRow({
               </button>
             )}
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

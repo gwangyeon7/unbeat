@@ -1,0 +1,266 @@
+{
+ "_meta": {
+  "source": "멜론 아티스트 검색 화면(리쌍, 다이나믹 듀오, 10CM의 곡 목록)을 사람이 직접 보고 옮겨 적은 시드 데이터(자동 수집 아님)",
+  "captured_at": "2026-11-19",
+  "note": "rank는 파일 안 순번일 뿐 차트 순위 아님.",
+  "suggested_aliases_confident": {
+   "리쌍": [
+    "Leessang"
+   ],
+   "다이나믹 듀오": [
+    "Dynamic Duo",
+    "다이나믹듀오"
+   ],
+   "10CM": [
+    "십센치"
+   ]
+  }
+ },
+ "tracks": [
+  {
+   "rank": 1,
+   "title": "Ballerino",
+   "artist": "리쌍",
+   "artist_en": "Leessang",
+   "artist_ko": "리쌍"
+  },
+  {
+   "rank": 2,
+   "title": "헤어지지 못하는 여자, 떠나가지 못하는 남자 (Feat. 정인)",
+   "artist": "리쌍",
+   "artist_en": "Leessang",
+   "artist_ko": "리쌍"
+  },
+  {
+   "rank": 3,
+   "title": "광대 (Feat. B.M.K)",
+   "artist": "리쌍",
+   "artist_en": "Leessang",
+   "artist_ko": "리쌍"
+  },
+  {
+   "rank": 4,
+   "title": "눈물 (Feat. 유진 Of 더 씨야)",
+   "artist": "리쌍",
+   "artist_en": "Leessang",
+   "artist_ko": "리쌍"
+  },
+  {
+   "rank": 5,
+   "title": "TV를 껐네... (Feat. t윤미래, 권정열 Of 10cm)",
+   "artist": "리쌍",
+   "artist_en": "Leessang",
+   "artist_ko": "리쌍"
+  },
+  {
+   "rank": 6,
+   "title": "사랑은 (Song 정인)",
+   "artist": "리쌍",
+   "artist_en": "Leessang",
+   "artist_ko": "리쌍"
+  },
+  {
+   "rank": 7,
+   "title": "회상 (Feat. 백지영)",
+   "artist": "리쌍",
+   "artist_en": "Leessang",
+   "artist_ko": "리쌍"
+  },
+  {
+   "rank": 8,
+   "title": "내가 웃는게 아니야 (Feat. ALI)",
+   "artist": "리쌍",
+   "artist_en": "Leessang",
+   "artist_ko": "리쌍"
+  },
+  {
+   "rank": 9,
+   "title": "나란 놈은 답은 너다 (Feat. 하림)",
+   "artist": "리쌍",
+   "artist_en": "Leessang",
+   "artist_ko": "리쌍"
+  },
+  {
+   "rank": 10,
+   "title": "리쌍부르쓰 (Feat. 정인)",
+   "artist": "리쌍",
+   "artist_en": "Leessang",
+   "artist_ko": "리쌍"
+  },
+  {
+   "rank": 11,
+   "title": "죽일 놈 (Guilty)",
+   "artist": "다이나믹 듀오",
+   "artist_en": "Dynamic Duo",
+   "artist_ko": "다이나믹 듀오"
+  },
+  {
+   "rank": 12,
+   "title": "고백(Go Back) (Feat.정인)",
+   "artist": "다이나믹 듀오",
+   "artist_en": "Dynamic Duo",
+   "artist_ko": "다이나믹 듀오"
+  },
+  {
+   "rank": 13,
+   "title": "AEAO",
+   "artist": "다이나믹 듀오",
+   "artist_en": "Dynamic Duo",
+   "artist_ko": "다이나믹 듀오"
+  },
+  {
+   "rank": 14,
+   "title": "하라는 랩",
+   "artist": "다이나믹 듀오",
+   "artist_en": "Dynamic Duo",
+   "artist_ko": "다이나믹 듀오"
+  },
+  {
+   "rank": 15,
+   "title": "Smoke (Prod. Dynamicduo, Padi)",
+   "artist": "다이나믹 듀오",
+   "artist_en": "Dynamic Duo",
+   "artist_ko": "다이나믹 듀오"
+  },
+  {
+   "rank": 16,
+   "title": "불꽃놀이 (Fireworks)",
+   "artist": "다이나믹 듀오",
+   "artist_en": "Dynamic Duo",
+   "artist_ko": "다이나믹 듀오"
+  },
+  {
+   "rank": 17,
+   "title": "Ring My Bell (Feat. 나얼 Of Brown Eyed Soul)",
+   "artist": "다이나믹 듀오",
+   "artist_en": "Dynamic Duo",
+   "artist_ko": "다이나믹 듀오"
+  },
+  {
+   "rank": 18,
+   "title": "출첵 (Feat. 나얼 For Brown Eyed Soul)",
+   "artist": "다이나믹 듀오",
+   "artist_en": "Dynamic Duo",
+   "artist_ko": "다이나믹 듀오"
+  },
+  {
+   "rank": 19,
+   "title": "BAAAM (Feat. Muzie Of UV)",
+   "artist": "다이나믹 듀오",
+   "artist_en": "Dynamic Duo",
+   "artist_ko": "다이나믹 듀오"
+  },
+  {
+   "rank": 20,
+   "title": "싱숭생숭 (SsSs)",
+   "artist": "다이나믹 듀오",
+   "artist_en": "Dynamic Duo",
+   "artist_ko": "다이나믹 듀오"
+  },
+  {
+   "rank": 21,
+   "title": "너에게 닿기를",
+   "artist": "10CM",
+   "artist_en": "10CM",
+   "artist_ko": "십센치"
+  },
+  {
+   "rank": 22,
+   "title": "스토커",
+   "artist": "10CM",
+   "artist_en": "10CM",
+   "artist_ko": "십센치"
+  },
+  {
+   "rank": 23,
+   "title": "그라데이션",
+   "artist": "10CM",
+   "artist_en": "10CM",
+   "artist_ko": "십센치"
+  },
+  {
+   "rank": 24,
+   "title": "이 밤을 빌려 말해요 (바른연애 길잡이 X 10CM)",
+   "artist": "10CM",
+   "artist_en": "10CM",
+   "artist_ko": "십센치"
+  },
+  {
+   "rank": 25,
+   "title": "폰서트",
+   "artist": "10CM",
+   "artist_en": "10CM",
+   "artist_ko": "십센치"
+  },
+  {
+   "rank": 26,
+   "title": "봄눈",
+   "artist": "10CM",
+   "artist_en": "10CM",
+   "artist_ko": "십센치"
+  },
+  {
+   "rank": 27,
+   "title": "사랑은 은하수 다방에서",
+   "artist": "10CM",
+   "artist_en": "10CM",
+   "artist_ko": "십센치"
+  },
+  {
+   "rank": 28,
+   "title": "서랍",
+   "artist": "10CM",
+   "artist_en": "10CM",
+   "artist_ko": "십센치"
+  },
+  {
+   "rank": 29,
+   "title": "봄이 좋냐??",
+   "artist": "10CM",
+   "artist_en": "10CM",
+   "artist_ko": "십센치"
+  },
+  {
+   "rank": 30,
+   "title": "나의 어깨에 기대어요",
+   "artist": "10CM",
+   "artist_en": "10CM",
+   "artist_ko": "십센치"
+  },
+  {
+   "rank": 31,
+   "title": "Sweet Dream",
+   "artist": "10CM",
+   "artist_en": "10CM",
+   "artist_ko": "십센치"
+  },
+  {
+   "rank": 32,
+   "title": "티라미수 케익",
+   "artist": "10CM",
+   "artist_en": "10CM",
+   "artist_ko": "십센치"
+  },
+  {
+   "rank": 33,
+   "title": "Good Night",
+   "artist": "10CM",
+   "artist_en": "10CM",
+   "artist_ko": "십센치"
+  },
+  {
+   "rank": 34,
+   "title": "방법 (The way to lose you)",
+   "artist": "10CM",
+   "artist_en": "10CM",
+   "artist_ko": "십센치"
+  },
+  {
+   "rank": 35,
+   "title": "새벽 4시",
+   "artist": "10CM",
+   "artist_en": "10CM",
+   "artist_ko": "십센치"
+  }
+ ]
+}

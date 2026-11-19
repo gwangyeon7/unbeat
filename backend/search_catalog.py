@@ -20,6 +20,7 @@ backend/catalog/catalog.json에 적어두고, 검색어가 그 별칭과 정확�
 """
 import json
 import os
+import re
 import unicodedata
 from typing import Callable, Optional
 
@@ -47,6 +48,8 @@ class AliasCatalog:
         # 정규화 제목 -> 곡 id 목록. 영문 제목 단독 검색("leo")에서 같은 제목이 "정확히 1곡"일 때만 쓰임(unique_title_track)
         self.by_title: dict = {}
         self.loaded_from: Optional[str] = None
+        # 아티스트 id -> 비슷한 아티스트 id 목록(가까운 순). related_artists.json의 그룹에서 만듦
+        self.related: dict = {}
 
     def load(self, path: str = CATALOG_PATH) -> "AliasCatalog":
         try:
@@ -105,6 +108,7 @@ class AliasCatalog:
             if key:
                 self.ambiguous.add(key)
         self._load_extra_aliases(os.path.join(os.path.dirname(path), "extra_aliases.json"))
+        self._load_related(os.path.join(os.path.dirname(path), "related_artists.json"))
         self.loaded_from = path
         print(f"[catalog] 별칭표 로드: 아티스트 {len(self.artists)}명, 곡 {len(self.tracks)}곡, 별칭 {len(self.index)}개, "
               f"모호 별칭 {len(self.ambiguous)}개"
@@ -132,6 +136,73 @@ class AliasCatalog:
                     self._add(alias, kind, item_id)
                     if kind == "artists":
                         self.by_name.setdefault(key, item_id)
+
+    def _load_related(self, path: str) -> None:
+        """related_artists.json의 그룹으로 "비슷한 아티스트" 표를 만듦. 같은 그룹에서 목록상 가까운 아티스트가 먼저.
+        파일이 없거나 깨져도 무시(비슷한 곡 채우기만 꺼짐)."""
+        try:
+            with open(path, encoding="utf-8") as f:
+                groups = (json.load(f).get("groups") or {})
+        except Exception:
+            return
+        for members in groups.values():
+            ids = [i for i in members if i in self.artists]
+            for pos, aid in enumerate(ids):
+                near = sorted((abs(p - pos), p, o) for p, o in enumerate(ids) if o != aid)
+                cur = self.related.setdefault(aid, [])
+                for _, _, o in near:
+                    if o not in cur:
+                        cur.append(o)
+
+    @staticmethod
+    def base_key(title: str) -> str:
+        """같은 곡의 다른 표기(Feat./Inst./공백 차이)를 한 곡으로 묶는 키: 괄호 안을 지우고 정규화."""
+        stripped = re.sub(r"[\(\[][^\)\]]*[\)\]]", "", title or "")
+        return normalize(stripped) or normalize(title)
+
+    def diversify(self, tracks: list, lead_id: str, lead_cap: int, limit: int,
+                  track_image: Callable[[str, str], Optional[str]] = lambda a, t: None) -> list:
+        """곡 목록에서 같은 곡의 변형(Feat./Inst. 등)을 하나로 줄이고, 검색한 아티스트의 곡은 lead_cap곡까지만 두고,
+        남는 자리는 비슷한 아티스트들의 곡으로 채움(아티스트마다 한 곡씩 돌아가며). 비슷한 아티스트가 없으면
+        중복만 정리해서 돌려줌."""
+        seen, out, lead_n = set(), [], 0
+        for t in tracks:
+            key = self.base_key(t.get("name", ""))
+            if key in seen:
+                continue
+            found = self.find_artist(t.get("artistOfficialName") or t.get("artist") or "")
+            if found and found["id"] == lead_id:
+                if lead_n >= lead_cap:
+                    continue
+                lead_n += 1
+            seen.add(key)
+            out.append(t)
+            if len(out) >= lead_cap + 2:
+                break
+        rel = self.related.get(lead_id) or []
+        if not rel:
+            return out
+        queues = []
+        for rid in rel:
+            q, local = [], set()
+            for tid in self.tracks_by_artist.get(rid, []):
+                k = self.base_key(self.tracks[tid]["title"])
+                if k not in seen and k not in local:
+                    local.add(k)
+                    q.append(tid)
+            if q:
+                queues.append(q)
+        while queues and len(out) < limit:
+            nxt = []
+            for q in queues:
+                if len(out) >= limit:
+                    break
+                tid = q.pop(0)
+                out.append(self._track_out(tid, track_image))
+                if q:
+                    nxt.append(q)
+            queues = nxt
+        return out
 
     def _add(self, alias, kind: str, item_id: str) -> None:
         key = normalize(alias) if isinstance(alias, str) else ""

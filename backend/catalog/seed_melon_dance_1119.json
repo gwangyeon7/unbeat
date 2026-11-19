@@ -1,0 +1,311 @@
+{
+ "_meta": {
+  "source": "멜론 장르음악(댄스) 최신 차트 1~50위 화면을 사람이 직접 보고 옮겨 적은 시드 데이터(자동 수집 아님)",
+  "captured_at": "2026-11-19",
+  "note": "genre 필드는 참고용(현재 빌드에서 쓰지 않음).",
+  "suggested_aliases_confident": {}
+ },
+ "tracks": [
+  {
+   "rank": 1,
+   "title": "듀파모 멀티버스",
+   "artist": "듀파모",
+   "genre": "댄스"
+  },
+  {
+   "rank": 2,
+   "title": "UP (R3HAB Ver.)",
+   "artist": "ATEEZ(에이티즈)",
+   "genre": "댄스"
+  },
+  {
+   "rank": 3,
+   "title": "딱 1분만",
+   "artist": "WhOLLiN",
+   "genre": "댄스"
+  },
+  {
+   "rank": 4,
+   "title": "UP (Spray Ver.)",
+   "artist": "ATEEZ(에이티즈)",
+   "genre": "댄스"
+  },
+  {
+   "rank": 5,
+   "title": "사쿠란보",
+   "artist": "YENA (최예나)",
+   "genre": "댄스"
+  },
+  {
+   "rank": 6,
+   "title": "King's Way",
+   "artist": "앰퍼샌드원 (AMPERS&ONE)",
+   "genre": "댄스"
+  },
+  {
+   "rank": 7,
+   "title": "유영 (游泳)",
+   "artist": "쿠잉 (COOING)",
+   "genre": "댄스"
+  },
+  {
+   "rank": 8,
+   "title": "Angel Bite",
+   "artist": "투모로우바이투게더",
+   "genre": "댄스"
+  },
+  {
+   "rank": 9,
+   "title": "Dream Come True",
+   "artist": "ST4R.TERS",
+   "genre": "댄스"
+  },
+  {
+   "rank": 10,
+   "title": "UP (Orchestra Ver.)",
+   "artist": "ATEEZ(에이티즈)",
+   "genre": "댄스"
+  },
+  {
+   "rank": 11,
+   "title": "Love S.O.S",
+   "artist": "임영민",
+   "genre": "댄스"
+  },
+  {
+   "rank": 12,
+   "title": "복숭아 맛 사랑",
+   "artist": "파스텔걸스(Pastel Girls)",
+   "genre": "댄스"
+  },
+  {
+   "rank": 13,
+   "title": "세계 최강 귀요미 선언!",
+   "artist": "iME",
+   "genre": "댄스"
+  },
+  {
+   "rank": 14,
+   "title": "Unbelievable",
+   "artist": "H1-KEY (하이키)",
+   "genre": "댄스"
+  },
+  {
+   "rank": 15,
+   "title": "UP",
+   "artist": "ATEEZ(에이티즈)",
+   "genre": "댄스"
+  },
+  {
+   "rank": 16,
+   "title": "I Want You To Know",
+   "artist": "tripleS (트리플에스)",
+   "genre": "댄스"
+  },
+  {
+   "rank": 17,
+   "title": "Lovesick (English Ver.)",
+   "artist": "채령 (ITZY)",
+   "genre": "댄스"
+  },
+  {
+   "rank": 18,
+   "title": "별의 안녕",
+   "artist": "꿈의 악마",
+   "genre": "댄스"
+  },
+  {
+   "rank": 19,
+   "title": "사랑법 (Never Leave) (Feat. 시은유)",
+   "artist": "DJ 검은별",
+   "genre": "댄스"
+  },
+  {
+   "rank": 20,
+   "title": "RABBIT ON THE MOON",
+   "artist": "유백합",
+   "genre": "댄스"
+  },
+  {
+   "rank": 21,
+   "title": "풍선인간",
+   "artist": "oftheblue",
+   "genre": "댄스"
+  },
+  {
+   "rank": 22,
+   "title": "100",
+   "artist": "AIMERS",
+   "genre": "댄스"
+  },
+  {
+   "rank": 23,
+   "title": "Hint(Feat.E.SHA of X:IN)",
+   "artist": "아리(Ari)",
+   "genre": "댄스"
+  },
+  {
+   "rank": 24,
+   "title": "Bananas",
+   "artist": "LNGSHOT",
+   "genre": "댄스"
+  },
+  {
+   "rank": 25,
+   "title": "Siren",
+   "artist": "나빌레라 (NAVILLERA)",
+   "genre": "댄스"
+  },
+  {
+   "rank": 26,
+   "title": "Kick Off The Wall (Midnight Drift Re...",
+   "artist": "KickFlip(킥플립)",
+   "genre": "댄스",
+   "truncated": true
+  },
+  {
+   "rank": 27,
+   "title": "Say It (R2 x AtHeart)",
+   "artist": "AtHeart (앳하트),R2",
+   "genre": "댄스"
+  },
+  {
+   "rank": 28,
+   "title": "Boogie Woogie",
+   "artist": "NCT DREAM",
+   "genre": "댄스"
+  },
+  {
+   "rank": 29,
+   "title": "REBELS",
+   "artist": "이세계아이돌 (ISEGYE IDOL)",
+   "genre": "댄스"
+  },
+  {
+   "rank": 30,
+   "title": "Lovesick",
+   "artist": "채령 (ITZY)",
+   "genre": "댄스"
+  },
+  {
+   "rank": 31,
+   "title": "YELLOW HEART",
+   "artist": "녹준",
+   "genre": "댄스"
+  },
+  {
+   "rank": 32,
+   "title": "자꾸 생각나 (On My Mind)",
+   "artist": "금동현 (KEUM)",
+   "genre": "댄스"
+  },
+  {
+   "rank": 33,
+   "title": "Dancing in the Dark",
+   "artist": "A2O,A2O SOUL",
+   "genre": "댄스"
+  },
+  {
+   "rank": 34,
+   "title": "NAGARI",
+   "artist": "KEYVITUP(키빗업)",
+   "genre": "댄스"
+  },
+  {
+   "rank": 35,
+   "title": "The Future",
+   "artist": "듀스 (DEUX)",
+   "genre": "댄스"
+  },
+  {
+   "rank": 36,
+   "title": "사랑의 바운스",
+   "artist": "소유미",
+   "genre": "댄스"
+  },
+  {
+   "rank": 37,
+   "title": "BLOW UP",
+   "artist": "P1Harmony",
+   "genre": "댄스"
+  },
+  {
+   "rank": 38,
+   "title": "DIENAMITE (Rico Ver.)",
+   "artist": "xikers(싸이커스)",
+   "genre": "댄스"
+  },
+  {
+   "rank": 39,
+   "title": "체포하겠어",
+   "artist": "아일릿(ILLIT)",
+   "genre": "댄스"
+  },
+  {
+   "rank": 40,
+   "title": "팅팅 (TiNG TiNG)",
+   "artist": "언차일드 (UNCHILD)",
+   "genre": "댄스"
+  },
+  {
+   "rank": 41,
+   "title": "BRB",
+   "artist": "HITGS(힛지스)",
+   "genre": "댄스"
+  },
+  {
+   "rank": 42,
+   "title": "True Love",
+   "artist": "BLEXA.",
+   "genre": "댄스"
+  },
+  {
+   "rank": 43,
+   "title": "BUFFERING",
+   "artist": "ADAP (에이댑)",
+   "genre": "댄스"
+  },
+  {
+   "rank": 44,
+   "title": "Replay",
+   "artist": "Baby DONT Cry",
+   "genre": "댄스"
+  },
+  {
+   "rank": 45,
+   "title": "OWL",
+   "artist": "RIIKA,Millionboy (밀리언보이)",
+   "genre": "댄스"
+  },
+  {
+   "rank": 46,
+   "title": "LA NOCHE",
+   "artist": "유권 (블락비)",
+   "genre": "댄스"
+  },
+  {
+   "rank": 47,
+   "title": "Slow Motion",
+   "artist": "윤서빈 (Yoon Seobin)",
+   "genre": "댄스"
+  },
+  {
+   "rank": 48,
+   "title": "With",
+   "artist": "RESCENE (리센느)",
+   "genre": "댄스"
+  },
+  {
+   "rank": 49,
+   "title": "AUTOMATIC",
+   "artist": "디노",
+   "genre": "댄스"
+  },
+  {
+   "rank": 50,
+   "title": "내 이름을 불러줘",
+   "artist": "TWS (투어스)",
+   "genre": "댄스"
+  }
+ ]
+}

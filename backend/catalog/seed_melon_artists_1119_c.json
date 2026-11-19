@@ -1,0 +1,309 @@
+{
+ "_meta": {
+  "source": "멜론 아티스트 검색 화면(루시, 실리카겔, 하성운의 곡 목록)을 사람이 직접 보고 옮겨 적은 시드 데이터(자동 수집 아님)",
+  "captured_at": "2026-11-19",
+  "note": "rank는 파일 안 순번일 뿐 차트 순위 아님. 하성운 'With you'는 지민 참여곡이라 아티스트를 하성운으로 단순화함.",
+  "suggested_aliases_confident": {
+   "루시": [
+    "LUCY"
+   ],
+   "실리카겔": [
+    "Silica Gel",
+    "SILICAGEL"
+   ],
+   "하성운": [
+    "HA SUNG WOON",
+    "Ha Sungwoon"
+   ]
+  }
+ },
+ "tracks": [
+  {
+   "title": "개화 (Flowering)",
+   "artist": "LUCY",
+   "artist_en": "LUCY",
+   "artist_ko": "루시",
+   "rank": 1
+  },
+  {
+   "title": "그녀가 웃잖아",
+   "artist": "LUCY",
+   "artist_en": "LUCY",
+   "artist_ko": "루시",
+   "rank": 2
+  },
+  {
+   "title": "다시!",
+   "artist": "LUCY",
+   "artist_en": "LUCY",
+   "artist_ko": "루시",
+   "rank": 3
+  },
+  {
+   "title": "아니 근데 진짜",
+   "artist": "LUCY",
+   "artist_en": "LUCY",
+   "artist_ko": "루시",
+   "rank": 4
+  },
+  {
+   "title": "히어로",
+   "artist": "LUCY",
+   "artist_en": "LUCY",
+   "artist_ko": "루시",
+   "rank": 5
+  },
+  {
+   "title": "낙화",
+   "artist": "LUCY",
+   "artist_en": "LUCY",
+   "artist_ko": "루시",
+   "rank": 6
+  },
+  {
+   "title": "아지랑이",
+   "artist": "LUCY",
+   "artist_en": "LUCY",
+   "artist_ko": "루시",
+   "rank": 7
+  },
+  {
+   "title": "못 죽는 기사와 비단 요람",
+   "artist": "LUCY",
+   "artist_en": "LUCY",
+   "artist_ko": "루시",
+   "rank": 8
+  },
+  {
+   "title": "Stay",
+   "artist": "LUCY",
+   "artist_en": "LUCY",
+   "artist_ko": "루시",
+   "rank": 9
+  },
+  {
+   "title": "21세기의 어떤 날",
+   "artist": "LUCY",
+   "artist_en": "LUCY",
+   "artist_ko": "루시",
+   "rank": 10
+  },
+  {
+   "title": "날씨가 미쳤어",
+   "artist": "LUCY",
+   "artist_en": "LUCY",
+   "artist_ko": "루시",
+   "rank": 11
+  },
+  {
+   "title": "애정표현 (말하고 싶은 비밀 X LUCY)",
+   "artist": "LUCY",
+   "artist_en": "LUCY",
+   "artist_ko": "루시",
+   "rank": 12
+  },
+  {
+   "title": "같이 가자 (전력고백 X LUCY)",
+   "artist": "LUCY",
+   "artist_en": "LUCY",
+   "artist_ko": "루시",
+   "rank": 13
+  },
+  {
+   "title": "너에게 가고 있어",
+   "artist": "LUCY",
+   "artist_en": "LUCY",
+   "artist_ko": "루시",
+   "rank": 14
+  },
+  {
+   "title": "Feel so good",
+   "artist": "LUCY",
+   "artist_en": "LUCY",
+   "artist_ko": "루시",
+   "rank": 15
+  },
+  {
+   "title": "Grey",
+   "artist": "LUCY",
+   "artist_en": "LUCY",
+   "artist_ko": "루시",
+   "rank": 16
+  },
+  {
+   "title": "NO PAIN",
+   "artist": "실리카겔",
+   "artist_en": "Silica Gel",
+   "artist_ko": "실리카겔",
+   "rank": 17
+  },
+  {
+   "title": "Tik Tak Tok (feat. So!YoON!)",
+   "artist": "실리카겔",
+   "artist_en": "Silica Gel",
+   "artist_ko": "실리카겔",
+   "rank": 18
+  },
+  {
+   "title": "Desert Eagle",
+   "artist": "실리카겔",
+   "artist_en": "Silica Gel",
+   "artist_ko": "실리카겔",
+   "rank": 19
+  },
+  {
+   "title": "BIG VOID (Single ver.)",
+   "artist": "실리카겔",
+   "artist_en": "Silica Gel",
+   "artist_ko": "실리카겔",
+   "rank": 20
+  },
+  {
+   "title": "Ryudejakeiru",
+   "artist": "실리카겔",
+   "artist_en": "Silica Gel",
+   "artist_ko": "실리카겔",
+   "rank": 21
+  },
+  {
+   "title": "Kyo181",
+   "artist": "실리카겔",
+   "artist_en": "Silica Gel",
+   "artist_ko": "실리카겔",
+   "rank": 22
+  },
+  {
+   "title": "Realize",
+   "artist": "실리카겔",
+   "artist_en": "Silica Gel",
+   "artist_ko": "실리카겔",
+   "rank": 23
+  },
+  {
+   "title": "T",
+   "artist": "실리카겔",
+   "artist_en": "Silica Gel",
+   "artist_ko": "실리카겔",
+   "rank": 24
+  },
+  {
+   "title": "Manphasickzuck",
+   "artist": "실리카겔",
+   "artist_en": "Silica Gel",
+   "artist_ko": "실리카겔",
+   "rank": 25
+  },
+  {
+   "title": "NEO SOUL",
+   "artist": "실리카겔",
+   "artist_en": "Silica Gel",
+   "artist_ko": "실리카겔",
+   "rank": 26
+  },
+  {
+   "title": "9",
+   "artist": "실리카겔",
+   "artist_en": "Silica Gel",
+   "artist_ko": "실리카겔",
+   "rank": 27
+  },
+  {
+   "title": "기억",
+   "artist": "실리카겔",
+   "artist_en": "Silica Gel",
+   "artist_ko": "실리카겔",
+   "rank": 28
+  },
+  {
+   "title": "모두 그래",
+   "artist": "실리카겔",
+   "artist_en": "Silica Gel",
+   "artist_ko": "실리카겔",
+   "rank": 29
+  },
+  {
+   "title": "연인",
+   "artist": "실리카겔",
+   "artist_en": "Silica Gel",
+   "artist_ko": "실리카겔",
+   "rank": 30
+  },
+  {
+   "title": "비경",
+   "artist": "실리카겔",
+   "artist_en": "Silica Gel",
+   "artist_ko": "실리카겔",
+   "rank": 31
+  },
+  {
+   "title": "눈동자",
+   "artist": "실리카겔",
+   "artist_en": "Silica Gel",
+   "artist_ko": "실리카겔",
+   "rank": 32
+  },
+  {
+   "title": "Hrm",
+   "artist": "실리카겔",
+   "artist_en": "Silica Gel",
+   "artist_ko": "실리카겔",
+   "rank": 33
+  },
+  {
+   "title": "Sister",
+   "artist": "실리카겔",
+   "artist_en": "Silica Gel",
+   "artist_ko": "실리카겔",
+   "rank": 34
+  },
+  {
+   "title": "With you",
+   "artist": "하성운",
+   "artist_en": "HA SUNG WOON",
+   "artist_ko": "하성운",
+   "rank": 35
+  },
+  {
+   "title": "선물",
+   "artist": "하성운",
+   "artist_en": "HA SUNG WOON",
+   "artist_ko": "하성운",
+   "rank": 36
+  },
+  {
+   "title": "Finale.",
+   "artist": "하성운",
+   "artist_en": "HA SUNG WOON",
+   "artist_ko": "하성운",
+   "rank": 37
+  },
+  {
+   "title": "자니",
+   "artist": "하성운",
+   "artist_en": "HA SUNG WOON",
+   "artist_ko": "하성운",
+   "rank": 38
+  },
+  {
+   "title": "티격태격",
+   "artist": "하성운",
+   "artist_en": "HA SUNG WOON",
+   "artist_ko": "하성운",
+   "rank": 39
+  },
+  {
+   "title": "Fall in You",
+   "artist": "하성운",
+   "artist_en": "HA SUNG WOON",
+   "artist_ko": "하성운",
+   "rank": 40
+  },
+  {
+   "title": "잊지마요 (Feat. 박지훈)",
+   "artist": "하성운",
+   "artist_en": "HA SUNG WOON",
+   "artist_ko": "하성운",
+   "rank": 41
+  }
+ ]
+}

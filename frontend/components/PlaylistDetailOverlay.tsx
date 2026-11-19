@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { createPortal } from "react-dom";
 import type { Playlist, PlaylistTrack } from "@/lib/playlistApi";
+import { thumbUrl } from "@/lib/imageSize";
 
 type PlaylistDetailOverlayProps = {
   playlist: Playlist;
@@ -139,6 +140,20 @@ export default function PlaylistDetailOverlay({
             </div>
           ) : (
             <div className="flex flex-col gap-1">
+              {onAddSongs && (
+                <button
+                  type="button"
+                  onClick={onAddSongs}
+                  className="flex items-center gap-3 rounded-md px-2 py-2 text-left hover:bg-white/5"
+                >
+                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded bg-white/10 text-white/70">
+                    <Icon className="h-5 w-5">
+                      <path d="M12 5v14M5 12h14" />
+                    </Icon>
+                  </span>
+                  <span className="text-sm text-white/80">노래 추가</span>
+                </button>
+              )}
               {list.map((t, idx) => {
                 return (
                   <div
@@ -156,8 +171,9 @@ export default function PlaylistDetailOverlay({
                         {t.imageUrl ? (
                           // eslint-disable-next-line @next/next/no-img-element
                           <img
-                            src={t.imageUrl}
+                            src={thumbUrl(t.imageUrl, 120) ?? t.imageUrl}
                             alt={t.trackName}
+                            loading="lazy"
                             draggable={false}
                             className="h-full w-full object-cover"
                           />
@@ -194,7 +210,7 @@ export default function PlaylistDetailOverlay({
       {/* 곡 ⋮ 메뉴(바텀시트) — z-50이라 이 화면(z-40) 위에 뜸 */}
       {menuTrack && (
         <div
-          className="fixed inset-0 z-50 flex items-end justify-center bg-black/60"
+          className="fixed inset-0 z-[60] flex items-end justify-center bg-black/60"
           onClick={() => setMenuTrack(null)}
         >
           <div

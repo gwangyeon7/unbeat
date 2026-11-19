@@ -1,0 +1,306 @@
+{
+ "_meta": {
+  "source": "멜론 장르음악(랩/힙합) 최신 차트 1~50위 화면을 사람이 직접 보고 옮겨 적은 시드 데이터(자동 수집 아님)",
+  "captured_at": "2026-11-19",
+  "note": "genre 필드는 참고용. 1~50위(44위는 28위와 같은 곡이라 생략).",
+  "suggested_aliases_confident": {}
+ },
+ "tracks": [
+  {
+   "rank": 1,
+   "title": "STAY S2 (Feat. SANTA19)",
+   "artist": "서울달 (SEOULDAL)",
+   "genre": "랩/힙합"
+  },
+  {
+   "rank": 2,
+   "title": "eAzy",
+   "artist": "27RING",
+   "genre": "랩/힙합"
+  },
+  {
+   "rank": 3,
+   "title": "그 영화속에서, 그 로맨스에서",
+   "artist": "태비 (Taeb2)",
+   "genre": "랩/힙합"
+  },
+  {
+   "rank": 4,
+   "title": "먼치킨 (Feat. 그냥노창, Jvcki Wai)",
+   "artist": "래원 (Layone)",
+   "genre": "랩/힙합"
+  },
+  {
+   "rank": 5,
+   "title": "드라마",
+   "artist": "김모이 (Kim Moi)",
+   "genre": "랩/힙합"
+  },
+  {
+   "rank": 6,
+   "title": "EDENMATE+",
+   "artist": "양홍원",
+   "genre": "랩/힙합"
+  },
+  {
+   "rank": 7,
+   "title": "하라는 랩",
+   "artist": "다이나믹 듀오",
+   "genre": "랩/힙합"
+  },
+  {
+   "rank": 8,
+   "title": "HAH!",
+   "artist": "Keyveatz",
+   "genre": "랩/힙합"
+  },
+  {
+   "rank": 9,
+   "title": "ANEMOIA",
+   "artist": "JJK",
+   "genre": "랩/힙합"
+  },
+  {
+   "rank": 10,
+   "title": "문담피 (Feat. 허성현)",
+   "artist": "키츠요지 (kitsyojii)",
+   "genre": "랩/힙합"
+  },
+  {
+   "rank": 11,
+   "title": "선 넘네. (Feat. Skinny Brown)",
+   "artist": "B JYUN.",
+   "genre": "랩/힙합"
+  },
+  {
+   "rank": 12,
+   "title": "99",
+   "artist": "행주,TAEIL",
+   "genre": "랩/힙합"
+  },
+  {
+   "rank": 13,
+   "title": "Get Shaky",
+   "artist": "Kevin Park,야삐(YABBI),Kajin",
+   "genre": "랩/힙합"
+  },
+  {
+   "rank": 14,
+   "title": "MIXWELL",
+   "artist": "스윙스,hyeminsong,율음,shinjihang,...",
+   "genre": "랩/힙합"
+  },
+  {
+   "rank": 15,
+   "title": "영원히 모하비 (Feat. D.Ark (디아크))",
+   "artist": "용용 (YongYong)",
+   "genre": "랩/힙합"
+  },
+  {
+   "rank": 16,
+   "title": "내가 있을 시간에 머물러줘 (Prod. Tmlm)",
+   "artist": "HWAN",
+   "genre": "랩/힙합"
+  },
+  {
+   "rank": 17,
+   "title": "zacuzzi",
+   "artist": "Royal 44",
+   "genre": "랩/힙합"
+  },
+  {
+   "rank": 18,
+   "title": "moneymoney",
+   "artist": "키드킹 (Kidd King)",
+   "genre": "랩/힙합"
+  },
+  {
+   "rank": 19,
+   "title": "Run the Town (Prod. Dosi Bwoy)",
+   "artist": "브라운티거 (Brown Tigger),CIELO,노디...",
+   "genre": "랩/힙합"
+  },
+  {
+   "rank": 20,
+   "title": "Platinum",
+   "artist": "김하온 (HAON)",
+   "genre": "랩/힙합"
+  },
+  {
+   "rank": 21,
+   "title": "산산산",
+   "artist": "Keepro",
+   "genre": "랩/힙합"
+  },
+  {
+   "rank": 22,
+   "title": "피노키오 (Feat. Raf Sandou)",
+   "artist": "우원재",
+   "genre": "랩/힙합"
+  },
+  {
+   "rank": 23,
+   "title": "I Be On That",
+   "artist": "Nudeboi Seo (누드보이 서)",
+   "genre": "랩/힙합"
+  },
+  {
+   "rank": 24,
+   "title": "I'm Your Fan",
+   "artist": "신얼",
+   "genre": "랩/힙합"
+  },
+  {
+   "rank": 25,
+   "title": "놓아줄게",
+   "artist": "육민재",
+   "genre": "랩/힙합"
+  },
+  {
+   "rank": 26,
+   "title": "VICTORY (Prod.Zzindda)",
+   "artist": "정상수",
+   "genre": "랩/힙합"
+  },
+  {
+   "rank": 27,
+   "title": "11월 11일 (Feat. Koonta)",
+   "artist": "황지상 (HWANG JI SANG)",
+   "genre": "랩/힙합"
+  },
+  {
+   "rank": 28,
+   "title": "RUN (with 다이나믹 듀오)",
+   "artist": "EMP (ZEROBASEONE)",
+   "genre": "랩/힙합"
+  },
+  {
+   "rank": 29,
+   "title": "Break/1",
+   "artist": "1ANDON (원엔온),bojvck",
+   "genre": "랩/힙합"
+  },
+  {
+   "rank": 30,
+   "title": "살짝 Freestyle (feat. Leellamarz)",
+   "artist": "저스디스 (JUSTHIS)",
+   "genre": "랩/힙합"
+  },
+  {
+   "rank": 31,
+   "title": "For You (Home)",
+   "artist": "빈첸,Yescoba",
+   "genre": "랩/힙합"
+  },
+  {
+   "rank": 32,
+   "title": "JM Interlude",
+   "artist": "스윙스,hyeminsong,율음,shinjihang,...",
+   "genre": "랩/힙합"
+  },
+  {
+   "rank": 33,
+   "title": "MOONWALK",
+   "artist": "Panda Gomm,양홍원",
+   "genre": "랩/힙합"
+  },
+  {
+   "rank": 34,
+   "title": "서울의 달 (feat. Odd95)",
+   "artist": "5sckar",
+   "genre": "랩/힙합"
+  },
+  {
+   "rank": 35,
+   "title": "I Was In The",
+   "artist": "슬릭 (SLEEQ)",
+   "genre": "랩/힙합"
+  },
+  {
+   "rank": 36,
+   "title": "CINEMA (Feat. Bryan Chase, sokod...",
+   "artist": "WE DEM BOYZ",
+   "genre": "랩/힙합",
+   "truncated": true
+  },
+  {
+   "rank": 37,
+   "title": "romantic charge",
+   "artist": "OVN (오븐)",
+   "genre": "랩/힙합"
+  },
+  {
+   "rank": 38,
+   "title": "돌고 돌아 (feat. 미담)",
+   "artist": "BLUE WHAILL",
+   "genre": "랩/힙합"
+  },
+  {
+   "rank": 39,
+   "title": "DND (Feat. ASH ISLAND, Skinny Br...",
+   "artist": "WISS",
+   "genre": "랩/힙합",
+   "truncated": true
+  },
+  {
+   "rank": 40,
+   "title": "어떻게 널 맞춰야 해",
+   "artist": "림도한",
+   "genre": "랩/힙합"
+  },
+  {
+   "rank": 41,
+   "title": "Vendetta remix",
+   "artist": "Godfather Black,빡부장(ALPHAcino)",
+   "genre": "랩/힙합"
+  },
+  {
+   "rank": 42,
+   "title": "LIT IT",
+   "artist": "HEART OF WOMAN (하트오브우먼)",
+   "genre": "랩/힙합"
+  },
+  {
+   "rank": 43,
+   "title": "OKA8 (feat. OKASHII, LEY, 노윤하)",
+   "artist": "MATTHEW,Wuuslime (우슬라임)",
+   "genre": "랩/힙합"
+  },
+  {
+   "rank": 45,
+   "title": "triple",
+   "artist": "기리보이,C JAMM,블랙넛 (Black Nut)",
+   "genre": "랩/힙합"
+  },
+  {
+   "rank": 46,
+   "title": "Elephant (feat. WILLA, Munch King)",
+   "artist": "30대 공기옹",
+   "genre": "랩/힙합"
+  },
+  {
+   "rank": 47,
+   "title": "인스턴트랩",
+   "artist": "Ambid Jack,Kangwon",
+   "genre": "랩/힙합"
+  },
+  {
+   "rank": 48,
+   "title": "긴 밤 (for you)",
+   "artist": "줍에이 (Joob A)",
+   "genre": "랩/힙합"
+  },
+  {
+   "rank": 49,
+   "title": "SUPERSTAR K (feat. BewhY)",
+   "artist": "0siggy",
+   "genre": "랩/힙합"
+  },
+  {
+   "rank": 50,
+   "title": "바빴어 (feat. B-Free)",
+   "artist": "야수 (YASU)",
+   "genre": "랩/힙합"
+  }
+ ]
+}

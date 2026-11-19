@@ -1102,20 +1102,30 @@ export default function Home() {
       ];
     }
 
-    // 곡 검색: 아래 두 섹션은 이미 위에 나온 곡을 빼고 보여줌(같은 곡이 반복돼 보이지 않게)
-    const shownKeys = new Set(searchTracks.map((t) => `${norm(t.artist)}|${norm(t.name)}`));
-    const withoutShown = (list: Track[]) =>
-      list.filter((t) => !shownKeys.has(`${norm(t.artist)}|${norm(t.name)}`));
+    // 곡 검색(유튜브 뮤직 방식): 맨 위에 검색한 곡 하나를 크게, 그 아래에 비슷한 곡을 하나의 목록으로.
+    // 예전엔 "검색된 곡" / "OO의 다른 곡" / "비슷한 곡"이 따로 나와 같은 곡이 반복돼 보였음 → 한 목록으로 합치고,
+    // Feat./Inst. 등 괄호만 다른 같은 곡은 한 곡으로 묶음. 순서: 서버가 채워준 비슷한 아티스트 곡 → 비슷한 곡 → 그 가수의 다른 곡.
+    const baseKey = (t: Track) =>
+      norm(t.name.replace(/[\(\[][^\)\]]*[\)\]]/g, "")).replace(/[^\p{L}\p{N}]/gu, "") ||
+      norm(t.name).replace(/[^\p{L}\p{N}]/gu, "");
+    const top = searchTracks[0];
+    const seenBase = new Set<string>(top ? [baseKey(top)] : []);
+    const rest: Track[] = [];
+    for (const t of [
+      ...searchTracks.slice(1),
+      ...similarSearchTracks,
+      ...(searchContextArtist ? searchArtistTracks : []),
+    ]) {
+      const key = baseKey(t);
+      if (seenBase.has(key)) continue;
+      seenBase.add(key);
+      rest.push(t);
+    }
     return [
-      { key: "search", title: "검색된 곡", note: searchNote, tracks: searchTracks },
+      { key: "top", title: "검색 결과", note: searchNote, tracks: top ? [top] : [], variant: "top" as const },
+      { key: "similar", title: "비슷한 곡", tracks: rest, initialVisible: 15 },
       { key: "tag", title: "관련 곡 (장르/연대)", tracks: tagSearchTracks },
       { key: "selected", title: `"${selectedArtist}"의 인기곡`, tracks: tracks },
-      {
-        key: "artist-more",
-        title: `"${searchContextArtist}"의 다른 곡`,
-        tracks: searchContextArtist ? withoutShown(searchArtistTracks) : [],
-      },
-      { key: "similar", title: "비슷한 곡", tracks: withoutShown(similarSearchTracks) },
     ];
   }
 
@@ -2189,6 +2199,14 @@ export default function Home() {
                       </div>
                     </button>
                     {renderRowMenu(`pl-${playlist.id}`, [
+                      {
+                        label: "노래 추가",
+                        onClick: () => {
+                          // 보관함을 닫고 검색을 바로 열어줌 — 찾은 곡의 "+"로 담음
+                          setIsLibraryOpen(false);
+                          searchBarRef.current?.openMobileSearch();
+                        },
+                      },
                       { label: "이름 수정", onClick: () => startRenamePlaylist(playlist) },
                       { label: "삭제", danger: true, onClick: () => handleDeletePlaylist(playlist.id) },
                     ])}

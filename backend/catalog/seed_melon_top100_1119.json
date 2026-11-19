@@ -1,0 +1,464 @@
+{
+ "_meta": {
+  "source": "멜론 TOP100 화면을 사람이 직접 보고 옮겨 적은 시드 데이터(자동 수집 아님)",
+  "captured_at": "2026-11-19 16:00",
+  "note": "69~78위는 캡처에 없어 빠짐. 길어서 잘린 제목은 '...'로 표시하고 truncated=true.",
+  "suggested_aliases_confident": {}
+ },
+ "tracks": [
+  {
+   "rank": 1,
+   "title": "With",
+   "artist": "RESCENE (리센느)"
+  },
+  {
+   "rank": 2,
+   "title": "NEON",
+   "artist": "A2O, A2O LITE"
+  },
+  {
+   "rank": 3,
+   "title": "체포하겠어",
+   "artist": "아일릿(ILLIT)"
+  },
+  {
+   "rank": 4,
+   "title": "백화요란 (Inside Out)",
+   "artist": "RESCENE (리센느)"
+  },
+  {
+   "rank": 5,
+   "title": "퇴사할게여 (Narr. 기안84)",
+   "artist": "소연 (SOYEON)"
+  },
+  {
+   "rank": 6,
+   "title": "Looks Can Kill",
+   "artist": "IVE (아이브)"
+  },
+  {
+   "rank": 7,
+   "title": "Finest Thing",
+   "artist": "RESCENE (리센느)"
+  },
+  {
+   "rank": 8,
+   "title": "삐그덕 (Feat. 아이유)",
+   "artist": "Crush"
+  },
+  {
+   "rank": 9,
+   "title": "MEME",
+   "artist": "RESCENE (리센느)"
+  },
+  {
+   "rank": 10,
+   "title": "Dragon",
+   "artist": "RESCENE (리센느)"
+  },
+  {
+   "rank": 11,
+   "title": "BiiiG",
+   "artist": "BIGBANG (빅뱅)"
+  },
+  {
+   "rank": 12,
+   "title": "Angel Bite",
+   "artist": "투모로우바이투게더"
+  },
+  {
+   "rank": 13,
+   "title": "REBELS",
+   "artist": "이세계아이돌 (ISEGYE IDOL)"
+  },
+  {
+   "rank": 14,
+   "title": "또또",
+   "artist": "임영웅"
+  },
+  {
+   "rank": 15,
+   "title": "Star Trace",
+   "artist": "PLAVE"
+  },
+  {
+   "rank": 16,
+   "title": "Boogie Woogie",
+   "artist": "NCT DREAM"
+  },
+  {
+   "rank": 17,
+   "title": "노스탈지아",
+   "artist": "BIG Naughty (서동현)"
+  },
+  {
+   "rank": 18,
+   "title": "Insomnia",
+   "artist": "RIIZE"
+  },
+  {
+   "rank": 19,
+   "title": "CRASH",
+   "artist": "ALLDAY PROJECT"
+  },
+  {
+   "rank": 20,
+   "title": "Dear my crazy soulmate",
+   "artist": "아이유"
+  },
+  {
+   "rank": 21,
+   "title": "부디 행복해질 것",
+   "artist": "임영웅"
+  },
+  {
+   "rank": 22,
+   "title": "Skibidi",
+   "artist": "소녀시대-효리수 (Girls' Generatio...)"
+  },
+  {
+   "rank": 23,
+   "title": "푸른 하늘에 단비",
+   "artist": "PLAVE"
+  },
+  {
+   "rank": 24,
+   "title": "이 별로부터",
+   "artist": "아이유"
+  },
+  {
+   "rank": 25,
+   "title": "Guitarist",
+   "artist": "도경수(D.O.)"
+  },
+  {
+   "rank": 26,
+   "title": "연애세포 (恋愛細胞)",
+   "artist": "이세계아이돌 (ISEGYE IDOL)"
+  },
+  {
+   "rank": 27,
+   "title": "ANTI-HERO",
+   "artist": "이세계아이돌 (ISEGYE IDOL)"
+  },
+  {
+   "rank": 28,
+   "title": "BACK 2 THE FUTURE",
+   "artist": "이세계아이돌 (ISEGYE IDOL)"
+  },
+  {
+   "rank": 29,
+   "title": "Dream Residue",
+   "artist": "이세계아이돌 (ISEGYE IDOL)"
+  },
+  {
+   "rank": 30,
+   "title": "지금까지와는 다른 무언가가 필요...",
+   "artist": "투모로우바이투게더",
+   "truncated": true
+  },
+  {
+   "rank": 31,
+   "title": "꾼",
+   "artist": "PLAVE"
+  },
+  {
+   "rank": 32,
+   "title": "Baila",
+   "artist": "임영웅"
+  },
+  {
+   "rank": 33,
+   "title": "Higher Love",
+   "artist": "투모로우바이투게더"
+  },
+  {
+   "rank": 34,
+   "title": "모이세",
+   "artist": "임영웅"
+  },
+  {
+   "rank": 35,
+   "title": "Sweetest Escape",
+   "artist": "투모로우바이투게더"
+  },
+  {
+   "rank": 36,
+   "title": "고양이가 세상을 구한다!",
+   "artist": "고세구"
+  },
+  {
+   "rank": 37,
+   "title": "Touch the Sky",
+   "artist": "투모로우바이투게더"
+  },
+  {
+   "rank": 38,
+   "title": "The Answer Is Yes",
+   "artist": "PLAVE"
+  },
+  {
+   "rank": 39,
+   "title": "살아온 우리에게",
+   "artist": "임영웅"
+  },
+  {
+   "rank": 40,
+   "title": "Hate It or Love It",
+   "artist": "투모로우바이투게더"
+  },
+  {
+   "rank": 41,
+   "title": "Rewind",
+   "artist": "PLAVE"
+  },
+  {
+   "rank": 42,
+   "title": "모래 알갱이 RE",
+   "artist": "임영웅"
+  },
+  {
+   "rank": 43,
+   "title": "미워요 RE",
+   "artist": "임영웅"
+  },
+  {
+   "rank": 44,
+   "title": "A Bientot RE",
+   "artist": "임영웅"
+  },
+  {
+   "rank": 45,
+   "title": "사랑은 늘 도망가 RE",
+   "artist": "임영웅"
+  },
+  {
+   "rank": 46,
+   "title": "New York",
+   "artist": "임영웅"
+  },
+  {
+   "rank": 47,
+   "title": "Drip",
+   "artist": "ATEEZ(에이티즈)"
+  },
+  {
+   "rank": 48,
+   "title": "내 이름을 불러줘",
+   "artist": "TWS (투어스)"
+  },
+  {
+   "rank": 49,
+   "title": "The Sun",
+   "artist": "NCT DREAM"
+  },
+  {
+   "rank": 50,
+   "title": "I SPY",
+   "artist": "NCT WISH"
+  },
+  {
+   "rank": 51,
+   "title": "Dream After Dream",
+   "artist": "NCT DREAM"
+  },
+  {
+   "rank": 52,
+   "title": "Smile for U",
+   "artist": "NCT DREAM"
+  },
+  {
+   "rank": 53,
+   "title": "사랑해볼래, 나",
+   "artist": "미나미 of RESCENE"
+  },
+  {
+   "rank": 54,
+   "title": "Tumbler",
+   "artist": "NCT DREAM"
+  },
+  {
+   "rank": 55,
+   "title": "Skydive",
+   "artist": "NCT DREAM"
+  },
+  {
+   "rank": 56,
+   "title": "Pressure",
+   "artist": "NCT DREAM"
+  },
+  {
+   "rank": 57,
+   "title": "Cool for Me",
+   "artist": "NCT DREAM"
+  },
+  {
+   "rank": 58,
+   "title": "미장센",
+   "artist": "에픽하이 (EPIK HIGH),다비치"
+  },
+  {
+   "rank": 59,
+   "title": "This Is Your World",
+   "artist": "NCT DREAM"
+  },
+  {
+   "rank": 60,
+   "title": "사쿠란보",
+   "artist": "YENA (최예나)"
+  },
+  {
+   "rank": 61,
+   "title": "Darling",
+   "artist": "도경수(D.O.)"
+  },
+  {
+   "rank": 62,
+   "title": "Watch U Watch Me",
+   "artist": "NCT DREAM"
+  },
+  {
+   "rank": 63,
+   "title": "긴 소원 (Birthday Wish)",
+   "artist": "NMIXX"
+  },
+  {
+   "rank": 64,
+   "title": "UP",
+   "artist": "ATEEZ(에이티즈)"
+  },
+  {
+   "rank": 65,
+   "title": "Star Trace (Future House Rem...",
+   "artist": "PLAVE",
+   "truncated": true
+  },
+  {
+   "rank": 66,
+   "title": "Star Trace (Afro Remix by IML...",
+   "artist": "PLAVE",
+   "truncated": true
+  },
+  {
+   "rank": 67,
+   "title": "크게 울어라",
+   "artist": "로이킴"
+  },
+  {
+   "rank": 68,
+   "title": "사계, 그리고 너",
+   "artist": "이창섭"
+  },
+  {
+   "rank": 79,
+   "title": "잔불 (Still)",
+   "artist": "엔플라잉 (N.Flying)"
+  },
+  {
+   "rank": 80,
+   "title": "Waste My Time",
+   "artist": "Marc Atlas"
+  },
+  {
+   "rank": 81,
+   "title": "We Own This Street",
+   "artist": "NCT WISH"
+  },
+  {
+   "rank": 82,
+   "title": "Good Bye Sadness, Hello Ha...",
+   "artist": "박진서",
+   "truncated": true
+  },
+  {
+   "rank": 83,
+   "title": "밤무대",
+   "artist": "이무진"
+  },
+  {
+   "rank": 84,
+   "title": "김성호의 회상",
+   "artist": "임바다"
+  },
+  {
+   "rank": 85,
+   "title": "우리만의 이야기",
+   "artist": "WOODZ,이승철"
+  },
+  {
+   "rank": 86,
+   "title": "FALLEN ANGEL",
+   "artist": "제니 (JENNIE)"
+  },
+  {
+   "rank": 87,
+   "title": "ICONIC HEART (Korean Ver.)",
+   "artist": "Hearts2Hearts (하츠투하츠)"
+  },
+  {
+   "rank": 88,
+   "title": "Super Major",
+   "artist": "NCT WISH"
+  },
+  {
+   "rank": 89,
+   "title": "UPGRADE",
+   "artist": "NCT WISH"
+  },
+  {
+   "rank": 90,
+   "title": "바람의 노래",
+   "artist": "박진서"
+  },
+  {
+   "rank": 91,
+   "title": "널",
+   "artist": "이소라"
+  },
+  {
+   "rank": 92,
+   "title": "푸른 산호초",
+   "artist": "이수현"
+  },
+  {
+   "rank": 93,
+   "title": "Dancing in the Dark",
+   "artist": "A2O,A2O SOUL"
+  },
+  {
+   "rank": 94,
+   "title": "하늘땅 별땅",
+   "artist": "UNIS(유니스)"
+  },
+  {
+   "rank": 95,
+   "title": "그대와 영원히",
+   "artist": "임바다"
+  },
+  {
+   "rank": 96,
+   "title": "그래도 사랑합니다",
+   "artist": "순순희(지환)"
+  },
+  {
+   "rank": 97,
+   "title": "Bloody Paradise",
+   "artist": "엔하이픈 (ENHYPEN)"
+  },
+  {
+   "rank": 98,
+   "title": "나를 외치다",
+   "artist": "박예승"
+  },
+  {
+   "rank": 99,
+   "title": "미야",
+   "artist": "장한별"
+  },
+  {
+   "rank": 100,
+   "title": "사랑하지 않아서 그랬어",
+   "artist": "신예영"
+  }
+ ]
+}

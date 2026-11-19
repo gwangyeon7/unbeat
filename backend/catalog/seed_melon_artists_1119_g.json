@@ -1,0 +1,44 @@
+{
+ "_meta": {
+  "source": "멜론 검색 화면 직접 옮겨 적음",
+  "captured_at": "2026-11-19",
+  "note": "부산 바캉스·당 디기 방은 스컬&하하 곡이라 하하로 단순화. 놀면 뭐하니 등 다인 프로젝트곡은 제외."
+ },
+ "tracks": [
+  {
+   "title": "국밥 (feat. 권인하)",
+   "artist": "하하",
+   "artist_en": "HAHA",
+   "artist_ko": "하하",
+   "rank": 1
+  },
+  {
+   "title": "키 작은 꼬마 이야기",
+   "artist": "하하",
+   "artist_en": "HAHA",
+   "artist_ko": "하하",
+   "rank": 2
+  },
+  {
+   "title": "너는 내 운명",
+   "artist": "하하",
+   "artist_en": "HAHA",
+   "artist_ko": "하하",
+   "rank": 3
+  },
+  {
+   "title": "부산 바캉스",
+   "artist": "하하",
+   "artist_en": "HAHA",
+   "artist_ko": "하하",
+   "rank": 4
+  },
+  {
+   "title": "당 디기 방 (Feat. Beenie Man)",
+   "artist": "하하",
+   "artist_en": "HAHA",
+   "artist_ko": "하하",
+   "rank": 5
+  }
+ ]
+}

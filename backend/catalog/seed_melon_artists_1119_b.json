@@ -1,0 +1,159 @@
+{
+ "_meta": {
+  "source": "멜론 아티스트 검색 화면(MC몽, 에픽하이의 곡 목록)을 사람이 직접 보고 옮겨 적은 시드 데이터(자동 수집 아님)",
+  "captured_at": "2026-11-19",
+  "note": "rank는 파일 안 순번일 뿐 차트 순위 아님.",
+  "suggested_aliases_confident": {
+   "MC몽": [
+    "엠씨몽",
+    "MC Mong"
+   ],
+   "에픽하이": [
+    "Epik High",
+    "EPIK HIGH"
+   ]
+  }
+ },
+ "tracks": [
+  {
+   "rank": 1,
+   "title": "죽을 만큼 아파서 (Feat. 멜로우)",
+   "artist": "MC몽",
+   "artist_en": "MC Mong",
+   "artist_ko": "MC몽"
+  },
+  {
+   "rank": 2,
+   "title": "너에게 쓰는 편지 (Feat. 린)",
+   "artist": "MC몽",
+   "artist_en": "MC Mong",
+   "artist_ko": "MC몽"
+  },
+  {
+   "rank": 3,
+   "title": "내 생애 가장 행복한 시간 (Feat. 허각)",
+   "artist": "MC몽",
+   "artist_en": "MC Mong",
+   "artist_ko": "MC몽"
+  },
+  {
+   "rank": 4,
+   "title": "Bubble Love",
+   "artist": "MC몽",
+   "artist_en": "MC Mong",
+   "artist_ko": "MC몽"
+  },
+  {
+   "rank": 5,
+   "title": "I Love U Oh Thank U (Feat. 김태우 Of God)",
+   "artist": "MC몽",
+   "artist_en": "MC Mong",
+   "artist_ko": "MC몽"
+  },
+  {
+   "rank": 6,
+   "title": "사랑 범벅 (Feat. 챈슬러 of the channels)",
+   "artist": "MC몽",
+   "artist_en": "MC Mong",
+   "artist_ko": "MC몽"
+  },
+  {
+   "rank": 7,
+   "title": "인기 (Feat. 송가인, 챈슬러)",
+   "artist": "MC몽",
+   "artist_en": "MC Mong",
+   "artist_ko": "MC몽"
+  },
+  {
+   "rank": 8,
+   "title": "기도 (Feat. 박효신)",
+   "artist": "MC몽",
+   "artist_en": "MC Mong",
+   "artist_ko": "MC몽"
+  },
+  {
+   "rank": 9,
+   "title": "서커스 (Feat. 임유경 - 달래 음악단 , $howgun)",
+   "artist": "MC몽",
+   "artist_en": "MC Mong",
+   "artist_ko": "MC몽"
+  },
+  {
+   "rank": 10,
+   "title": "도망가자 (Feat. 린)",
+   "artist": "MC몽",
+   "artist_en": "MC Mong",
+   "artist_ko": "MC몽"
+  },
+  {
+   "rank": 11,
+   "title": "Love Love Love (Feat. Yoong Jin Of Casker)",
+   "artist": "에픽하이 (EPIK HIGH)",
+   "artist_en": "EPIK HIGH",
+   "artist_ko": "에픽하이"
+  },
+  {
+   "rank": 12,
+   "title": "미장센",
+   "artist": "에픽하이 (EPIK HIGH)",
+   "artist_en": "EPIK HIGH",
+   "artist_ko": "에픽하이"
+  },
+  {
+   "rank": 13,
+   "title": "우산 (Feat. 윤하)",
+   "artist": "에픽하이 (EPIK HIGH)",
+   "artist_en": "EPIK HIGH",
+   "artist_ko": "에픽하이"
+  },
+  {
+   "rank": 14,
+   "title": "BORN HATER (Feat. 빈지노, 버벌진트, B.I, MINO, BOBBY)",
+   "artist": "에픽하이 (EPIK HIGH)",
+   "artist_en": "EPIK HIGH",
+   "artist_ko": "에픽하이"
+  },
+  {
+   "rank": 15,
+   "title": "One (Feat. 지선)",
+   "artist": "에픽하이 (EPIK HIGH)",
+   "artist_en": "EPIK HIGH",
+   "artist_ko": "에픽하이"
+  },
+  {
+   "rank": 16,
+   "title": "Fly",
+   "artist": "에픽하이 (EPIK HIGH)",
+   "artist_en": "EPIK HIGH",
+   "artist_ko": "에픽하이"
+  },
+  {
+   "rank": 17,
+   "title": "트로트",
+   "artist": "에픽하이 (EPIK HIGH)",
+   "artist_en": "EPIK HIGH",
+   "artist_ko": "에픽하이"
+  },
+  {
+   "rank": 18,
+   "title": "연애소설 (Feat. 아이유)",
+   "artist": "에픽하이 (EPIK HIGH)",
+   "artist_en": "EPIK HIGH",
+   "artist_ko": "에픽하이"
+  },
+  {
+   "rank": 19,
+   "title": "헤픈엔딩 (Feat. 조원선 Of 롤러코스터)",
+   "artist": "에픽하이 (EPIK HIGH)",
+   "artist_en": "EPIK HIGH",
+   "artist_ko": "에픽하이"
+  },
+  {
+   "rank": 20,
+   "title": "노땡큐 (Feat. MINO, 사이먼 도미닉, 더콰이엇)",
+   "artist": "에픽하이 (EPIK HIGH)",
+   "artist_en": "EPIK HIGH",
+   "artist_ko": "에픽하이"
+  }
+ ]
+}

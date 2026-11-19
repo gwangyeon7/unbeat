@@ -559,7 +559,7 @@ export default function RankingPage({
         : "인기 차트";
 
   return createPortal(
-    <div className="fixed inset-0 z-40 flex flex-col bg-neutral-950">
+    <div className="fixed inset-0 z-40 flex flex-col bg-neutral-950" style={{ paddingBottom: "var(--mini-pad, 0px)" }}>
       <div className="flex items-center justify-between border-b border-white/10 px-6 py-4">
         <button
           type="button"

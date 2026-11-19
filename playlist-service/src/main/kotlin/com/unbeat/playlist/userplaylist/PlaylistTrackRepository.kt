@@ -4,7 +4,13 @@ import org.springframework.data.jpa.repository.JpaRepository
 
 interface PlaylistTrackRepository : JpaRepository<PlaylistTrack, Long> {
     fun findByPlaylistIdOrderByAddedAtDesc(playlistId: Long): List<PlaylistTrack>
-    fun findByPlaylistIdAndArtistNameAndTrackName(
+    // 같은 곡이 "그래도 추가"로 여러 행일 수 있어서 한 건만 고르는 방식(맨 앞 행 / 가장 큰 dup_index 행)
+    fun findFirstByPlaylistIdAndArtistNameAndTrackNameOrderByDupIndexAsc(
+        playlistId: Long,
+        artistName: String,
+        trackName: String
+    ): PlaylistTrack?
+    fun findFirstByPlaylistIdAndArtistNameAndTrackNameOrderByDupIndexDesc(
         playlistId: Long,
         artistName: String,
         trackName: String

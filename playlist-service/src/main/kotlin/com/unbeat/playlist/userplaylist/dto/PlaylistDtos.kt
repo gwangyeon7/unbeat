@@ -78,7 +78,9 @@ data class PlaylistTrackRequest(
     val artistName: String,
     val trackName: String,
     val trackUrl: String? = null,
-    val imageUrl: String? = null
+    val imageUrl: String? = null,
+    // 사용자가 "이미 있는 곡이에요" 안내를 보고도 한 번 더 담기를 선택한 경우에만 true
+    val allowDuplicate: Boolean = false
 )
 
 // 오늘의 믹스 저장(POST /playlists/auto-mix) — 곡 고르기(즐겨찾기 + 비슷한 곡 + 인기곡)는 프론트가

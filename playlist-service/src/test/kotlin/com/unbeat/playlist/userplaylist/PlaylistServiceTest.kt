@@ -260,7 +260,7 @@ class PlaylistServiceTest {
         val playlist = Playlist(sessionId = "s1", name = "출퇴근길").apply { id = 1L }
         whenever(playlistRepository.findById(1L)).thenReturn(Optional.of(playlist))
         val existing = PlaylistTrack(playlistId = 1L, artistName = "IU", trackName = "Blueming").apply { id = 5L }
-        whenever(playlistTrackRepository.findByPlaylistIdAndArtistNameAndTrackName(1L, "IU", "Blueming"))
+        whenever(playlistTrackRepository.findFirstByPlaylistIdAndArtistNameAndTrackNameOrderByDupIndexDesc(1L, "IU", "Blueming"))
             .thenReturn(existing)
 
         val result = service.addTrack("s1", 1L, PlaylistTrackRequest(artistName = "IU", trackName = "Blueming"))

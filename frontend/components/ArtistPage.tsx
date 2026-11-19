@@ -64,7 +64,7 @@ export default function ArtistPage({
   }, [artistName, lookupName]);
 
   return (
-    <div className="fixed inset-0 z-40 flex flex-col bg-black text-white">
+    <div className="fixed inset-0 z-40 flex flex-col bg-black text-white" style={{ paddingBottom: "var(--mini-pad, 0px)" }}>
       <header className="flex items-center gap-3 border-b border-white/10 px-4 py-4">
         <button onClick={onClose} aria-label="뒤로" className="text-xl text-white/80">
           ‹

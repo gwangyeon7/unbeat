@@ -15,7 +15,7 @@ type AddToPlaylistModalProps = {
   tracks: PendingTrack[];
   playlists: Playlist[];
   onClose: () => void;
-  onAddToPlaylist: (playlistId: number) => void;
+  onAddToPlaylist: (playlistId: number, force?: boolean) => Promise<"added" | "duplicate" | "failed"> | void;
   onCreatePlaylist: (name: string) => void;
 };
 
@@ -32,13 +32,19 @@ export default function AddToPlaylistModal({
   onAddToPlaylist,
   onCreatePlaylist,
 }: AddToPlaylistModalProps) {
-  const [addedIds, setAddedIds] = useState<Set<number>>(new Set());
+  // 재생목록별 결과 — "added": 추가됨, "duplicate": 이미 있는 곡이라 추가 안 함
+  const [results, setResults] = useState<Record<number, "added" | "duplicate">>({});
+  const [busyId, setBusyId] = useState<number | null>(null);
   const [isCreating, setIsCreating] = useState(false);
   const [newName, setNewName] = useState("");
 
-  function handleAdd(playlistId: number) {
-    onAddToPlaylist(playlistId);
-    setAddedIds((prev) => new Set(prev).add(playlistId));
+  async function handleAdd(playlistId: number, force = false) {
+    if (busyId !== null) return;
+    setBusyId(playlistId);
+    const result = await onAddToPlaylist(playlistId, force);
+    setBusyId(null);
+    if (result === "failed") return;
+    setResults((prev) => ({ ...prev, [playlistId]: result === "duplicate" ? "duplicate" : "added" }));
   }
 
   function handleCreate() {
@@ -87,20 +93,40 @@ export default function AddToPlaylistModal({
             </p>
           )}
           {playlists.map((playlist) => {
-            const isAdded = addedIds.has(playlist.id);
+            const result = results[playlist.id];
+            // 이미 있는 곡이면 안내만 하고 멈춤 — 그래도 담고 싶으면 옆의 "그래도 추가"를 눌러야 한 번 더 담김
+            if (result === "duplicate") {
+              return (
+                <div key={playlist.id} className="flex items-center justify-between gap-2 rounded-md px-2 py-2 text-sm">
+                  <div className="min-w-0">
+                    <p className="truncate text-white/60">{playlist.name}</p>
+                    <p className="text-xs text-accent">이미 있는 곡이에요</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleAdd(playlist.id, true)}
+                    disabled={busyId !== null}
+                    className="shrink-0 rounded-full border border-white/20 px-3 py-1 text-xs text-white/80 hover:bg-white/10"
+                  >
+                    그래도 추가
+                  </button>
+                </div>
+              );
+            }
+            const isDone = result !== undefined;
             return (
               <button
                 key={playlist.id}
                 type="button"
                 onClick={() => handleAdd(playlist.id)}
-                disabled={isAdded}
+                disabled={isDone || busyId !== null}
                 className={`flex items-center justify-between rounded-md px-2 py-2 text-left text-sm ${
-                  isAdded ? "text-white/40" : "hover:bg-white/10"
+                  isDone ? "text-white/40" : "hover:bg-white/10"
                 }`}
               >
                 <span className="truncate">{playlist.name}</span>
                 <span className="ml-2 shrink-0 text-xs text-white/30">
-                  {isAdded ? "✓ 추가됨" : `${playlist.trackCount}곡`}
+                  {result === "added" ? "✓ 추가됨" : `${playlist.trackCount}곡`}
                 </span>
               </button>
             );

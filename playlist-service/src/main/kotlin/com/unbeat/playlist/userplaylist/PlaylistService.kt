@@ -181,15 +181,21 @@ class PlaylistService(
         category = category
     )
 
-    // 이미 그 재생목록에 있는 곡이면 새로 안 만들고 기존 걸 그대로 반환 (FavoriteTrackService.add와 같은 멱등 처리)
+    // 이미 그 재생목록에 있는 곡이면 새로 안 만들고 기존 걸 그대로 반환(기본). 사용자가 중복 안내를 보고 "그래도 추가"를
+    // 고른 요청(allowDuplicate)만 dup_index를 하나 올려 같은 곡을 한 번 더 담음 — DB UNIQUE는 그대로라 실수로 겹치는 건 막힘.
     fun addTrack(sessionId: String, playlistId: Long, request: PlaylistTrackRequest): PlaylistTrackResponse? {
         val playlist = playlistRepository.findById(playlistId).orElse(null) ?: return null
         if (playlist.sessionId != sessionId) return null
 
-        val existing = playlistTrackRepository.findByPlaylistIdAndArtistNameAndTrackName(
+        val latest = playlistTrackRepository.findFirstByPlaylistIdAndArtistNameAndTrackNameOrderByDupIndexDesc(
             playlistId, request.artistName, request.trackName
         )
-        if (existing != null) return existing.toResponse()
+        if (latest != null && !request.allowDuplicate) {
+            return playlistTrackRepository
+                .findFirstByPlaylistIdAndArtistNameAndTrackNameOrderByDupIndexAsc(
+                    playlistId, request.artistName, request.trackName
+                )?.toResponse() ?: latest.toResponse()
+        }
 
         val saved = playlistTrackRepository.save(
             PlaylistTrack(
@@ -197,7 +203,8 @@ class PlaylistService(
                 artistName = request.artistName,
                 trackName = request.trackName,
                 url = request.trackUrl,
-                imageUrl = request.imageUrl
+                imageUrl = request.imageUrl,
+                dupIndex = if (latest == null) 0 else latest.dupIndex + 1
             )
         )
         return saved.toResponse()

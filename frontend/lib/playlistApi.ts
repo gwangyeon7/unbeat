@@ -224,11 +224,13 @@ export function addTrackToPlaylist(
   artistName: string,
   trackName: string,
   trackUrl: string | null,
-  imageUrl: string | null
+  imageUrl: string | null,
+  // 사용자가 "이미 있는 곡이에요" 안내를 보고 "그래도 추가"를 누른 경우에만 true
+  allowDuplicate = false
 ): Promise<PlaylistTrack> {
   return playlistFetch<PlaylistTrack>(`/playlists/${playlistId}/tracks`, {
     method: "POST",
-    body: JSON.stringify({ artistName, trackName, trackUrl, imageUrl }),
+    body: JSON.stringify({ artistName, trackName, trackUrl, imageUrl, allowDuplicate }),
   });
 }
 

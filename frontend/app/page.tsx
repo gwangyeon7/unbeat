@@ -497,14 +497,27 @@ export default function Home() {
     setAddToPlaylistTracks(tracks);
   }
 
-  async function handleAddTracksToPlaylist(playlistId: number) {
-    if (!addToPlaylistTracks || addToPlaylistTracks.length === 0) return;
+  // 반환값: "added"(전부/일부 추가), "duplicate"(전부 이미 있어서 추가 안 함), "failed" — 모달이 행에 결과를 표시함
+  async function handleAddTracksToPlaylist(playlistId: number, force = false): Promise<"added" | "duplicate" | "failed"> {
+    if (!addToPlaylistTracks || addToPlaylistTracks.length === 0) return "failed";
     try {
+      // (2026-11-19) 이미 담긴 곡은 다시 추가하지 않고 알려줌 — 예전엔 중복으로 쌓이면서 "추가됨"만 떴음
+      const key = (artist: string, name: string) => `${artist}\u0000${name}`.toLowerCase().replace(/\s+/g, " ").trim();
+      const existing = await getPlaylistTracks(playlistId).catch(() => [] as Awaited<ReturnType<typeof getPlaylistTracks>>);
+      const existingKeys = new Set(existing.map((e) => key(e.artistName, e.trackName)));
+      // force: 사용자가 안내를 보고 "그래도 추가"를 누른 경우 — 겹치는 곡도 서버에 한 번 더 담도록 allowDuplicate로 보냄
+      const toAdd = force
+        ? addToPlaylistTracks
+        : addToPlaylistTracks.filter((t) => !existingKeys.has(key(t.artist, t.name)));
+      if (toAdd.length === 0) {
+        return "duplicate";
+      }
       await Promise.all(
-        addToPlaylistTracks.map((t) =>
-          addTrackToPlaylist(playlistId, t.artist, t.name, null, t.image ?? null)
-        )
+        toAdd.map((t) => addTrackToPlaylist(playlistId, t.artist, t.name, null, t.image ?? null, force))
       );
+      if (!force && toAdd.length < addToPlaylistTracks.length) {
+        showToast(`${addToPlaylistTracks.length - toAdd.length}곡은 이미 있어서 제외했어요`);
+      }
       refreshPlaylists();
       // 이미 펼쳐서 캐싱해둔 재생목록이면(=화면에 보이고 있으면) 곧바로 최신 곡 목록으로 갱신
       if (playlistTracksById[playlistId]) {
@@ -512,8 +525,10 @@ export default function Home() {
           .then((tracks) => setPlaylistTracksById((prev) => ({ ...prev, [playlistId]: tracks })))
           .catch(() => {});
       }
+      return "added";
     } catch (err) {
       setError("재생목록에 곡을 추가하지 못했어요.");
+      return "failed";
     }
   }
 
@@ -1260,6 +1275,11 @@ export default function Home() {
   // 아티스트 카드를 누르면 그 아티스트의 전용 전체화면 페이지(ArtistPage)를 엶 —
   // 예전엔 아래에 곡 몇 개만 덧붙여서 검색 결과 맨 아래 "다른 곡"과 똑같은 목록이 중복으로 나왔음.
   const [artistPageName, setArtistPageName] = useState<string | null>(null);
+  // 전체화면 위에 뜨는 화면들(보관함/재생목록 상세/아티스트/공개 피드) — 이때 미니 플레이어를 위로 올려 계속 보이게 함
+  const isOverlayOpen = isLibraryOpen || openPlaylistId !== null || artistPageName !== null || isPublicFeedOpen;
+  useEffect(() => {
+    document.documentElement.style.setProperty("--mini-pad", isOverlayOpen && nowPlaying ? "4.5rem" : "0px");
+  }, [isOverlayOpen, nowPlaying]);
   // 아티스트 페이지 곡 조회용 정식 이름(검색 카드에서 열었을 때). 화면 제목은 artistPageName(한글 표시 이름)
   const [artistPageLookup, setArtistPageLookup] = useState<string | null>(null);
   // 아티스트 페이지 상단 프로필 사진(검색 카드에서 열었을 때 그 카드의 아티스트 사진)
@@ -1629,12 +1649,43 @@ export default function Home() {
     setUserQueuedKeys(list.map((t) => `${t.artist.toLowerCase().trim()}::${t.name.toLowerCase().trim()}`));
   }
 
+  // (2026-11-19) 프로필 화면을 열어 둔 동안 팔로워/팔로잉 수와 재생목록을 8초마다, 그리고 앱으로 돌아올 때 조용히 다시 불러옴 —
+  // 서버가 변경을 밀어주는 구조가 아니라(화면을 열 때만 조회) 상대가 팔로우해도 앱을 껐다 켜야 보이던 문제. 화면이 비어 보이지
+  // 않게 기존 값은 새 값이 올 때까지 그대로 둠.
+  useEffect(() => {
+    if (viewingProfileNickname === null) return;
+    const nickname = viewingProfileNickname;
+    function refresh() {
+      if (document.visibilityState !== "visible") return;
+      getProfile(nickname)
+        .then((res) => {
+          setProfilePlaylists(res.playlists);
+          setProfileInfo(res);
+        })
+        .catch(() => {});
+    }
+    const timer = setInterval(refresh, 8000);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", refresh);
+    };
+  }, [viewingProfileNickname]);
+
+  // (2026-11-19) 오류 문구("좋아요를 누르려면 로그인…")가 메인 화면에 빨간 글씨로 계속 남아 거슬린다는 피드백 —
+  // 화면 위에 박아 두지 않고, 어느 화면에서든 아래쪽에 작은 안내(토스트)로 잠깐 띄웠다가 사라지게 함.
+  useEffect(() => {
+    if (!error) return;
+    showToast(error, 3000);
+    setError(null);
+  }, [error]);
+
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  function showToast(message: string) {
+  function showToast(message: string, durationMs = 1800) {
     setToastMessage(message);
     if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
-    toastTimerRef.current = setTimeout(() => setToastMessage(null), 1800);
+    toastTimerRef.current = setTimeout(() => setToastMessage(null), durationMs);
   }
 
   function handleTrackEnded(nativeOverride?: { videoId: string; name: string; artist: string }) {
@@ -2367,7 +2418,7 @@ export default function Home() {
       {/* 모바일 "보관함" 전체화면 서랍 — 즐겨찾기 아티스트/즐겨찾기 곡/내 재생목록을 데스크톱
           사이드바와 완전히 같은 내용(renderFavoriteArtists/renderLibraryPanel)으로 보여줌. */}
       {isLibraryOpen && (
-        <div className="animate-slide-up-in fixed inset-0 z-50 flex h-screen w-screen flex-col bg-black sm:hidden">
+        <div className="animate-slide-up-in fixed inset-0 z-50 flex h-screen w-screen flex-col bg-black sm:hidden" style={{ paddingBottom: "var(--mini-pad, 0px)" }}>
           <div className="flex items-center gap-2 border-b border-white/10 p-3">
             <button
               type="button"
@@ -2383,7 +2434,6 @@ export default function Home() {
           </div>
           <div className="flex-1 overflow-y-auto p-4">
             {/* 에러 메시지는 본문(main)에 그려져서 보관함 서랍 뒤에 가려졌음 — 서랍 안에도 같이 보여줌 */}
-            {error && <p className="mb-4 rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-400">{error}</p>}
             {renderMobileLibrary()}
           </div>
         </div>
@@ -2399,7 +2449,6 @@ export default function Home() {
       {/* 데스크톱 3열 그리드에서 왼쪽 사이드바가 실제로 왼쪽에 오도록 order를 명시.
           JSX 선언 순서는 (중앙 → 왼쪽 사이드 → 오른쪽 사이드)라 order 없이는 중앙이 첫 칸(200px)에 끼임. */}
       <div className="flex flex-col items-center gap-8 lg:order-2">
-      {error && <p className="text-sm text-red-400">{error}</p>}
 
       {/* 검색 없이 바로 탐색하는 흐름 — 유튜브 뮤직 홈처럼 검색창 바로 아래에 무드 칩부터 노출.
           예전엔 이 블록이 차트/인기 아티스트 밑에 깔려있어서 스크롤을 많이 해야 보였는데,
@@ -3054,6 +3103,7 @@ export default function Home() {
         Unbeat 자체 UI로 재생/일시정지/진행바를 직접 그림 (MiniPlayer 내부에서 처리) */}
     {nowPlaying && (
       <MiniPlayer
+        raised={isOverlayOpen}
         track={nowPlaying}
         onClose={() => setNowPlaying(null)}
         onActuallyPlaying={() => handleActuallyPlaying(nowPlaying)}
@@ -3120,6 +3170,8 @@ export default function Home() {
         if (!playlist) return null;
         return (
           <PlaylistDetailOverlay
+            onPlayNext={(t) => handleQueueTrack({ ...t, listeners: null, url: "", image: t.image ?? null }, "next")}
+            onAddToQueue={(t) => handleQueueTrack({ ...t, listeners: null, url: "", image: t.image ?? null }, "last")}
             playlist={playlist}
             tracks={playlistTracksById[openPlaylistId]}
             onClose={() => {
@@ -3357,7 +3409,7 @@ export default function Home() {
     {/* 대기열 추가 안내 — 잠깐 떴다 사라지는 작은 알림 */}
     {toastMessage && (
       <div className="pointer-events-none fixed inset-x-0 bottom-28 z-[80] flex justify-center px-4">
-        <div className="rounded-full bg-neutral-800 px-4 py-2 text-sm text-white shadow-lg ring-1 ring-white/10">
+        <div className="rounded-full bg-neutral-800 px-4 py-2 text-xs text-white shadow-lg ring-1 ring-white/10">
           {toastMessage}
         </div>
       </div>

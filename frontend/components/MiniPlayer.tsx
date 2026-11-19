@@ -31,6 +31,8 @@ export type NowPlayingTrack = {
 };
 
 type MiniPlayerProps = {
+  // 보관함/재생목록 상세/아티스트 페이지 같은 전체화면 위에서도 하단 바가 보이게 올림(탭바도 가려져 있어 bottom-0)
+  raised?: boolean;
   track: NowPlayingTrack;
   onClose: () => void;
   // 재생 버튼을 누른 시점이 아니라, 유튜브 플레이어가 실제로 PLAYING 상태에 들어간 순간(=진짜 소리가
@@ -427,6 +429,7 @@ function ExpandedTrackRow({ track, index, onClick }: { track: Track; index: numb
 // 이후 "다른 서비스들에 비해 재생바가 작고 정보도 부실하다"는 피드백을 받고, 스포티파이/유튜브 뮤직처럼
 // 좌(앨범아트+곡정보+즐겨찾기) / 가운데(재생+진행바) / 우(볼륨) 3분할 레이아웃 + 큰 앨범아트로 확장.
 export default function MiniPlayer({
+  raised = false,
   track,
   onClose,
   onActuallyPlaying,
@@ -1121,7 +1124,11 @@ export default function MiniPlayer({
   return (
     // (하단 탭바 도입) 폰 화면(sm 미만)엔 page.tsx의 하단 탭바(h-16, bottom-0)가 깔려 있어서
     // 이 collapsed bar를 bottom-16으로 올려 탭바 위에 쌓음. sm 이상은 탭바가 없으니 기존대로 bottom-0.
-    <div className="fixed inset-x-0 bottom-16 z-30 border-t border-white/10 bg-black/95 backdrop-blur sm:bottom-0">
+    <div
+      className={`fixed inset-x-0 border-t border-white/10 bg-black/95 backdrop-blur ${
+        raised ? "bottom-0 z-[55]" : "bottom-16 z-30 sm:bottom-0"
+      }`}
+    >
       {/* 실제 유튜브 iframe — 화면엔 안 보이게 숨겨두고 오디오 소스로만 씀 */}
       <div
         ref={containerRef}

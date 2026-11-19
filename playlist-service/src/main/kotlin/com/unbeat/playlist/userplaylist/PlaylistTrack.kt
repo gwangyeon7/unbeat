@@ -17,7 +17,7 @@ import java.time.LocalDateTime
 @Entity
 @Table(
     name = "playlist_tracks",
-    uniqueConstraints = [UniqueConstraint(columnNames = ["playlist_id", "artist_name", "track_name"])]
+    uniqueConstraints = [UniqueConstraint(name = "uk_playlist_tracks_dup", columnNames = ["playlist_id", "artist_name", "track_name", "dup_index"])]
 )
 class PlaylistTrack(
     @Column(name = "playlist_id", nullable = false)
@@ -34,6 +34,11 @@ class PlaylistTrack(
 
     @Column(name = "image_url", length = 500)
     var imageUrl: String? = null,
+
+    // (2026-11-19) 같은 곡을 사용자가 "그래도 추가"로 일부러 한 번 더 담는 경우만 1, 2, ...로 올라감. 평소(0)에는 같은 곡이
+    // 중복으로 못 들어가게 DB가 막고(UNIQUE에 dup_index 포함), 사용자가 확인한 중복만 이 값으로 구분해서 허용함.
+    @Column(name = "dup_index", nullable = false, columnDefinition = "int not null default 0")
+    val dupIndex: Int = 0,
 
     @Column(name = "added_at", nullable = false)
     val addedAt: LocalDateTime = LocalDateTime.now()

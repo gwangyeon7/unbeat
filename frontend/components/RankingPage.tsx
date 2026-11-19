@@ -74,7 +74,7 @@ function FollowListSheet({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60" onClick={onClose}>
+    <div className="fixed inset-0 z-[60] flex items-end justify-center bg-black/60" onClick={onClose}>
       <div
         className="flex max-h-[70vh] w-full max-w-2xl flex-col rounded-t-xl border-t border-white/10 bg-neutral-900"
         onClick={(e) => e.stopPropagation()}

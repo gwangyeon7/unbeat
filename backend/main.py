@@ -2327,13 +2327,32 @@ def _search_from_catalog(q: str, x_session_id: Optional[str] = None) -> Optional
     }
 
 
+def _apply_related_tracks(result: dict, q: str) -> dict:
+    """(2026-11-19) 곡 목록 아래가 같은 곡의 변형(Feat./Inst.)과 같은 아티스트 곡으로만 채워지던 문제 — 변형은 한 곡으로
+    합치고, 별칭표에 있는 아티스트면 남는 자리를 "비슷한 아티스트"(related_artists.json)의 곡으로 채움. 실패하면 원본 그대로."""
+    try:
+        tracks = result.get("tracks") or []
+        if not tracks:
+            return result
+        lead = ALIAS_CATALOG.find_artist(tracks[0].get("artistOfficialName") or tracks[0].get("artist") or "")
+        if not lead or not ALIAS_CATALOG.related.get(lead["id"]):
+            return result
+        names = {ALIAS_CATALOG_NORMALIZE(n) for n in (lead["display"], lead["official"], lead["lookup"]) if n}
+        cap = 6 if ALIAS_CATALOG_NORMALIZE(q) in names else 3  # 아티스트 이름 검색이면 그 곡을 더 많이, 곡 검색이면 적게
+        new_tracks = ALIAS_CATALOG.diversify(tracks, lead["id"], cap, 10, track_image=cached_track_image)
+        return {**result, "tracks": new_tracks}
+    except Exception as e:
+        print(f"[related] '{q}' 비슷한 곡 채우기 실패(무시): {e}")
+        return result
+
+
 @app.get("/search")
 def search(q: str, artist: Optional[str] = None, x_session_id: Optional[str] = Header(default=None)):
     if artist and artist.strip():
         return _with_display_names(_search_exact_pick(q.strip(), artist.strip(), x_session_id), q)
     catalog_result = _search_from_catalog(q, x_session_id)
     if catalog_result is not None:
-        return _with_display_names(catalog_result, q)
+        return _with_display_names(_apply_related_tracks(catalog_result, q), q)
     result = {**_search_by_query(q, x_session_id), "source": "pipeline"}
     # (2026-11-18) 영문 제목 단독 검색("leo"): 별칭표에 정규화 제목이 같은 곡이 정확히 1곡이면 맨 위에 추가(중복 제거).
     # 응답 단계에서 처리 — 파이프라인 캐시는 그대로, 별칭표를 고치면 서버 재시작만으로 반영됨.
@@ -2350,7 +2369,7 @@ def search(q: str, artist: Optional[str] = None, x_session_id: Optional[str] = H
                 a for a in result.get("artists") or [] if ALIAS_CATALOG_NORMALIZE(a.get("name", "")) != card_key
             ]
     result["artists"] = _drop_title_named_artists(q, result.get("artists") or [], result.get("tracks") or [])
-    return _with_display_names(result, q)
+    return _with_display_names(_apply_related_tracks(result, q), q)
 
 
 def _drop_title_named_artists(q: str, artists: list, tracks: list) -> list:
@@ -2368,8 +2387,17 @@ def _drop_title_named_artists(q: str, artists: list, tracks: list) -> list:
             listeners = int(a.get("listeners") or 0)
         except (TypeError, ValueError):
             listeners = 0
-        if ALIAS_CATALOG_NORMALIZE(a.get("name", "")) == key and listeners < 2000:
-            continue
+        if ALIAS_CATALOG_NORMALIZE(a.get("name", "")) == key:
+            if ALIAS_CATALOG.find_artist(a.get("officialName") or a.get("name") or ""):
+                kept.append(a)  # 별칭표에 있는 진짜 아티스트("인디고")는 이름이 곡 제목과 같아도 유지
+                continue
+            if listeners < 2000:
+                continue
+            # (2026-11-19) "키 작은 꼬마 이야기"처럼 곡 제목과 같은 이름의 가짜 아티스트가 청취자 수가 많아 남던 문제 —
+            # 위 상위 곡 중 제목이 검색어와 정확히 같고 아티스트가 다른 곡이 있으면 곡 검색으로 보고 카드를 뺌.
+            if any(ALIAS_CATALOG_NORMALIZE(t.get("name", "")) == key
+                   and ALIAS_CATALOG_NORMALIZE(t.get("artist", "")) != key for t in tracks[:3]):
+                continue
         kept.append(a)
     return kept
 
@@ -4534,6 +4562,72 @@ CURATED_DOMESTIC_MOOD_TRACKS: dict[str, list[tuple[str, str]]] = {
 }
 
 
+# (2026-11-19) 감성일기/무드 추천이 "폴킴·자이언티·아이유" 위주로만 나오고 곡도 무드당 10~20곡뿐이라
+# 같은 곡이 반복된다는 피드백 — 무드별 큐레이션을 인디/밴드/싱어송라이터까지 넓혀서 풀을 키움
+# (한로로, 볼빨간사춘기, 악동뮤지션, 잔나비, 검정치마, 새소년, 혁오, 이무진 등).
+# 곡명/표기가 Last.fm과 안 맞으면 _resolve_single_curated_track의 유사도 검증에서 그 곡만 조용히
+# 빠지므로(엉뚱한 곡이 섞이진 않음) 일부가 탈락해도 괜찮음 — 안 뜨는 곡은 여기서 빼거나 표기를 고치면 됨.
+_CURATED_EXTRA: dict[str, list[tuple[str, str]]] = {
+    "chill": [
+        ("HANRORO", "입춘"), ("Bolbbalgan4", "나의 사춘기에게"), ("AKMU", "시간과 낙엽"),
+        ("Jannabi", "뜨거운 여름밤은 가고 남은 건 볼품없지만"), ("The Black Skirts", "Everything"),
+        ("SE SO NEON", "파도"), ("Busker Busker", "여수 밤바다"), ("Roy Kim", "봄봄봄"),
+        ("Jukjae", "별 보러 가자"), ("Lee Mujin", "에피소드"), ("Kwon Jinah", "끝"),
+        ("Baek Yerin", "Maybe It's Not Our Fault"), ("Hyukoh", "Panda Bear"), ("Lucid Fall", "오 사랑아"),
+    ],
+    "study": [
+        ("HANRORO", "정류장"), ("Bolbbalgan4", "Some"), ("AKMU", "소우주"),
+        ("Jannabi", "가을밤에 든 생각"), ("The Black Skirts", "기다린만큼, 더"),
+        ("SE SO NEON", "난춘"), ("Hyukoh", "Wi Ing Wi Ing"), ("Jukjae", "나랑 같이 걸을래"),
+        ("Lee Mujin", "청춘만화"), ("Standing Egg", "Little Star"), ("Kwon Jinah", "운이 좋았지"),
+        ("Busker Busker", "처음 느낌 그대로"), ("Sunwoojunga", "도망가자"),
+    ],
+    "mellow": [
+        ("HANRORO", "사랑하게 될 거야"), ("Bolbbalgan4", "좋다고 말해"), ("AKMU", "후라이의 꿈"),
+        ("Jannabi", "슬픔이여 안녕"), ("The Black Skirts", "Antifreeze"), ("Hyukoh", "Paul"),
+        ("Jukjae", "별 보러 가자"), ("Roy Kim", "Home"), ("Baek Yerin", "그어줘"),
+        ("Lee Mujin", "신호등"), ("Kim Feel", "나비"), ("Standing Egg", "Lonely"),
+        ("Busker Busker", "벚꽃 엔딩"), ("Jaurim", "스물다섯, 스물하나"),
+    ],
+    "sad": [
+        ("HANRORO", "비틀비틀 짝짜꿍"), ("Bolbbalgan4", "나만 봄"), ("AKMU", "낙하"),
+        ("Jannabi", "나의 기쁨 나의 노래"), ("Hyukoh", "Tomboy"), ("Kwon Jinah", "끝"),
+        ("Baek Yerin", "Bye bye my blue"), ("DAY6", "한 페이지가 될 수 있도록"), ("Lee Mujin", "이별 노래"),
+        ("Crush", "잊어버리지마"), ("Zion.T", "눈"), ("Epik High", "Fly Me to the Moon"),
+        ("BTS", "봄날"), ("10cm", "그라데이션"),
+    ],
+    "love": [
+        ("HANRORO", "사랑하게 될 거야"), ("Bolbbalgan4", "썸 탈거야"), ("AKMU", "200%"),
+        ("Jannabi", "슬픔이여 안녕"), ("The Black Skirts", "Everything"), ("10cm", "스토커"),
+        ("Roy Kim", "봄봄봄"), ("Busker Busker", "벚꽃 엔딩"), ("Lee Mujin", "신호등"),
+        ("DAY6", "Congratulations"), ("Heize", "비도 오고 그래서"), ("Jukjae", "나랑 같이 걸을래"),
+    ],
+    "party": [
+        ("Bolbbalgan4", "썸 탈거야"), ("AKMU", "200%"), ("AKMU", "Hello"), ("Hyukoh", "Tomboy"),
+        ("Jaurim", "일탈"), ("10cm", "스토커"), ("Jessi", "Nunu Nana"), ("Hyuna", "Bubble Pop!"),
+        ("ZICO", "SPOT!"), ("IU", "Celebrity"), ("Lee Mujin", "신호등"), ("QWER", "고민중독"),
+        ("Silica Gel", "NO PAIN"), ("Busker Busker", "벚꽃 엔딩"),
+    ],
+    "workout": [
+        ("Jessi", "Nunu Nana"), ("Hyuna", "Bubble Pop!"), ("CL", "The Baddest Female"),
+        ("Epik High", "Fly"), ("Stray Kids", "Back Door"), ("Silica Gel", "NO PAIN"),
+        ("Jaurim", "일탈"), ("Hyukoh", "Tomboy"), ("QWER", "고민중독"), ("AKMU", "200%"),
+    ],
+    "driving": [
+        ("HANRORO", "입춘"), ("Jannabi", "뜨거운 여름밤은 가고 남은 건 볼품없지만"),
+        ("The Black Skirts", "Everything"), ("Hyukoh", "Wi Ing Wi Ing"), ("AKMU", "시간과 낙엽"),
+        ("Busker Busker", "벚꽃 엔딩"), ("Lee Mujin", "신호등"), ("Bolbbalgan4", "나의 사춘기에게"),
+        ("SE SO NEON", "파도"), ("Jukjae", "별 보러 가자"), ("QWER", "고민중독"),
+    ],
+}
+for _mood, _extra in _CURATED_EXTRA.items():
+    _have = {(a.lower(), t.lower()) for a, t in CURATED_DOMESTIC_MOOD_TRACKS.get(_mood, [])}
+    for _a, _t in _extra:
+        if (_a.lower(), _t.lower()) not in _have:
+            CURATED_DOMESTIC_MOOD_TRACKS.setdefault(_mood, []).append((_a, _t))
+            _have.add((_a.lower(), _t.lower()))
+
+
 # (버그 수정, 2026-10-07) "출퇴근길" 무드 실사용 중 전혀 엉뚱한 곡("Kim Dong Ryul - 감수성"을
 # 큐레이션에 넣었는데 실제로는 "우리가 쏜 화살은 어디로 갔을까"가 뜨는 등)이 섞여 나오는 걸 발견.
 # 원인: Last.fm의 한국 인디/발라드 곡 색인이 성겨서, track.search가 의도한 제목을 못 찾으면
@@ -4852,6 +4946,8 @@ def discover_by_mood(tag: str, x_session_id: Optional[str] = Header(default=None
     """
     RESULT_SIZE = 10
     POOL_SIZE = 20
+    # (2026-11-19) 국내 풀은 더 크게 — 큐레이션을 넓힌 만큼 매번 다른 조합이 나오게
+    DOMESTIC_POOL_SIZE = 45
 
     # 캐시 키 버전: v2는 국내/해외 분리(응답 스키마 변경). v3은 이미지 우선순위 반전(§31).
     # v4는 국내 폴백을 무드별 큐레이션 목록으로 바꾼 변경(§63/§64). v5는 하드 필터→소프트
@@ -4868,7 +4964,7 @@ def discover_by_mood(tag: str, x_session_id: Optional[str] = Header(default=None
     # 버전 때 잘못 매칭된 채로 캐싱된 풀(curated-track:v1 캐시 기반)이 안 섞이도록 재버전업.
     # v9: "sad"에서 Gee/Supernova 같은 무관 k-pop이 섞이는 버그 발견 후 전체 무드 감사 — sad/love/
     # study/chill/party 큐레이션 목록을 실제 Last.fm 매칭 검증 거쳐 재구성(아래 딕셔너리 주석 참고).
-    cache_key = f"discover-by-mood:v11:{tag.lower().strip()}"
+    cache_key = f"discover-by-mood:v12:{tag.lower().strip()}"
     pool = get_cached(cache_key)
 
     if pool is None:
@@ -4882,7 +4978,7 @@ def discover_by_mood(tag: str, x_session_id: Optional[str] = Header(default=None
         # Last.fm의 무드/장르 태그는 서구 팝 위주로 편향돼 있어서, 후보를 아무리 늘려도
         # 국내 곡이 하나도 안 걸리는 태그가 실제로 있음 — 이 경우 무드별로 직접 골라둔
         # CURATED_DOMESTIC_MOOD_TRACKS로 보충함.
-        if len(domestic) < POOL_SIZE:
+        if len(domestic) < DOMESTIC_POOL_SIZE:
             seen = {(t["artist"].lower(), t["name"].lower()) for t in domestic}
             curated_pairs = CURATED_DOMESTIC_MOOD_TRACKS.get(tag.lower().strip(), [])
             for track in _resolve_curated_tracks(curated_pairs):
@@ -4916,7 +5012,7 @@ def discover_by_mood(tag: str, x_session_id: Optional[str] = Header(default=None
         international.sort(key=lambda t: not availability.get((t["artist"], t["name"]), False))
 
         pool = {
-            "domesticPool": domestic[:POOL_SIZE],
+            "domesticPool": domestic[:DOMESTIC_POOL_SIZE],
             "internationalPool": international[:POOL_SIZE],
         }
         set_cached(cache_key, pool)
@@ -4928,7 +5024,18 @@ def discover_by_mood(tag: str, x_session_id: Optional[str] = Header(default=None
     # 모자라면(큐레이션이 짧은 무드) 모자란 만큼 해외로 채워서 총 10곡은 유지함.
     domestic_n = min(7, len(domestic_pool))
     international_n = min(RESULT_SIZE - domestic_n, len(international_pool))
-    domestic_tracks = random.sample(domestic_pool, domestic_n)
+    # 같은 가수가 한 번에 여러 곡 나오지 않게 가수당 최대 2곡까지만(풀을 섞은 뒤 앞에서부터 채움)
+    shuffled = random.sample(domestic_pool, len(domestic_pool))
+    per_artist: dict[str, int] = {}
+    domestic_tracks = []
+    for t in shuffled:
+        a = t["artist"].lower()
+        if per_artist.get(a, 0) >= 2:
+            continue
+        per_artist[a] = per_artist.get(a, 0) + 1
+        domestic_tracks.append(t)
+        if len(domestic_tracks) >= domestic_n:
+            break
     international_tracks = random.sample(international_pool, international_n)
     # (버그 수정, 2026-10-14) 무드 추천(감성 카드 diary_reflection/context_mood도 이 함수를
     # 그대로 재사용함)에 한글 아티스트명 보완이 빠져있었음 — 제목은 국내 발라드/인디 가수는

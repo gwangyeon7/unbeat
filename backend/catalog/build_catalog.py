@@ -49,7 +49,7 @@ EXTRA_VIDEO_TITLE = re.compile(
 KO_LIST_MIN_TRACKS = 5
 KO_LIST_MIN_LISTENERS = 1000
 HANGUL = re.compile(r"[가-힣]")
-SEED_FILES = ["seed_melon_top100.json", "seed_melon_rap_daily.json", "seed_melon_jpop_daily.json", "seed_melon_indie_daily.json"]
+SEED_FILES = ["seed_melon_top100.json", "seed_melon_top100_1119.json", "seed_melon_yearly_2025.json", "seed_melon_artists_1119.json", "seed_melon_artists_1119_b.json", "seed_melon_artists_1119_c.json", "seed_melon_artists_1119_d.json", "seed_melon_artists_1119_e.json", "seed_melon_artists_1119_f.json", "seed_melon_artists_1119_g.json", "seed_melon_artists_1119_h.json", "seed_melon_ballad_1119.json", "seed_melon_dance_1119.json", "seed_melon_rap_1119.json", "seed_melon_rap_daily.json", "seed_melon_jpop_daily.json", "seed_melon_indie_daily.json"]
 # 출처 우선순위: 높은 쪽 값만 덮어쓸 수 있음 — 수동 시드는 어떤 경우에도 덮어써지지 않음
 PRIO_LIST, PRIO_MELON, PRIO_QUERIES, PRIO_MANUAL = 0, 1, 2, 3
 # "#안녕", "그_냥", "조선힙합_official": 특수문자를 빼고 정규화하면 일반 단어("안녕", "그냥")가 돼서 검색을 가로챔 — 색인 안 함

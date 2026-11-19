@@ -1,0 +1,312 @@
+{
+ "_meta": {
+  "source": "멜론 장르음악(발라드) 최신 차트 1~50위 화면을 사람이 직접 보고 옮겨 적은 시드 데이터(자동 수집 아님)",
+  "captured_at": "2026-11-19",
+  "note": "genre 필드는 참고용(현재 빌드에서 쓰지 않음).",
+  "suggested_aliases_confident": {}
+ },
+ "tracks": [
+  {
+   "rank": 1,
+   "title": "그대의 세상",
+   "artist": "김현진",
+   "genre": "발라드"
+  },
+  {
+   "rank": 2,
+   "title": "#아파트#주식#코인#달러 (Feat. 윤석원)",
+   "artist": "PLAT9 (플랫나인)",
+   "genre": "발라드"
+  },
+  {
+   "rank": 3,
+   "title": "사랑해볼래, 나",
+   "artist": "미나미 of RESCENE",
+   "genre": "발라드"
+  },
+  {
+   "rank": 4,
+   "title": "안녕 너희",
+   "artist": "허각",
+   "genre": "발라드"
+  },
+  {
+   "rank": 5,
+   "title": "Our Days",
+   "artist": "우다비",
+   "genre": "발라드"
+  },
+  {
+   "rank": 6,
+   "title": "동반 (A Long Walk)",
+   "artist": "선우정아",
+   "genre": "발라드"
+  },
+  {
+   "rank": 7,
+   "title": "Promises",
+   "artist": "제아",
+   "genre": "발라드"
+  },
+  {
+   "rank": 8,
+   "title": "소나기",
+   "artist": "박현규",
+   "genre": "발라드"
+  },
+  {
+   "rank": 9,
+   "title": "사랑이라 일컫던",
+   "artist": "승희",
+   "genre": "발라드"
+  },
+  {
+   "rank": 10,
+   "title": "너를 사랑하지 않는 법 (Female Ver.)",
+   "artist": "NUGU YAM",
+   "genre": "발라드"
+  },
+  {
+   "rank": 11,
+   "title": "우리에게 주어진 시간이 끝날 때까지 (feat...",
+   "artist": "듀 (DEW)",
+   "genre": "발라드",
+   "truncated": true
+  },
+  {
+   "rank": 12,
+   "title": "한번만 안아보면 안 될까",
+   "artist": "에코비",
+   "genre": "발라드"
+  },
+  {
+   "rank": 13,
+   "title": "퍼스트 터치",
+   "artist": "굿굿",
+   "genre": "발라드"
+  },
+  {
+   "rank": 14,
+   "title": "우리라는 퍼즐",
+   "artist": "양지은",
+   "genre": "발라드"
+  },
+  {
+   "rank": 15,
+   "title": "Hear Me Now",
+   "artist": "김귤",
+   "genre": "발라드"
+  },
+  {
+   "rank": 16,
+   "title": "사랑합니다 사랑해 사랑해요",
+   "artist": "리디아 (Lydia)",
+   "genre": "발라드"
+  },
+  {
+   "rank": 17,
+   "title": "우리는 내리는",
+   "artist": "NO.I (노이)",
+   "genre": "발라드"
+  },
+  {
+   "rank": 18,
+   "title": "Lost & Found",
+   "artist": "가호 (Gaho)",
+   "genre": "발라드"
+  },
+  {
+   "rank": 19,
+   "title": "사랑하는 일",
+   "artist": "이동우 (LEE DONG WOO),출판사 무제",
+   "genre": "발라드"
+  },
+  {
+   "rank": 20,
+   "title": "지나간 우리의 이야기",
+   "artist": "이준호",
+   "genre": "발라드"
+  },
+  {
+   "rank": 21,
+   "title": "홍련",
+   "artist": "HANZ",
+   "genre": "발라드"
+  },
+  {
+   "rank": 22,
+   "title": "세월이 가면",
+   "artist": "임바다,허채민",
+   "genre": "발라드"
+  },
+  {
+   "rank": 23,
+   "title": "멈춘 시간 위에 서 있어",
+   "artist": "ChiVee",
+   "genre": "발라드"
+  },
+  {
+   "rank": 24,
+   "title": "너잖아",
+   "artist": "지진석",
+   "genre": "발라드"
+  },
+  {
+   "rank": 25,
+   "title": "사랑이 어떻게 그래요",
+   "artist": "아렌 (브라더스)",
+   "genre": "발라드"
+  },
+  {
+   "rank": 26,
+   "title": "착한 이별",
+   "artist": "태온(TAEON)",
+   "genre": "발라드"
+  },
+  {
+   "rank": 27,
+   "title": "Whisper love to you",
+   "artist": "진현준",
+   "genre": "발라드"
+  },
+  {
+   "rank": 28,
+   "title": "마음의 숲",
+   "artist": "조선힙합,벤",
+   "genre": "발라드"
+  },
+  {
+   "rank": 29,
+   "title": "그래도 사랑합니다",
+   "artist": "순순희(지환)",
+   "genre": "발라드"
+  },
+  {
+   "rank": 30,
+   "title": "나보다 좋은 사람 만나 (feat.폴림)",
+   "artist": "정창롱",
+   "genre": "발라드"
+  },
+  {
+   "rank": 31,
+   "title": "깊은 밤을 날아서 (Flying through the d...",
+   "artist": "준성 (JunSung)",
+   "genre": "발라드",
+   "truncated": true
+  },
+  {
+   "rank": 32,
+   "title": "나만 보고싶은",
+   "artist": "혁기 (hucki)",
+   "genre": "발라드"
+  },
+  {
+   "rank": 33,
+   "title": "마지막 사랑",
+   "artist": "안재우",
+   "genre": "발라드"
+  },
+  {
+   "rank": 34,
+   "title": "사랑하면",
+   "artist": "KCM",
+   "genre": "발라드"
+  },
+  {
+   "rank": 35,
+   "title": "우린 사랑했잖아 어떻게 이러니",
+   "artist": "란 (RAN)",
+   "genre": "발라드"
+  },
+  {
+   "rank": 36,
+   "title": "같았으면해",
+   "artist": "장은지",
+   "genre": "발라드"
+  },
+  {
+   "rank": 37,
+   "title": "사랑한다는 말로도 채울 수 없던 우리",
+   "artist": "이보람",
+   "genre": "발라드"
+  },
+  {
+   "rank": 38,
+   "title": "이 말 하나 전하고 싶었어",
+   "artist": "주현민",
+   "genre": "발라드"
+  },
+  {
+   "rank": 39,
+   "title": "HOME",
+   "artist": "예잔 (가비엔제이)",
+   "genre": "발라드"
+  },
+  {
+   "rank": 40,
+   "title": "선물",
+   "artist": "이예지",
+   "genre": "발라드"
+  },
+  {
+   "rank": 41,
+   "title": "언제나 사랑해",
+   "artist": "류민희",
+   "genre": "발라드"
+  },
+  {
+   "rank": 42,
+   "title": "Starlight",
+   "artist": "효정 (오마이걸)",
+   "genre": "발라드"
+  },
+  {
+   "rank": 43,
+   "title": "부르다 보면",
+   "artist": "김결",
+   "genre": "발라드"
+  },
+  {
+   "rank": 44,
+   "title": "가끔씩이라도",
+   "artist": "아우릴고트 (OUREALGOAT)",
+   "genre": "발라드"
+  },
+  {
+   "rank": 45,
+   "title": "좋아하니까",
+   "artist": "다희 (dahee)",
+   "genre": "발라드"
+  },
+  {
+   "rank": 46,
+   "title": "연애하고 싶지만",
+   "artist": "에피타이저 (Appetizer)",
+   "genre": "발라드"
+  },
+  {
+   "rank": 47,
+   "title": "그때 그 자리에 그 시간에",
+   "artist": "권순호",
+   "genre": "발라드"
+  },
+  {
+   "rank": 48,
+   "title": "어떤 일이 있대도",
+   "artist": "윤토벤",
+   "genre": "발라드"
+  },
+  {
+   "rank": 49,
+   "title": "이제서야 헤어졌어",
+   "artist": "최충현 (화곡동 청개구리)",
+   "genre": "발라드"
+  },
+  {
+   "rank": 50,
+   "title": "AFTER",
+   "artist": "김지웅 (ZEROBASEONE)",
+   "genre": "발라드"
+  }
+ ]
+}

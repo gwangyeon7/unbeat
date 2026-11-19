@@ -1,49 +1,514 @@
 {
  "_meta": "build_catalog를 다시 돌리지 않고 catalog.json에 별칭만 덧붙이는 파일(search_catalog.load가 읽음). 이미 다른 곡/아티스트가 쓰는 별칭은 자동으로 건너뜀(모호 방지).",
  "tracks": {
-  "soyeon:퇴사할게여narr기안84": ["퇴사", "퇴사할게요", "퇴사 할게요", "퇴사할게여", "소연 퇴사할게요", "퇴사할게요 기안84"],
-  "officialhigedandism:pretender": ["프리텐더", "프리텐더 히게단"],
-  "tuki:晩餐歌bansanka": ["만찬가", "반산카", "츠키 만찬가"],
-  "backnumber:heroine": ["히로인", "백넘버 히로인"],
-  "yuuri:betelgeuse": ["베텔기우스", "유우리 베텔기우스"],
-  "kenshiyonezu:lemon": ["요네즈 켄시 레몬", "켄시 레몬"],
-  "kenshiyonezu:irisout": ["아이리스 아웃", "아이리스아웃"],
-  "newjeans:supernatural": ["슈퍼내추럴"],
-  "hearts2hearts:iconicheart": ["아이코닉 하트"],
-  "aespa:kissntell": ["키스 앤 텔", "키스앤텔"],
-  "kenshiyonezu:janedoe": ["제인 도", "제인도"],
-  "novelbright:walkingwithyou": ["워킹 위드 유"],
-  "vaundy:odoriko": ["오도리코"],
-  "imase:nightdancer": ["나이트 댄서", "나이트댄서"],
-  "rokudenashi:onevoice": ["원 보이스"],
-  "nctwish:boymeetsgirl": ["보이 미츠 걸"],
-  "vaundy:kaijunohanauta": ["괴수의 꽃노래", "카이쥬노하나우타"],
-  "yuika:sukidakara": ["스키다카라"],
-  "yuuri:driedflower": ["드라이플라워", "드라이 플라워 유우리"],
-  "yoasobi:夜に駆ける": ["밤을 달리다", "요루니카케루", "요아소비 밤을 달리다"],
-  "yoasobi:たぶん아마도tabun": ["타분", "요아소비 타분"],
-  "kenshiyonezu:kickback": ["킥백", "킥 백"],
-  "aimyon:marigold": ["마리골드"],
-  "ayumuimazu:musubi": ["무스비"],
-  "yuuri:leo": ["유우리 레오", "유우리 leo"],
-  "vaundy:tokyoflash": ["도쿄 플래시"],
-  "tatsuyakitani:whereourblueis": ["웨어 아워 블루 이즈"],
-  "kinggnu:sakayume": ["사카유메"],
-  "nctwish:yoidon": ["요이돈"],
-  "radwimps:sparklemoviever": ["스파클"]
+  "soyeon:퇴사할게여narr기안84": [
+   "퇴사",
+   "퇴사할게요",
+   "퇴사 할게요",
+   "퇴사할게여",
+   "소연 퇴사할게요",
+   "퇴사할게요 기안84"
+  ],
+  "officialhigedandism:pretender": [
+   "프리텐더",
+   "프리텐더 히게단"
+  ],
+  "tuki:晩餐歌bansanka": [
+   "만찬가",
+   "반산카",
+   "츠키 만찬가"
+  ],
+  "backnumber:heroine": [
+   "히로인",
+   "백넘버 히로인"
+  ],
+  "yuuri:betelgeuse": [
+   "베텔기우스",
+   "유우리 베텔기우스"
+  ],
+  "kenshiyonezu:lemon": [
+   "요네즈 켄시 레몬",
+   "켄시 레몬"
+  ],
+  "kenshiyonezu:irisout": [
+   "아이리스 아웃",
+   "아이리스아웃"
+  ],
+  "newjeans:supernatural": [
+   "슈퍼내추럴"
+  ],
+  "hearts2hearts:iconicheart": [
+   "아이코닉 하트"
+  ],
+  "aespa:kissntell": [
+   "키스 앤 텔",
+   "키스앤텔"
+  ],
+  "kenshiyonezu:janedoe": [
+   "제인 도",
+   "제인도"
+  ],
+  "novelbright:walkingwithyou": [
+   "워킹 위드 유"
+  ],
+  "vaundy:odoriko": [
+   "오도리코"
+  ],
+  "imase:nightdancer": [
+   "나이트 댄서",
+   "나이트댄서"
+  ],
+  "rokudenashi:onevoice": [
+   "원 보이스"
+  ],
+  "nctwish:boymeetsgirl": [
+   "보이 미츠 걸"
+  ],
+  "vaundy:kaijunohanauta": [
+   "괴수의 꽃노래",
+   "카이쥬노하나우타"
+  ],
+  "yuika:sukidakara": [
+   "스키다카라"
+  ],
+  "yuuri:driedflower": [
+   "드라이플라워",
+   "드라이 플라워 유우리"
+  ],
+  "yoasobi:夜に駆ける": [
+   "밤을 달리다",
+   "요루니카케루",
+   "요아소비 밤을 달리다"
+  ],
+  "yoasobi:たぶん아마도tabun": [
+   "타분",
+   "요아소비 타분"
+  ],
+  "kenshiyonezu:kickback": [
+   "킥백",
+   "킥 백"
+  ],
+  "aimyon:marigold": [
+   "마리골드"
+  ],
+  "ayumuimazu:musubi": [
+   "무스비"
+  ],
+  "yuuri:leo": [
+   "유우리 레오",
+   "유우리 leo"
+  ],
+  "vaundy:tokyoflash": [
+   "도쿄 플래시"
+  ],
+  "tatsuyakitani:whereourblueis": [
+   "웨어 아워 블루 이즈"
+  ],
+  "kinggnu:sakayume": [
+   "사카유메"
+  ],
+  "nctwish:yoidon": [
+   "요이돈"
+  ],
+  "radwimps:sparklemoviever": [
+   "스파클"
+  ],
+  "ladygaga:pokerface": [
+   "포커페이스",
+   "포커 페이스"
+  ],
+  "ladygaga:badromance": [
+   "배드 로맨스",
+   "배드로맨스"
+  ],
+  "ladygaga:paparazzi": [
+   "파파라치"
+  ],
+  "ladygaga:justdance": [
+   "저스트 댄스",
+   "저스트댄스"
+  ],
+  "ladygaga:diewithasmile": [
+   "다이 위드 어 스마일",
+   "다이위드어스마일"
+  ],
+  "ladygaga:telephone": [
+   "텔레폰"
+  ],
+  "ladygaga:alejandro": [
+   "알레한드로"
+  ],
+  "ladygaga:applause": [
+   "애플로즈"
+  ],
+  "ladygaga:lovegame": [
+   "러브 게임"
+  ],
+  "huntrx:golden": [
+   "골든",
+   "헌트릭스 골든"
+  ],
+  "huntrx:takedown": [
+   "테이크다운",
+   "테이크 다운"
+  ],
+  "huntrx:sodapop": [
+   "소다 팝",
+   "소다팝"
+  ],
+  "huntrx:youridol": [
+   "유어 아이돌"
+  ],
+  "huntrx:whatitsoundslike": [
+   "왓 잇 사운즈 라이크"
+  ],
+  "mrsgreenapple:lilac": [
+   "라일락 미세스",
+   "미세스 그린애플 라일락"
+  ],
+  "mrsgreenapple:inferno": [
+   "인페르노"
+  ],
+  "mrsgreenapple:magic": [
+   "미세스 매직"
+  ],
+  "mrsgreenapple:soranji": [
+   "소란지"
+  ],
+  "kinggnu:teenagerforever": [
+   "틴에이저 포에버"
+  ],
+  "kinggnu:vinyl": [
+   "킹누 바이닐"
+  ],
+  "kinggnu:specialz": [
+   "스페셜즈"
+  ],
+  "officialhigedandism:crybaby": [
+   "크라이 베이비",
+   "크라이베이비"
+  ],
+  "officialhigedandism:mixednuts": [
+   "믹스트 넛츠",
+   "믹스트넛츠"
+  ],
+  "officialhigedandism:subtitle": [
+   "서브타이틀"
+  ],
+  "officialhigedandism:yesterday": [
+   "히게단 예스터데이"
+  ],
+  "gdragon:power": [
+   "지드래곤 파워"
+  ],
+  "gdragon:heartbreaker": [
+   "하트브레이커"
+  ],
+  "gdragon:toobad": [
+   "투 배드",
+   "투배드"
+  ],
+  "gdragon:takeme": [
+   "테이크 미 지드래곤"
+  ],
+  "gdragon:withoutyoufeatrose": [
+   "위다웃 유 로제",
+   "위다웃유"
+  ],
+  "p1harmony:killinit": [
+   "킬링 잇",
+   "킬링잇"
+  ],
+  "p1harmony:siren": [
+   "피원하모니 사이렌"
+  ],
+  "p1harmony:duh": [
+   "피원하모니 덕"
+  ],
+  "p1harmony:doitlikethis": [
+   "두 잇 라이크 디스"
+  ],
+  "plave:way4luv": [
+   "웨이 포 러브",
+   "웨이포러브"
+  ],
+  "plave:pumpupthevolume": [
+   "펌프 업 더 볼륨"
+  ],
+  "plave:waitforyou": [
+   "웨이트 포 유"
+  ],
+  "plave:rewind": [
+   "플레이브 리와인드"
+  ],
+  "plave:dash": [
+   "플레이브 대시"
+  ],
+  "plave:startrace": [
+   "스타 레이스"
+  ],
+  "plave:chromadrift": [
+   "크로마 드리프트"
+  ],
+  "plave:rizz": [
+   "플레이브 리즈"
+  ],
+  "qwer:discord": [
+   "디스코드"
+  ],
+  "qwer:fakeidol": [
+   "페이크 아이돌"
+  ],
+  "nctwish:steady": [
+   "스테디"
+  ],
+  "nctwish:handsup": [
+   "핸즈 업",
+   "핸즈업"
+  ],
+  "nctwish:dunkshot": [
+   "덩크 슛",
+   "덩크슛"
+  ],
+  "nctwish:upgrade": [
+   "업그레이드 위시"
+  ],
+  "nctwish:surf": [
+   "서프 위시"
+  ],
+  "nctwish:poppop": [
+   "팝팝"
+  ],
+  "nctwish:songbirdkoreanversion": [
+   "송버드"
+  ],
+  "nctwish:odetolove": [
+   "오드 투 러브"
+  ],
+  "woodz:drowning": [
+   "드라우닝"
+  ],
+  "woodz:lovemeharder": [
+   "러브 미 하더"
+  ],
+  "woodz:feellike": [
+   "필 라이크"
+  ],
+  "woodz:ihateyou": [
+   "아이 헤이트 유"
+  ],
+  "woodz:amnesia": [
+   "우즈 애므니지아"
+  ],
+  "imase:nagisa": [
+   "나기사"
+  ],
+  "imase:haveaniceday": [
+   "해브 어 나이스 데이"
+  ],
+  "imase:happyorder": [
+   "해피 오더"
+  ],
+  "wavetoearth:seasons": [
+   "시즌스"
+  ],
+  "wavetoearth:homesick": [
+   "홈식"
+  ],
+  "wavetoearth:sunnydays": [
+   "써니 데이즈",
+   "서니 데이즈"
+  ],
+  "wavetoearth:bonfire": [
+   "본파이어"
+  ],
+  "wavetoearth:daisy": [
+   "웨이브투어스 데이지"
+  ],
+  "vaundy:chainsawblood": [
+   "체인소 블러드"
+  ],
+  "vaundy:napori": [
+   "나포리"
+  ],
+  "vaundy:tokimeki": [
+   "토키메키"
+  ],
+  "vaundy:fukakoryoku": [
+   "후카코료쿠"
+  ],
+  "mikimatsubara:mayonakanodoorstaywithme": [
+   "마요나카노 도아",
+   "마요나카노도아",
+   "스테이 위드 미"
+  ],
+  "aimyon:harunohi": [
+   "하루노히"
+  ],
+  "aimyon:luckycolor": [
+   "럭키 컬러"
+  ],
+  "dprlive:jasmine": [
+   "자스민 디피알"
+  ],
+  "dprlive:martiniblue": [
+   "마티니 블루"
+  ],
+  "wiss:mrsunshine": [
+   "미스터 선샤인 위스"
+  ]
  },
  "artists": {
-  "yuuri": ["유우리"],
-  "vaundy": ["바운디", "바우디"],
-  "tuki": ["츠키"],
-  "backnumber": ["백넘버"],
-  "kenshiyonezu": ["요네즈 켄시", "요네즈켄시"],
-  "imase": ["이마세"],
-  "aimyon": ["아이묭"],
-  "kinggnu": ["킹누"],
-  "radwimps": ["래드윔프스"],
-  "mrsgreenapple": ["미세스 그린 애플"],
-  "yoasobi": ["요아소비"],
-  "officialhigedandism": ["히게단", "오피셜 히게단디즘"]
+  "yuuri": [
+   "유우리"
+  ],
+  "vaundy": [
+   "바운디",
+   "바우디"
+  ],
+  "tuki": [
+   "츠키"
+  ],
+  "backnumber": [
+   "백넘버"
+  ],
+  "kenshiyonezu": [
+   "요네즈 켄시",
+   "요네즈켄시"
+  ],
+  "imase": [
+   "이마세"
+  ],
+  "aimyon": [
+   "아이묭"
+  ],
+  "kinggnu": [
+   "킹누"
+  ],
+  "radwimps": [
+   "래드윔프스"
+  ],
+  "mrsgreenapple": [
+   "미세스 그린 애플"
+  ],
+  "yoasobi": [
+   "요아소비"
+  ],
+  "officialhigedandism": [
+   "히게단",
+   "오피셜 히게단디즘"
+  ],
+  "aihiguchi": [
+   "아이 히구치",
+   "히구치 아이"
+  ],
+  "aimers": [
+   "에메르"
+  ],
+  "alldayproject": [
+   "올데이 프로젝트",
+   "올데이프로젝트"
+  ],
+  "ashisland": [
+   "애쉬 아일랜드",
+   "애쉬아일랜드"
+  ],
+  "ayumuimazu": [
+   "이마즈 아유무",
+   "아유무 이마즈"
+  ],
+  "babydontcry": [
+   "베이비 돈 크라이",
+   "베이비돈크라이"
+  ],
+  "dprlive": [
+   "디피알 라이브",
+   "디피알라이브"
+  ],
+  "gdragon": [
+   "지드래곤",
+   "지디"
+  ],
+  "huntrx": [
+   "헌트릭스",
+   "헌트렉스"
+  ],
+  "kanaboon": [
+   "카나분"
+  ],
+  "ladygaga": [
+   "레이디 가가",
+   "레이디가가"
+  ],
+  "mikimatsubara": [
+   "마츠바라 미키",
+   "미키 마츠바라"
+  ],
+  "nctwish": [
+   "엔씨티 위시",
+   "엔시티 위시",
+   "엔씨티위시"
+  ],
+  "nuguyam": [
+   "누구얌"
+  ],
+  "p1harmony": [
+   "피원하모니"
+  ],
+  "ph1": [
+   "피에이치원"
+  ],
+  "plave": [
+   "플레이브"
+  ],
+  "qwer": [
+   "큐더블유이알"
+  ],
+  "riika": [
+   "리카"
+  ],
+  "rokudenashi": [
+   "로쿠데나시"
+  ],
+  "seikomatsuda": [
+   "마츠다 세이코",
+   "세이코 마츠다"
+  ],
+  "spyair": [
+   "스파이에어"
+  ],
+  "supremeteam": [
+   "슈프림팀",
+   "슈프림 팀"
+  ],
+  "takahashiyoko": [
+   "타카하시 요코",
+   "다카하시 요코"
+  ],
+  "taniyuuki": [
+   "타니 유우키",
+   "다니 유우키"
+  ],
+  "tatsuyakitani": [
+   "키타니 타츠야",
+   "기타니 타츠야"
+  ],
+  "wavetoearth": [
+   "웨이브투어스",
+   "웨이브 투 어스"
+  ],
+  "wedemboyz": [
+   "위뎀보이즈",
+   "위 뎀 보이즈"
+  ],
+  "woodz": [
+   "우즈"
+  ],
+  "yuika": [
+   "유이카"
+  ],
+  "natori": [
+   "나토리"
+  ]
  }
 }

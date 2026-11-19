@@ -45,6 +45,8 @@ export default function AddToPlaylistModal({
     setBusyId(null);
     if (result === "failed") return;
     setResults((prev) => ({ ...prev, [playlistId]: result === "duplicate" ? "duplicate" : "added" }));
+    // 담기에 성공하면 "✓ 추가됨"을 잠깐 보여주고 창을 자동으로 닫음(이미 있는 곡 안내일 땐 그대로 둠)
+    if (result !== "duplicate") window.setTimeout(onClose, 600);
   }
 
   function handleCreate() {
@@ -57,7 +59,7 @@ export default function AddToPlaylistModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4"
+      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 px-4"
       onClick={onClose}
     >
       <div

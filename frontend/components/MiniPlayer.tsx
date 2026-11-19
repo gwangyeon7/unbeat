@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import type { Track, LyricsResult, HighlightHint } from "@/lib/api";
 import { getHighlightHint, getLyrics, requestLyrics, searchYoutubeVideo } from "@/lib/api";
 import { isNativeAndroid, createNativePlayer } from "@/lib/nativePlayer";
+import { useQueueActions } from "@/lib/queueContext";
 
 // 이모지(⏮ ⏭)는 기기마다 파란 네모 아이콘으로 보여서, 글자색을 따라가는 SVG로 대체
 function SkipPrevIcon({ className = "h-5 w-5" }: { className?: string }) {
@@ -342,23 +343,6 @@ function PreviewIcon() {
   );
 }
 
-// 즐겨찾기 별 아이콘 — 옆의 번개(하이라이트)·이전/다음 아이콘과 크기를 맞춤(글자 ★ 대신 SVG)
-function StarIcon({ filled }: { filled: boolean }) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill={filled ? "currentColor" : "none"}
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinejoin="round"
-      className="h-4 w-4"
-      aria-hidden="true"
-    >
-      <path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2L12 17.3 6.4 20.2l1.1-6.2L3 9.6l6.2-.9z" />
-    </svg>
-  );
-}
-
 // 확장 화면을 접을 때 쓰는 아래쪽 화살표 아이콘 (유튜브 뮤직 확장 화면의 "접기" 버튼과 같은 위치/역할)
 function ChevronDownIcon() {
   return (
@@ -407,11 +391,56 @@ function TrackThumb({ src, alt, sizeClass }: { src: string | null; alt: string; 
 }
 
 // 재생목록/큐/관련 항목 탭에서 공통으로 쓰는 트랙 한 줄 — 번호·썸네일·곡명·아티스트, 누르면 그 곡으로 전환.
-function ExpandedTrackRow({ track, index, onClick }: { track: Track; index: number; onClick: () => void }) {
+function ExpandedTrackRow({
+  track,
+  index,
+  onClick,
+  onLongPress,
+}: {
+  track: Track;
+  index: number;
+  onClick: () => void;
+  // 꾹 누르면(터치 0.5초) / 우클릭하면 호출 — 곡 ⋮ 메뉴를 열 때 씀
+  onLongPress?: () => void;
+}) {
+  const timerRef = useRef<number | null>(null);
+  const firedRef = useRef(false);
+  function cancel() {
+    if (timerRef.current !== null) {
+      window.clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+  }
   return (
     <button
       type="button"
-      onClick={onClick}
+      onClick={() => {
+        // 꾹 눌러서 메뉴가 열렸으면 손을 뗄 때 따라오는 클릭(재생)은 무시
+        if (firedRef.current) {
+          firedRef.current = false;
+          return;
+        }
+        onClick();
+      }}
+      onTouchStart={() => {
+        if (!onLongPress) return;
+        firedRef.current = false;
+        cancel();
+        timerRef.current = window.setTimeout(() => {
+          firedRef.current = true;
+          onLongPress();
+        }, 500);
+      }}
+      onTouchEnd={cancel}
+      onTouchMove={cancel}
+      onTouchCancel={cancel}
+      onContextMenu={(e) => {
+        if (!onLongPress) return;
+        e.preventDefault();
+        firedRef.current = false;
+        onLongPress();
+      }}
+      style={{ WebkitTouchCallout: "none", WebkitUserSelect: "none", userSelect: "none" }}
       className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-sm hover:bg-white/5"
     >
       <span className="w-4 shrink-0 text-xs text-white/30">{index + 1}</span>
@@ -540,6 +569,10 @@ export default function MiniPlayer({
   // 유튜브 뮤직의 확장 재생 화면(앨범아트 크게 + 다음 트랙/관련 항목/가사 탭)을 참고해서 추가.
   // 미니 플레이어 하단 바의 앨범아트나 곡 정보를 누르면 이 전체화면 오버레이가 열림.
   const [isExpanded, setIsExpanded] = useState(false);
+  // 확장 화면 오른쪽 위 ⋮ 메뉴(즐겨찾기/하이라이트/재생목록 추가/재생 종료)와, 다음 트랙 곡을 꾹 눌렀을 때 열리는 곡 메뉴
+  const [playerMenuOpen, setPlayerMenuOpen] = useState(false);
+  const [queueMenuTrack, setQueueMenuTrack] = useState<Track | null>(null);
+  const queueActions = useQueueActions();
   // 확장 재생 화면에서 아래로 쓸어내리면 크롬의 "당겨서 새로고침"이 먼저 발동해 페이지가 새로고침되던
   // 문제(2026-10-25 폰 확인) — 확장 화면이 열려 있는 동안만 문서 전체의 overscroll을 막아서 새로고침 대신
   // 우리 "쓸어내려 닫기"만 동작하게 함(닫으면 원래대로 복구해서 홈에서는 당겨서 새로고침 가능).
@@ -1444,11 +1477,15 @@ export default function MiniPlayer({
             </button>
             <button
               type="button"
-              onClick={onClose}
-              aria-label="플레이어 닫기"
-              className="rounded-full p-2 text-white/50 hover:bg-white/10 hover:text-white"
+              onClick={() => setPlayerMenuOpen(true)}
+              aria-label="더보기"
+              className="rounded-full p-2 text-white/70 hover:bg-white/10 hover:text-white"
             >
-              ✕
+              <svg viewBox="0 0 24 24" fill="currentColor" className="h-5 w-5" aria-hidden="true">
+                <circle cx="12" cy="5" r="1.8" />
+                <circle cx="12" cy="12" r="1.8" />
+                <circle cx="12" cy="19" r="1.8" />
+              </svg>
             </button>
           </div>
 
@@ -1481,17 +1518,8 @@ export default function MiniPlayer({
                 <p className="text-xl font-semibold">{track.name}</p>
                 <p className="mt-1 text-white/50">{track.artist}</p>
               </div>
-              <div className="flex items-center gap-5">
-                {onToggleFavorite && (
-                  <button
-                    type="button"
-                    onClick={onToggleFavorite}
-                    aria-label={isFavorite ? "즐겨찾기 해제" : "즐겨찾기 추가"}
-                    className="rounded-full p-2 text-yellow-400 hover:bg-white/10"
-                  >
-                    <StarIcon filled={!!isFavorite} />
-                  </button>
-                )}
+              {/* 즐겨찾기/하이라이트는 오른쪽 위 ⋮ 메뉴로 옮김(2026-11-19) — 여기엔 이전/재생/다음만 */}
+              <div className="flex items-center gap-8">
                 <button
                   type="button"
                   onClick={goPrevious}
@@ -1515,18 +1543,6 @@ export default function MiniPlayer({
                   className="rounded-full p-2 text-2xl text-white/80 hover:bg-white/10 hover:text-white"
                 >
                   <SkipNextIcon className="h-7 w-7" />
-                </button>
-                <button
-                  type="button"
-                  onClick={handleToggleHighlightMode}
-                  disabled={!duration}
-                  aria-label={isPreviewing ? "하이라이트 이어듣기 끄기" : "하이라이트 이어듣기"}
-                  title={isPreviewing ? "하이라이트 이어듣기 끄기" : "하이라이트 이어듣기 (켜면 다음 곡도 하이라이트로 이어짐)"}
-                  className={`rounded-full p-2 hover:bg-white/10 disabled:opacity-30 ${
-                    isPreviewing ? "text-accent" : "text-white/50 hover:text-white"
-                  }`}
-                >
-                  <PreviewIcon />
                 </button>
               </div>
               <div className="flex w-full max-w-sm items-center gap-2 text-xs text-white/40">
@@ -1696,6 +1712,7 @@ export default function MiniPlayer({
                                 if (!selectMode) return onSelectQueueTrack?.(t);
                                 toggleSelected(idx);
                               }}
+                              onLongPress={selectMode ? undefined : () => setQueueMenuTrack(t)}
                             />
                           </div>
                         </div>
@@ -1772,6 +1789,84 @@ export default function MiniPlayer({
         </div>,
         document.body
       )}
+
+      {/* 확장 화면의 ⋮ 메뉴 / 다음 트랙 곡 메뉴(꾹 누르기) — body로 직접 그려서 미니 플레이어·하단바보다 항상 위에 뜸 */}
+      {isExpanded &&
+        typeof document !== "undefined" &&
+        (playerMenuOpen || queueMenuTrack) &&
+        createPortal(
+          <div
+            className="fixed inset-0 z-[70] flex items-end justify-center bg-black/60"
+            onClick={() => {
+              setPlayerMenuOpen(false);
+              setQueueMenuTrack(null);
+            }}
+          >
+            <div
+              className="w-full max-w-xl rounded-t-2xl border-t border-white/10 bg-neutral-900 pb-[max(1.5rem,env(safe-area-inset-bottom))]"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {(() => {
+                const t = queueMenuTrack;
+                const head = t ?? track;
+                const items: { label: string; danger?: boolean; disabled?: boolean; onClick: () => void }[] = t
+                  ? [
+                      { label: "지금 재생", onClick: () => onSelectQueueTrack?.(t) },
+                      ...(queueActions
+                        ? [
+                            {
+                              label: "다음에 재생",
+                              onClick: () => queueActions.playNext({ name: t.name, artist: t.artist, image: t.image }),
+                            },
+                          ]
+                        : []),
+                      ...(onSaveQueueToPlaylist
+                        ? [{ label: "재생목록에 추가", onClick: () => onSaveQueueToPlaylist([t]) }]
+                        : []),
+                    ]
+                  : [
+                      ...(onToggleFavorite
+                        ? [{ label: isFavorite ? "즐겨찾기 해제" : "즐겨찾기에 추가", onClick: onToggleFavorite }]
+                        : []),
+                      {
+                        label: isPreviewing ? "하이라이트 이어듣기 끄기" : "하이라이트 이어듣기",
+                        disabled: !duration,
+                        onClick: handleToggleHighlightMode,
+                      },
+                      ...(onAddCurrentToPlaylist
+                        ? [{ label: "재생목록에 추가", onClick: onAddCurrentToPlaylist }]
+                        : []),
+                    ];
+                return (
+                  <>
+                    <div className="border-b border-white/10 px-5 py-4">
+                      <p className="truncate text-sm font-semibold">{head.name}</p>
+                      <p className="truncate text-xs text-white/50">{head.artist}</p>
+                    </div>
+                    {items.map((item) => (
+                      <button
+                        key={item.label}
+                        type="button"
+                        disabled={item.disabled}
+                        onClick={() => {
+                          setPlayerMenuOpen(false);
+                          setQueueMenuTrack(null);
+                          item.onClick();
+                        }}
+                        className={`block w-full px-5 py-3.5 text-left text-sm hover:bg-white/5 disabled:opacity-30 ${
+                          item.danger ? "text-red-400" : "text-white"
+                        }`}
+                      >
+                        {item.label}
+                      </button>
+                    ))}
+                  </>
+                );
+              })()}
+            </div>
+          </div>,
+          document.body
+        )}
     </div>
   );
 }

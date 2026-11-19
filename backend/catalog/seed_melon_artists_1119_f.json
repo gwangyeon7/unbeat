@@ -1,0 +1,55 @@
+{
+ "_meta": {
+  "source": "멜론 검색 화면 직접 옮겨 적음",
+  "captured_at": "2026-11-19",
+  "suggested_aliases_confident": {
+   "트래비스 스캇": [
+    "Travis Scott"
+   ]
+  }
+ },
+ "tracks": [
+  {
+   "title": "FE!N (Feat. Playboi Carti)",
+   "artist": "Travis Scott",
+   "artist_en": "Travis Scott",
+   "artist_ko": "트래비스 스캇",
+   "rank": 1
+  },
+  {
+   "title": "SICKO MODE",
+   "artist": "Travis Scott",
+   "artist_en": "Travis Scott",
+   "artist_ko": "트래비스 스캇",
+   "rank": 2
+  },
+  {
+   "title": "goosebumps (Feat. Kendrick Lamar)",
+   "artist": "Travis Scott",
+   "artist_en": "Travis Scott",
+   "artist_ko": "트래비스 스캇",
+   "rank": 3
+  },
+  {
+   "title": "MY EYES",
+   "artist": "Travis Scott",
+   "artist_en": "Travis Scott",
+   "artist_ko": "트래비스 스캇",
+   "rank": 4
+  },
+  {
+   "title": "Maria I'm Drunk (Feat. Justin Bieber, Young Thug)",
+   "artist": "Travis Scott",
+   "artist_en": "Travis Scott",
+   "artist_ko": "트래비스 스캇",
+   "rank": 5
+  },
+  {
+   "title": "K-POP",
+   "artist": "Travis Scott",
+   "artist_en": "Travis Scott",
+   "artist_ko": "트래비스 스캇",
+   "rank": 6
+  }
+ ]
+}

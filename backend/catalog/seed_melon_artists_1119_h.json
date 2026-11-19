@@ -1,0 +1,230 @@
+{
+ "_meta": {
+  "source": "멜론 검색 화면 직접 옮겨 적음",
+  "captured_at": "2026-11-19",
+  "note": "EXO-K 표기 곡(중독)은 EXO로 통일",
+  "suggested_aliases_confident": {
+   "인피니트": [
+    "INFINITE"
+   ],
+   "엑소": [
+    "EXO"
+   ],
+   "방탄소년단": [
+    "BTS"
+   ]
+  }
+ },
+ "tracks": [
+  {
+   "title": "추격자",
+   "artist": "인피니트",
+   "artist_en": "INFINITE",
+   "artist_ko": "인피니트",
+   "rank": 1
+  },
+  {
+   "title": "내꺼하자",
+   "artist": "인피니트",
+   "artist_en": "INFINITE",
+   "artist_ko": "인피니트",
+   "rank": 2
+  },
+  {
+   "title": "Man In Love (남자가 사랑할때)",
+   "artist": "인피니트",
+   "artist_en": "INFINITE",
+   "artist_ko": "인피니트",
+   "rank": 3
+  },
+  {
+   "title": "파라다이스 (Paradise)",
+   "artist": "인피니트",
+   "artist_en": "INFINITE",
+   "artist_ko": "인피니트",
+   "rank": 4
+  },
+  {
+   "title": "하얀 고백 (Lately)",
+   "artist": "인피니트",
+   "artist_en": "INFINITE",
+   "artist_ko": "인피니트",
+   "rank": 5
+  },
+  {
+   "title": "Destiny",
+   "artist": "인피니트",
+   "artist_en": "INFINITE",
+   "artist_ko": "인피니트",
+   "rank": 6
+  },
+  {
+   "title": "Last Romeo",
+   "artist": "인피니트",
+   "artist_en": "INFINITE",
+   "artist_ko": "인피니트",
+   "rank": 7
+  },
+  {
+   "title": "Nothing's Over",
+   "artist": "인피니트",
+   "artist_en": "INFINITE",
+   "artist_ko": "인피니트",
+   "rank": 8
+  },
+  {
+   "title": "Bad",
+   "artist": "인피니트",
+   "artist_en": "INFINITE",
+   "artist_ko": "인피니트",
+   "rank": 9
+  },
+  {
+   "title": "태풍 (The Eye)",
+   "artist": "인피니트",
+   "artist_en": "INFINITE",
+   "artist_ko": "인피니트",
+   "rank": 10
+  },
+  {
+   "title": "첫 눈",
+   "artist": "EXO",
+   "artist_en": "EXO",
+   "artist_ko": "엑소",
+   "rank": 11
+  },
+  {
+   "title": "으르렁 (Growl)",
+   "artist": "EXO",
+   "artist_en": "EXO",
+   "artist_ko": "엑소",
+   "rank": 12
+  },
+  {
+   "title": "중독 (Overdose)",
+   "artist": "EXO",
+   "artist_en": "EXO",
+   "artist_ko": "엑소",
+   "rank": 13
+  },
+  {
+   "title": "나비소녀 (Don't Go)",
+   "artist": "EXO",
+   "artist_en": "EXO",
+   "artist_ko": "엑소",
+   "rank": 14
+  },
+  {
+   "title": "LOVE ME RIGHT",
+   "artist": "EXO",
+   "artist_en": "EXO",
+   "artist_ko": "엑소",
+   "rank": 15
+  },
+  {
+   "title": "Tempo",
+   "artist": "EXO",
+   "artist_en": "EXO",
+   "artist_ko": "엑소",
+   "rank": 16
+  },
+  {
+   "title": "Love Shot",
+   "artist": "EXO",
+   "artist_en": "EXO",
+   "artist_ko": "엑소",
+   "rank": 17
+  },
+  {
+   "title": "Lucky",
+   "artist": "EXO",
+   "artist_en": "EXO",
+   "artist_ko": "엑소",
+   "rank": 18
+  },
+  {
+   "title": "CALL ME BABY",
+   "artist": "EXO",
+   "artist_en": "EXO",
+   "artist_ko": "엑소",
+   "rank": 19
+  },
+  {
+   "title": "Monster",
+   "artist": "EXO",
+   "artist_en": "EXO",
+   "artist_ko": "엑소",
+   "rank": 20
+  },
+  {
+   "title": "Dynamite",
+   "artist": "방탄소년단",
+   "artist_en": "BTS",
+   "artist_ko": "방탄소년단",
+   "rank": 21
+  },
+  {
+   "title": "I NEED U",
+   "artist": "방탄소년단",
+   "artist_en": "BTS",
+   "artist_ko": "방탄소년단",
+   "rank": 22
+  },
+  {
+   "title": "봄날",
+   "artist": "방탄소년단",
+   "artist_en": "BTS",
+   "artist_ko": "방탄소년단",
+   "rank": 23
+  },
+  {
+   "title": "작은 것들을 위한 시 (Boy With Luv) (Feat. Halsey)",
+   "artist": "방탄소년단",
+   "artist_en": "BTS",
+   "artist_ko": "방탄소년단",
+   "rank": 24
+  },
+  {
+   "title": "MIC Drop",
+   "artist": "방탄소년단",
+   "artist_en": "BTS",
+   "artist_ko": "방탄소년단",
+   "rank": 25
+  },
+  {
+   "title": "DNA",
+   "artist": "방탄소년단",
+   "artist_en": "BTS",
+   "artist_ko": "방탄소년단",
+   "rank": 26
+  },
+  {
+   "title": "Butter",
+   "artist": "방탄소년단",
+   "artist_en": "BTS",
+   "artist_ko": "방탄소년단",
+   "rank": 27
+  },
+  {
+   "title": "FAKE LOVE",
+   "artist": "방탄소년단",
+   "artist_en": "BTS",
+   "artist_ko": "방탄소년단",
+   "rank": 28
+  },
+  {
+   "title": "Save ME",
+   "artist": "방탄소년단",
+   "artist_en": "BTS",
+   "artist_ko": "방탄소년단",
+   "rank": 29
+  },
+  {
+   "title": "소우주 (Mikrokosmos)",
+   "artist": "방탄소년단",
+   "artist_en": "BTS",
+   "artist_ko": "방탄소년단",
+   "rank": 30
+  }
+ ]
+}

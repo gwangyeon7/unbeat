@@ -14,6 +14,8 @@ export type SearchSongSection = {
   tracks: Track[];
   // 처음에 보여줄 곡 수(기본 8) — 아티스트 검색은 곡이 쫙 나오도록 크게 줌
   initialVisible?: number;
+  // "top" = 검색한 곡 한 개를 큰 카드로(유튜브 뮤직식). 없으면 일반 곡 목록
+  variant?: "top";
 };
 
 // 유튜브에서 가져온 제목에 &#39; 같은 HTML 엔티티가 그대로 섞여 오는 경우가 있어서 화면에 보일 때만 풀어줌
@@ -131,27 +133,8 @@ export default function MobileSearchResults({
 
   return (
     <div className="flex flex-col gap-8 sm:hidden">
-      {/* 멜론식 글자 탭: 선택된 탭은 굵은 흰 글자 + 강조색 밑줄 */}
-      <div className="-mt-1 flex gap-6 border-b border-white/10">
-        {FILTERS.map(({ value, label }) => {
-          const active = filter === value;
-          return (
-            <button
-              key={value}
-              type="button"
-              onClick={() => onFilterChange(value)}
-              className={`-mb-px border-b-2 pb-2.5 text-sm ${
-                active
-                  ? "border-accent font-bold text-white"
-                  : "border-transparent text-white/50 hover:text-white/70"
-              }`}
-            >
-              {label}
-            </button>
-          );
-        })}
-      </div>
-
+      {/* (2026-11-19) 전체/노래/아티스트 탭은 숨김 — 결과가 한 화면에 다 나와서 필요 없다는 피드백.
+          filter 값은 그대로 두되 화면에선 항상 "전체"로 동작(onFilterChange/FILTERS는 안 씀). */}
       {showArtists && artists.length > 0 && (
         <section>
           {sectionHeader("아티스트", artistNote)}
@@ -203,6 +186,27 @@ export default function MobileSearchResults({
 
       {showSongs &&
         visibleSongSections.map((section) => {
+          if (section.variant === "top") {
+            // 검색한 곡: 제목 없이 작은 카드 한 줄 — 큰 커버 + 제목/아티스트 + 재생 버튼, 나머지 기능은 ⋮ 메뉴
+            const track = section.tracks[0];
+            return (
+              <section key={section.key} className="-mt-3">
+                <div className="rounded-xl bg-white/5 p-2">
+                  <CompactTrackRow
+                    large
+                    title={decodeEntities(track.name)}
+                    subtitle={decodeEntities(track.artist)}
+                    image={track.image}
+                    isFavorite={isTrackFavorite(track)}
+                    onPlay={() => onPlay(track)}
+                    onToggleFavorite={() => onToggleFavoriteTrack(track)}
+                    onAddToPlaylist={() => onAddToPlaylist(track)}
+                    onViewArtist={() => onViewArtist(track)}
+                  />
+                </div>
+              </section>
+            );
+          }
           const isOpen = expanded.has(section.key);
           const limit = section.initialVisible ?? INITIAL_VISIBLE;
           const shown = isOpen ? section.tracks : section.tracks.slice(0, limit);

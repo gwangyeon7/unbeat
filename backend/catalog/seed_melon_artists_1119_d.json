@@ -1,0 +1,154 @@
+{
+ "_meta": {
+  "source": "멜론 검색 화면(음율, 미로)을 직접 보고 옮겨 적은 시드",
+  "captured_at": "2026-11-19",
+  "note": "음율(그룹)과 Miiro(미로, 솔로 래퍼/힙합)는 다른 아티스트. 음율 영문명은 미확인이라 비워 둠.",
+  "suggested_aliases_confident": {
+   "미로": [
+    "Miiro"
+   ]
+  }
+ },
+ "tracks": [
+  {
+   "title": "피차일반 (彼此一般)",
+   "artist": "음율",
+   "artist_en": "",
+   "artist_ko": "음율",
+   "rank": 1
+  },
+  {
+   "title": "파도혁명",
+   "artist": "음율",
+   "artist_en": "",
+   "artist_ko": "음율",
+   "rank": 2
+  },
+  {
+   "title": "반비례 (反比例)",
+   "artist": "음율",
+   "artist_en": "",
+   "artist_ko": "음율",
+   "rank": 3
+  },
+  {
+   "title": "시시한 청춘에 남기는 노래",
+   "artist": "음율",
+   "artist_en": "",
+   "artist_ko": "음율",
+   "rank": 4
+  },
+  {
+   "title": "행복이론 (幸福理論)",
+   "artist": "음율",
+   "artist_en": "",
+   "artist_ko": "음율",
+   "rank": 5
+  },
+  {
+   "title": "월담소녀",
+   "artist": "음율",
+   "artist_en": "",
+   "artist_ko": "음율",
+   "rank": 6
+  },
+  {
+   "title": "시계태엽 오렌지",
+   "artist": "음율",
+   "artist_en": "",
+   "artist_ko": "음율",
+   "rank": 7
+  },
+  {
+   "title": "체스카에게 여름을",
+   "artist": "음율",
+   "artist_en": "",
+   "artist_ko": "음율",
+   "rank": 8
+  },
+  {
+   "title": "희비교차",
+   "artist": "음율",
+   "artist_en": "",
+   "artist_ko": "음율",
+   "rank": 9
+  },
+  {
+   "title": "절망 속에서 춤을 추어라",
+   "artist": "음율",
+   "artist_en": "",
+   "artist_ko": "음율",
+   "rank": 10
+  },
+  {
+   "title": "계절범죄 (Feat. 새빛)",
+   "artist": "Miiro",
+   "artist_en": "Miiro",
+   "artist_ko": "미로",
+   "rank": 11
+  },
+  {
+   "title": "괴물이 피는 숲 (Feat. Dovlvl (도비비))",
+   "artist": "Miiro",
+   "artist_en": "Miiro",
+   "artist_ko": "미로",
+   "rank": 12
+  },
+  {
+   "title": "목숨 (Feat. 아카네 리제)",
+   "artist": "Miiro",
+   "artist_en": "Miiro",
+   "artist_ko": "미로",
+   "rank": 13
+  },
+  {
+   "title": "헤일로 (Feat. 도비비, 새빛)",
+   "artist": "Miiro",
+   "artist_en": "Miiro",
+   "artist_ko": "미로",
+   "rank": 14
+  },
+  {
+   "title": "NEMESIS (Feat. 새빛)",
+   "artist": "Miiro",
+   "artist_en": "Miiro",
+   "artist_ko": "미로",
+   "rank": 15
+  },
+  {
+   "title": "엔딩. (Feat. 새빛)",
+   "artist": "Miiro",
+   "artist_en": "Miiro",
+   "artist_ko": "미로",
+   "rank": 16
+  },
+  {
+   "title": "SHOUT OUT! (Feat. 새빛)",
+   "artist": "Miiro",
+   "artist_en": "Miiro",
+   "artist_ko": "미로",
+   "rank": 17
+  },
+  {
+   "title": "미로 (Feat. 새빛)",
+   "artist": "Miiro",
+   "artist_en": "Miiro",
+   "artist_ko": "미로",
+   "rank": 18
+  },
+  {
+   "title": "SAVE!",
+   "artist": "Miiro",
+   "artist_en": "Miiro",
+   "artist_ko": "미로",
+   "rank": 19
+  },
+  {
+   "title": "양자실린더 (Feat. Marochi (마로치))",
+   "artist": "Miiro",
+   "artist_en": "Miiro",
+   "artist_ko": "미로",
+   "rank": 20
+  }
+ ]
+}

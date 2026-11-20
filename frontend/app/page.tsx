@@ -388,6 +388,8 @@ export default function Home() {
   // 없이 바로 signOut()을 호출해버려서, "로그인이 됐는지 안 됐는지 전혀 안 보인다"는 혼란을
   // 실제로 겪음 — 로그인됐을 때만 이메일+로그아웃 버튼이 있는 작은 바텀시트를 보여주도록 분리.
   const [isProfileSheetOpen, setIsProfileSheetOpen] = useState(false);
+  // 로그아웃 확인 창("로그아웃 하시겠습니까?") — 프로필 시트/내 프로필 화면의 로그아웃 버튼이 모두 이걸 거침
+  const [isLogoutConfirmOpen, setIsLogoutConfirmOpen] = useState(false);
   // 트랙 카드의 "+" 버튼을 누르면(1곡) 또는 재생목록 상세 화면에서 여러 곡을 체크하고 "담기"를
   // 누르면(여러 곡) 이 상태가 채워지고, 화면 중앙에 AddToPlaylistModal이 뜸 — 항상 배열로 통일.
   const [addToPlaylistTracks, setAddToPlaylistTracks] = useState<
@@ -1382,16 +1384,21 @@ export default function Home() {
         }
       }
       if (!data) throw lastErr;
-      setDiaryResult(data);
-      discoverByMood(data.moodTag)
-        .then((tracks) => {
-          setDiaryResult((prev) =>
-            prev && prev.moodTag === data.moodTag
-              ? { ...prev, domesticTracks: tracks.domesticTracks, internationalTracks: tracks.internationalTracks }
-              : prev
-          );
-        })
-        .catch((e) => console.warn("[diary] 추천곡 조회 실패:", e));
+      // 위로 문구와 추천곡이 한 번에 같이 뜨도록, 곡까지 받은 뒤에 한꺼번에 보여줌(곡 조회는 실패하면 한 번 더
+      // 시도하고, 끝내 실패하면 문구만 먼저 보여줌).
+      let moodTracks: { domesticTracks: Track[]; internationalTracks: Track[] } | null = null;
+      for (let attempt = 0; attempt < 2 && !moodTracks; attempt++) {
+        try {
+          moodTracks = await discoverByMood(data.moodTag);
+        } catch (e) {
+          console.warn("[diary] 추천곡 조회 실패:", e);
+        }
+      }
+      setDiaryResult(
+        moodTracks
+          ? { ...data, domesticTracks: moodTracks.domesticTracks, internationalTracks: moodTracks.internationalTracks }
+          : data
+      );
       const entry: DiaryHistoryEntry = {
         date: new Date().toISOString().slice(0, 10),
         at: new Date().toISOString(),
@@ -3150,14 +3157,54 @@ export default function Home() {
           </button>
           <button
             type="button"
-            onClick={async () => {
-              await supabase?.auth.signOut();
-              setIsProfileSheetOpen(false);
-            }}
+            onClick={() => setIsLogoutConfirmOpen(true)}
             className="w-full rounded-md border border-white/15 px-3 py-2.5 text-sm text-white/80 hover:bg-white/10"
           >
             로그아웃
           </button>
+        </div>
+      </div>
+    )}
+
+    {/* 로그아웃 확인 — 어떤 계정에서 로그아웃하는지 보여주고, 실수로 누른 경우 취소할 수 있게 함 */}
+    {isLogoutConfirmOpen && (
+      <div
+        className="fixed inset-0 z-[80] flex items-center justify-center bg-black/70 px-6"
+        onClick={() => setIsLogoutConfirmOpen(false)}
+      >
+        <div
+          className="w-full max-w-sm rounded-2xl border border-white/10 bg-neutral-900 p-5"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <p className="text-base font-semibold">로그아웃 하시겠습니까?</p>
+          {userEmail && (
+            <p className="mt-2 break-all text-xs text-white/50">
+              현재 계정: <span className="text-white/80">{userEmail}</span>
+            </p>
+          )}
+          <div className="mt-5 flex gap-2">
+            <button
+              type="button"
+              onClick={() => setIsLogoutConfirmOpen(false)}
+              className="flex-1 rounded-md border border-white/15 px-3 py-2.5 text-sm text-white/80 hover:bg-white/10"
+            >
+              취소
+            </button>
+            <button
+              type="button"
+              onClick={async () => {
+                await supabase?.auth.signOut();
+                setIsLogoutConfirmOpen(false);
+                setIsProfileSheetOpen(false);
+                setIsPublicFeedOpen(false);
+                setViewingProfileNickname(null);
+                setProfileInfo(null);
+              }}
+              className="flex-1 rounded-md bg-accent px-3 py-2.5 text-sm font-semibold text-black hover:opacity-90"
+            >
+              로그아웃
+            </button>
+          </div>
         </div>
       </div>
     )}
@@ -3500,12 +3547,8 @@ export default function Home() {
         profileInfo={profileInfo}
         onToggleFollow={handleToggleFollow}
         onSaveBio={handleSaveBio}
-        onSignOut={async () => {
-          await supabase?.auth.signOut();
-          setIsPublicFeedOpen(false);
-          setViewingProfileNickname(null);
-          setProfileInfo(null);
-        }}
+        onSignOut={() => setIsLogoutConfirmOpen(true)}
+        accountEmail={userEmail}
       />
     )}
 

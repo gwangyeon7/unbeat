@@ -2398,6 +2398,11 @@ def _drop_title_named_artists(q: str, artists: list, tracks: list) -> list:
             if any(ALIAS_CATALOG_NORMALIZE(t.get("name", "")) == key
                    and ALIAS_CATALOG_NORMALIZE(t.get("artist", "")) != key for t in tracks[:3]):
                 continue
+        elif key in ALIAS_CATALOG_NORMALIZE(a.get("name", "")) and listeners < 50000:
+            # (2026-11-20) "졸업" → "방탄소년단들의 졸업", "들의 졸업 (Graduation)"처럼 곡/앨범 제목이 이름에 들어간
+            # 가짜 "아티스트"가 카드로 뜨던 문제. 별칭표에 없는 무명 아티스트면 곡 검색으로 보고 카드를 뺌.
+            if not ALIAS_CATALOG.find_artist(a.get("officialName") or a.get("name") or ""):
+                continue
         kept.append(a)
     return kept
 

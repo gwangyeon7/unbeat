@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { Playlist, PlaylistTrack } from "@/lib/playlistApi";
 import { thumbUrl } from "@/lib/imageSize";
@@ -67,6 +67,7 @@ export default function PlaylistDetailOverlay({
 }: PlaylistDetailOverlayProps) {
   // 곡 행 ⋮를 누르면 열리는 바텀시트의 대상 곡
   const [menuTrack, setMenuTrack] = useState<PlaylistTrack | null>(null);
+  const swipeStartRef = useRef<{ x: number; y: number } | null>(null);
   const list = tracks ?? [];
   function handleRowClick(t: PlaylistTrack) {
     onPlayTrack({ name: t.trackName, artist: t.artistName, image: t.imageUrl });
@@ -75,7 +76,22 @@ export default function PlaylistDetailOverlay({
   if (typeof document === "undefined") return null;
 
   return createPortal(
-    <div className="fixed inset-0 z-40 flex flex-col bg-neutral-950" style={{ paddingBottom: "var(--mini-pad, 0px)" }}>
+    <div
+      className="fixed inset-0 z-40 flex flex-col bg-neutral-950"
+      style={{ paddingBottom: "var(--mini-pad, 0px)" }}
+      // 왼쪽 가장자리에서 오른쪽으로 쓸면 닫기(보관함으로 복귀)
+      onTouchStart={(e) => {
+        const t = e.touches[0];
+        swipeStartRef.current = t.clientX <= 60 ? { x: t.clientX, y: t.clientY } : null;
+      }}
+      onTouchEnd={(e) => {
+        const start = swipeStartRef.current;
+        swipeStartRef.current = null;
+        if (!start) return;
+        const t = e.changedTouches[0];
+        if (t.clientX - start.x > 70 && Math.abs(t.clientY - start.y) < 60) onClose();
+      }}
+    >
       {/* 헤더: 양쪽 칸 너비를 같게(w-20) 둬서 제목이 항상 정가운데. 오른쪽엔 공개/비공개 전환만 둠 —
           예전 "선택" 버튼과 선택 모드는 없애고, 그 안에 있던 기능은 곡마다 있는 ⋮ 메뉴로 옮김. */}
       <div className="flex items-center gap-2 border-b border-white/10 px-4 py-4">

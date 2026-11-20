@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useSwipeBack } from "@/lib/useSwipeBack";
 import { createPortal } from "react-dom";
 import {
   followUser,
@@ -551,6 +552,8 @@ export default function RankingPage({
           : categoryFiltered;
   const overallRank = (id: number) => publicPlaylists.findIndex((p) => p.id === id) + 1;
 
+  const swipeBack = useSwipeBack(screen === "feed" ? onClose : onBack);
+
   const title =
     screen === "tracks"
       ? currentTrackPlaylist?.name ?? "재생목록"
@@ -559,7 +562,11 @@ export default function RankingPage({
         : "인기 차트";
 
   return createPortal(
-    <div className="fixed inset-0 z-40 flex flex-col bg-neutral-950" style={{ paddingBottom: "var(--mini-pad, 0px)" }}>
+    <div
+      className="fixed inset-0 z-40 flex flex-col bg-neutral-950"
+      style={{ paddingBottom: "var(--mini-pad, 0px)" }}
+      {...swipeBack}
+    >
       <div className="flex items-center justify-between border-b border-white/10 px-6 py-4">
         <button
           type="button"

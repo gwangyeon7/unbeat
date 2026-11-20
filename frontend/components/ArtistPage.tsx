@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { getArtistTopTracks, type Track } from "@/lib/api";
 import CompactTrackRow from "./CompactTrackRow";
+import { useSwipeBack } from "@/lib/useSwipeBack";
 
 type ArtistPageProps = {
   // 화면 제목에 쓰는 표시 이름(한글 우선)
@@ -63,8 +64,10 @@ export default function ArtistPage({
     };
   }, [artistName, lookupName]);
 
+  const swipeBack = useSwipeBack(onClose);
+
   return (
-    <div className="fixed inset-0 z-40 flex flex-col bg-black text-white" style={{ paddingBottom: "var(--mini-pad, 0px)" }}>
+    <div className="fixed inset-0 z-40 flex flex-col bg-black text-white" style={{ paddingBottom: "var(--mini-pad, 0px)" }} {...swipeBack}>
       <header className="flex items-center gap-3 border-b border-white/10 px-4 py-4">
         <button onClick={onClose} aria-label="뒤로" className="text-xl text-white/80">
           ‹

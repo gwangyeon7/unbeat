@@ -2464,7 +2464,24 @@ export default function Home() {
       {/* 모바일 "보관함" 전체화면 서랍 — 즐겨찾기 아티스트/즐겨찾기 곡/내 재생목록을 데스크톱
           사이드바와 완전히 같은 내용(renderFavoriteArtists/renderLibraryPanel)으로 보여줌. */}
       {isLibraryOpen && (
-        <div className="animate-slide-up-in fixed inset-0 z-50 flex h-screen w-screen flex-col bg-black sm:hidden" style={{ paddingBottom: "var(--mini-pad, 0px)" }}>
+        <div
+          className="animate-slide-up-in fixed inset-0 z-50 flex h-screen w-screen flex-col bg-black sm:hidden"
+          style={{ paddingBottom: "var(--mini-pad, 0px)" }}
+          // 왼쪽 가장자리에서 오른쪽으로 쓸면 보관함 닫기(검색 결과 화면과 같은 제스처)
+          onTouchStart={(e) => {
+            const t = e.touches[0];
+            swipeBackRef.current = t.clientX <= 60 ? { x: t.clientX, y: t.clientY } : null;
+          }}
+          onTouchEnd={(e) => {
+            const start = swipeBackRef.current;
+            swipeBackRef.current = null;
+            if (!start) return;
+            const t = e.changedTouches[0];
+            if (t.clientX - start.x > 70 && Math.abs(t.clientY - start.y) < 60) {
+              setIsLibraryOpen(false);
+            }
+          }}
+        >
           <div className="flex items-center gap-2 border-b border-white/10 p-3">
             <button
               type="button"

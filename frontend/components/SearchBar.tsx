@@ -3,6 +3,7 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { searchSuggest, type SearchSuggestion } from "@/lib/api";
+import { useSwipeBack } from "@/lib/useSwipeBack";
 
 export type RecentSearchEntry = { query: string; image: string | null };
 
@@ -34,6 +35,7 @@ const SearchBar = forwardRef<SearchBarHandle, SearchBarProps>(function SearchBar
   // 열리는 패턴을 씀. "폰 규격끼리 공통적인 UX부터 맞추고 싶다"는 요청으로 이 패턴을 도입 —
   // 데스크톱(sm 이상)은 기존 상시 노출 입력창을 그대로 두고, 모바일(sm 미만)만 이 방식으로 바꿈.
   const [isMobileOpen, setIsMobileOpen] = useState(false);
+  const swipeBack = useSwipeBack(() => setIsMobileOpen(false));
   // 유튜브 뮤직 검색창처럼 "numb"까지만 쳐도 "Numb Little Bug" 같은 후보가 뜨게 해달라는
   // 요청으로 추가 — 값이 없을 때는 기존처럼 '최근 검색'을, 두 글자 이상 입력하면 이 자동완성
   // 후보로 드롭다운 내용을 바꿔치기함.
@@ -355,7 +357,7 @@ const SearchBar = forwardRef<SearchBarHandle, SearchBarProps>(function SearchBar
           z-50을 줘도 header 바깥의 하단 탭바(z-30, 하단 탭바 도입으로 신규)보다 아래에
           깔려 버림 — createPortal로 body 바로 밑에 그려서 그 제약을 벗어나게 함. */}
       {isMobileOpen && createPortal(
-        <div className="animate-slide-up-in fixed inset-0 z-50 flex h-screen w-screen flex-col bg-black sm:hidden">
+        <div className="animate-slide-up-in fixed inset-0 z-50 flex h-screen w-screen flex-col bg-black sm:hidden" {...swipeBack}>
           <form onSubmit={handleSubmit} className="flex items-center gap-2 border-b border-white/10 p-3">
             <button
               type="button"

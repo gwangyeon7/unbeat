@@ -898,6 +898,23 @@ export default function Home() {
     }
   }
 
+  // 로그인/로그아웃/세션 복원으로 계정이 바뀌면 계정 기준 목록(재생목록·즐겨찾기)을 다시 받음.
+  // 첫 로드 때는 토큰 복원 전이라 세션 기준(빈 목록)으로 받아졌다가, 로그인 후에도 그대로 남아
+  // "프로필엔 재생목록이 보이는데 보관함은 비어 있는" 문제가 있었음.
+  const prevUserEmailRef = useRef<string | null | undefined>(undefined);
+  useEffect(() => {
+    if (prevUserEmailRef.current === undefined) {
+      prevUserEmailRef.current = userEmail;
+      return;
+    }
+    if (prevUserEmailRef.current === userEmail) return;
+    prevUserEmailRef.current = userEmail;
+    getPlaylists().then(setPlaylists).catch(() => {});
+    getFavorites().then(setFavorites).catch(() => {});
+    getFavoriteTracks().then(setFavoriteTracks).catch(() => {});
+    getRecentPlays().then((data) => setRecentPlays(data.tracks)).catch(() => {});
+  }, [userEmail]);
+
   useEffect(() => {
     // 새로고침해도 로그인 상태가 유지되도록 Supabase가 localStorage에 저장해둔 세션을 복원.
     // 이후 로그인/로그아웃/토큰 자동 갱신 등 모든 인증 상태 변화를 이 구독 하나로 계속 반영함.
@@ -1353,7 +1370,18 @@ export default function Home() {
     try {
       // 공감 메시지를 먼저 받아 바로 보여주고, 추천곡은 이어서 따로 채움(곡 조회가 느려도
       // "위로받기" 응답이 같이 늦어지지 않게)
-      const data = await getDiaryReflection(text, false);
+      // 무료 서버가 깨어나는 중이거나 AI 응답이 일시적으로 실패해도 사용자가 다시 누르지 않게 자동 재시도(최대 3번)
+      let data: Awaited<ReturnType<typeof getDiaryReflection>> | null = null;
+      let lastErr: unknown = null;
+      for (let attempt = 0; attempt < 3 && !data; attempt++) {
+        try {
+          data = await getDiaryReflection(text, false);
+        } catch (e) {
+          lastErr = e;
+          await new Promise((r) => setTimeout(r, 1500));
+        }
+      }
+      if (!data) throw lastErr;
       setDiaryResult(data);
       discoverByMood(data.moodTag)
         .then((tracks) => {

@@ -481,7 +481,7 @@ def resolve_korean_title(artist: str, track_name: str, assume_domestic: bool = F
 
     title = None
     try:
-        client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+        client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY, timeout=8.0, max_retries=0)
         message = client.messages.create(
             model=ANTHROPIC_MODEL,
             max_tokens=100,
@@ -559,7 +559,7 @@ def resolve_korean_artist_name(artist: str, assume_domestic: bool = False) -> Op
 
     name = None
     try:
-        client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+        client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY, timeout=8.0, max_retries=0)
         message = client.messages.create(
             model=ANTHROPIC_MODEL,
             max_tokens=60,
@@ -5044,7 +5044,8 @@ def discover_by_mood(tag: str, x_session_id: Optional[str] = Header(default=None
     # 자체가 아니라 매 요청 최종 결과에만 적용해서 별도 캐시 버전업 불필요(풀 캐시와 무관).
     # international_tracks는 resolve_korean_artist_name 내부에서 _is_domestic_artist로 어차피
     # 걸러지니 굳이 안 거쳐도 되지만, 명시적으로 domestic만 거쳐 불필요한 호출을 아예 줄임.
-    domestic_tracks = _apply_korean_titles(domestic_tracks, assume_domestic=True)
+    # 한글 보완은 최대 6초만 기다림 — 못 끝낸 곡은 원본 표기로 먼저 내려주고, 스레드는 계속 돌아 캐시에 남김
+    domestic_tracks = _apply_korean_titles(domestic_tracks, assume_domestic=True, deadline=6.0)
 
     if x_session_id:
         total = len(domestic_tracks) + len(international_tracks)

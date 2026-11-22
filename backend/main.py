@@ -4623,6 +4623,12 @@ _CURATED_EXTRA: dict[str, list[tuple[str, str]]] = {
         ("The Black Skirts", "Everything"), ("Hyukoh", "Wi Ing Wi Ing"), ("AKMU", "시간과 낙엽"),
         ("Busker Busker", "벚꽃 엔딩"), ("Lee Mujin", "신호등"), ("Bolbbalgan4", "나의 사춘기에게"),
         ("SE SO NEON", "파도"), ("Jukjae", "별 보러 가자"), ("QWER", "고민중독"),
+        # (2026-11-22) 출퇴근길은 감성 인디 위주로 — 카탈로그에 있는 달담/유다빈밴드/최유리/YB 곡 추가
+        ("달담", "졸업"), ("달담", "청춘기수"), ("달담", "반딧불이"), ("달담", "여름도둑"),
+        ("유다빈밴드", "좋지 아니한가"), ("유다빈밴드", "항해"), ("유다빈밴드", "LETTER"),
+        ("유다빈밴드", "오늘은 잠에 들 거예요"), ("유다빈밴드", "우리의 밤"),
+        ("최유리", "숲"), ("최유리", "잘 지내자, 우리"), ("최유리", "밤, 바다"), ("최유리", "동그라미"),
+        ("YB", "나는 나비"), ("YB", "너를 보내고"),
     ],
 }
 for _mood, _extra in _CURATED_EXTRA.items():
@@ -4993,7 +4999,7 @@ def discover_by_mood(tag: str, x_session_id: Optional[str] = Header(default=None
     # 버전 때 잘못 매칭된 채로 캐싱된 풀(curated-track:v1 캐시 기반)이 안 섞이도록 재버전업.
     # v9: "sad"에서 Gee/Supernova 같은 무관 k-pop이 섞이는 버그 발견 후 전체 무드 감사 — sad/love/
     # study/chill/party 큐레이션 목록을 실제 Last.fm 매칭 검증 거쳐 재구성(아래 딕셔너리 주석 참고).
-    cache_key = f"discover-by-mood:v12:{tag.lower().strip()}"
+    cache_key = f"discover-by-mood:v13:{tag.lower().strip()}"
     pool = get_cached(cache_key)
 
     if pool is None:
@@ -5010,7 +5016,13 @@ def discover_by_mood(tag: str, x_session_id: Optional[str] = Header(default=None
         if len(domestic) < DOMESTIC_POOL_SIZE:
             seen = {(t["artist"].lower(), t["name"].lower()) for t in domestic}
             curated_pairs = CURATED_DOMESTIC_MOOD_TRACKS.get(tag.lower().strip(), [])
-            for track in _resolve_curated_tracks(curated_pairs):
+            curated_resolved = _resolve_curated_tracks(curated_pairs)
+            # (2026-11-22) 직접 고른 곡이 충분하면(15곡 이상) Last.fm 태그에서 딸려온 국내 곡은 섞지 않음 —
+            # "출퇴근길인데 노래가 별로"라는 피드백. 태그 곡은 무드와 무관하게 인기곡이 섞이는 경우가 많았음.
+            if len(curated_resolved) >= 15:
+                domestic = []
+                seen = set()
+            for track in curated_resolved:
                 key = (track["artist"].lower(), track["name"].lower())
                 if key not in seen:
                     domestic.append(track)

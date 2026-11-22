@@ -42,6 +42,7 @@ class AliasCatalog:
         # 모호 별칭: 서로 다른 곡/아티스트에 걸리는 검색어("고백" 3곡). 생성기가 이미 색인에서 뺐지만, 손으로 고친
         # catalog.json에 다시 들어가도 단정해서 답하지 않게 여기서도 막음 -> 이 검색어는 항상 기존 파이프라인으로
         self.ambiguous: set = set()
+        self.ambiguous_tracks_by_key: dict = {}  # 모호 별칭 -> 후보 곡 id 목록(결과 맨 위에 같이 보여줄 용도)
         # 이름 -> 아티스트 id(정식/한글/조회용/별칭 전부). 검색어 가로채기(index)와 별개로, 이름 변환에만 씀
         # (아티스트 페이지가 "아이유"로 와도 "IU"로 와도 같은 아티스트 = 같은 조회용 이름)
         self.by_name: dict = {}
@@ -107,6 +108,12 @@ class AliasCatalog:
             key = normalize(item.get("alias") if isinstance(item, dict) else item)
             if key:
                 self.ambiguous.add(key)
+                # (2026-11-22) 모호 별칭("졸업" = 달담 + 브로콜리너마저)은 하나로 단정하진 않되, 후보 곡들은 결과 맨 위에
+                # 같이 보여줌 — 둘 다 별칭표에 있는데 아무것도 안 나오면 이상하다는 지적. 후보 id는 "track:달담:졸업" 형태.
+                if isinstance(item, dict):
+                    ids = [c.split(":", 1)[1] for c in item.get("candidates") or [] if isinstance(c, str) and c.startswith("track:")]
+                    if ids:
+                        self.ambiguous_tracks_by_key[key] = ids
         self._load_extra_aliases(os.path.join(os.path.dirname(path), "extra_aliases.json"))
         self._load_related(os.path.join(os.path.dirname(path), "related_artists.json"))
         self.loaded_from = path
@@ -273,6 +280,13 @@ class AliasCatalog:
             return None
         ids = self.by_title.get(normalize(q)) or []
         return self._track_out(ids[0], track_image) if len(ids) == 1 else None
+
+    def ambiguous_tracks(self, q: str, track_image: Callable[[str, str], Optional[str]] = lambda artist, title: None) -> list:
+        """모호 별칭("졸업")의 후보 곡들을 응답 형식으로. 해당 없으면 빈 목록. 하나로 단정하지 않고 후보를 모두 보여주는 용도."""
+        if not isinstance(q, str):
+            return []
+        ids = self.ambiguous_tracks_by_key.get(normalize(q)) or []
+        return [self._track_out(tid, track_image) for tid in ids if tid in self.tracks]
 
     def artist_card(self, official_name: str, artist_image: Callable[[str], Optional[str]] = lambda name: None) -> Optional[dict]:
         """정식 이름으로 아티스트 카드(응답 형식). 별칭표에 없으면 None."""

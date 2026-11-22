@@ -2368,6 +2368,14 @@ def search(q: str, artist: Optional[str] = None, x_session_id: Optional[str] = H
             result["artists"] = [card] + [
                 a for a in result.get("artists") or [] if ALIAS_CATALOG_NORMALIZE(a.get("name", "")) != card_key
             ]
+    # (2026-11-22) "졸업"처럼 별칭이 여러 곡에 걸려 단정하지 못하는 검색어는, 후보 곡들(달담/브로콜리너마저)을 맨 위에 같이 보여줌
+    try:
+        amb = ALIAS_CATALOG.ambiguous_tracks(q, track_image=cached_track_image)
+        if amb:
+            amb_keys = {_track_dedupe_key(t) for t in amb}
+            result["tracks"] = amb + [t for t in result.get("tracks") or [] if _track_dedupe_key(t) not in amb_keys]
+    except Exception as e:
+        print(f"[catalog] 모호 별칭 후보 추가 실패(무시): {e}")
     result["artists"] = _drop_title_named_artists(q, result.get("artists") or [], result.get("tracks") or [])
     return _with_display_names(_apply_related_tracks(result, q), q)
 

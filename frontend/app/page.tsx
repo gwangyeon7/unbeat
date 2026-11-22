@@ -185,6 +185,23 @@ export default function Home() {
   const [diaryError, setDiaryError] = useState<string | null>(null);
   const [diaryHistory, setDiaryHistory] = useState<DiaryHistoryEntry[]>([]);
   const [isDiaryHistoryOpen, setIsDiaryHistoryOpen] = useState(false);
+  // 감성일기 창을 닫으면 방금 본 결과와 입력을 비워서, 다시 열었을 때 이전 내용이 또 나오지 않게 함
+  // (지난 일기는 "최근 기록"에서만 볼 수 있음)
+  useEffect(() => {
+    if (isDiaryOpen) return;
+    setDiaryResult(null);
+    setDiaryError(null);
+    setDiaryText("");
+    setIsDiaryHistoryOpen(false);
+  }, [isDiaryOpen]);
+  function persistDiaryHistory(next: DiaryHistoryEntry[]) {
+    setDiaryHistory(next);
+    try {
+      localStorage.setItem(DIARY_HISTORY_KEY, JSON.stringify(next));
+    } catch (e) {
+      console.warn("[diary] 기록 저장 실패:", e);
+    }
+  }
   // (B단계 4) 결과(공감 글)가 입력창 아래라 키보드에 가려져 안 보이던 문제 — 결과가 오면 키보드를
   // 내리고 결과 위치로 스크롤해서 공감 글이 처음부터 끝까지 보이게 함.
   const diaryResultRef = useRef<HTMLDivElement | null>(null);
@@ -895,6 +912,9 @@ export default function Home() {
         );
       }
       refreshPlaylists();
+      // 만들고 곡까지 담았으면 모달을 닫음(기존엔 안 닫혀서 창이 그대로 남았음)
+      setAddToPlaylistTracks(null);
+      showToast(`'${name}' 재생목록에 담았어요`);
     } catch (err) {
       setError("재생목록을 만들지 못했어요.");
     }
@@ -1567,8 +1587,8 @@ export default function Home() {
   const [highlightOn, setHighlightOn] = useState(false);
 
   function handleStartMix(highlight: boolean) {
-    // 이미 곡을 듣고 있는데 하이라이트를 켜면 그 곡이 끊기고 새 곡으로 넘어가서 어색했음 —
-    // 지금 곡은 끝까지 듣고, 다음 곡부터 하이라이트로 이어지게 모드만 켬.
+    // 이미 곡을 듣고 있는데 하이라이트를 켜면 새 곡으로 갈아타지 않고, 지금 곡의 하이라이트 지점으로
+    // 바로 이동한 뒤 다음 곡부터도 하이라이트로 이어지게 모드를 켬(MiniPlayer가 이동 처리).
     // 재생 중인 곡이 없으면 노래를 새로 틀지 않고 모드만 켜고 끔 — 다음에 재생하는 곡부터 적용됨
     if (highlight && !nowPlaying) {
       setHighlightOn((prev) => !prev);
@@ -3411,7 +3431,7 @@ export default function Home() {
                 {diaryResult.message}
               </p>
               <p className="mb-2 mt-3 text-xs text-white/40">
-                &quot;{diaryResult.moodLabel}&quot; 어울리는 곡
+                오늘 기분에 어울리는 곡
               </p>
               {diaryResult.domesticTracks.length > 0 && (
                 <div className="mb-2">
@@ -3464,7 +3484,14 @@ export default function Home() {
                               })
                             : entry.date}
                         </span>
-                        <span>&quot;{entry.moodLabel}&quot;</span>
+                        <button
+                          type="button"
+                          onClick={() => persistDiaryHistory(diaryHistory.filter((_, idx) => idx !== i))}
+                          aria-label="이 기록 삭제"
+                          className="rounded px-1.5 py-0.5 text-white/40 hover:bg-white/10 hover:text-red-400"
+                        >
+                          삭제
+                        </button>
                       </div>
                       {entry.text && (
                         <p className="mt-1 whitespace-pre-wrap break-words text-white/50">

@@ -4737,10 +4737,29 @@ MOOD_LABELS_KO = {
     "sad": "슬픔",
     "driving": "출퇴근길",
     "chill": "잔잔한",
-    "study": "집중",
+    "study": "위로",  # (2026-11-20) 키는 그대로 두고 화면 표기만 "집중" → "위로" — 큐레이션이 차분한 곡 위주라 위로가 더 맞음
     "mellow": "휴식",
     "love": "설렘",
 }
+
+
+@app.on_event("startup")
+def _warm_mood_pools_on_startup():
+    """서버가 (재)시작된 직후 첫 감성일기/무드 요청이 느리지 않게, 무드별 곡 풀을 백그라운드에서
+    미리 만들어 캐시에 채워둠. 무료 서버는 재시작이 잦아서 첫 요청이 풀 생성(수 초~십수 초)을
+    통째로 떠안던 문제. 실패해도 서비스에는 영향 없음(그냥 첫 요청 때 만들어짐)."""
+    import threading
+    import time
+
+    def run():
+        for tag in list(MOOD_LABELS_KO.keys()):
+            try:
+                discover_by_mood(tag, x_session_id=None)
+            except Exception as e:
+                print(f"[warmup] 무드 풀 미리 채우기 실패({tag}): {e}")
+            time.sleep(0.5)
+
+    threading.Thread(target=run, daemon=True, name="mood-warmup").start()
 
 
 def _map_weather_to_mood(weathercode: int, temp_c: float) -> tuple[str, str]:
@@ -4863,7 +4882,8 @@ def diary_reflection(
     if len(text) > DIARY_TEXT_MAX_LENGTH:
         raise HTTPException(status_code=400, detail=f"일기는 {DIARY_TEXT_MAX_LENGTH}자 이하로 적어주세요.")
 
-    allowed_tags = ", ".join(MOOD_LABELS_KO.keys())
+    # 키 옆에 한글 뜻을 같이 줘서(예: study(위로)) 모델이 라벨 의미에 맞게 고르게 함
+    allowed_tags = ", ".join(f"{k}({v})" for k, v in MOOD_LABELS_KO.items())
     prompt = f"""다음은 한 사용자가 오늘 쓴 짧은 감정 일기야:
 "{text}"
 
@@ -4877,10 +4897,12 @@ def diary_reflection(
 다른 설명 없이 JSON으로만 답해줘. 형식: {{"message": "...", "moodTag": "..."}}"""
 
     try:
-        client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+        # 타임아웃을 안 두면 AI 응답이 멈췄을 때 프론트가 끝없이 기다리다 "응답을 받지 못했어요"가 뜸.
+        # 12초 안에 안 오면 빨리 실패시키고(프론트가 자동 재시도), 내부 재시도는 1번만.
+        client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY, timeout=12.0, max_retries=1)
         message = client.messages.create(
             model=ANTHROPIC_MODEL,
-            max_tokens=512,
+            max_tokens=300,
             messages=[{"role": "user", "content": prompt}],
         )
         raw_text = message.content[0].text.strip()
@@ -4905,8 +4927,10 @@ def diary_reflection(
 
     if not healing_message:
         raise HTTPException(status_code=502, detail="AI가 빈 응답을 돌려줬어요.")
+    mood_tag = mood_tag.split("(")[0].strip()  # 모델이 "study(위로)"처럼 라벨까지 붙여 답해도 키만 취함
     if mood_tag not in MOOD_LABELS_KO:
-        mood_tag = "chill"  # 모델이 엉뚱한 태그를 주거나 빠뜨리면 무난한 기본값으로 폴백
+        # 한글 라벨("위로")로 답한 경우도 키로 되돌림
+        mood_tag = next((k for k, v in MOOD_LABELS_KO.items() if v == mood_tag), "chill")  # 그래도 못 맞추면 무난한 기본값
 
     # (체감 속도 개선, 2026-10-19) include_tracks=false면 추천곡 조회를 건너뛰고 공감 메시지와
     # 무드 태그만 먼저 돌려줌 — 프론트가 메시지를 바로 보여주고, 곡 목록은 기존
@@ -5050,7 +5074,8 @@ def discover_by_mood(tag: str, x_session_id: Optional[str] = Header(default=None
     # international_tracks는 resolve_korean_artist_name 내부에서 _is_domestic_artist로 어차피
     # 걸러지니 굳이 안 거쳐도 되지만, 명시적으로 domestic만 거쳐 불필요한 호출을 아예 줄임.
     # 한글 보완은 최대 6초만 기다림 — 못 끝낸 곡은 원본 표기로 먼저 내려주고, 스레드는 계속 돌아 캐시에 남김
-    domestic_tracks = _apply_korean_titles(domestic_tracks, assume_domestic=True, deadline=6.0)
+    # (속도 개선, 2026-11-22) 6초 → 3초: 감성일기가 이 시간만큼 더 기다리던 구간. 못 끝낸 곡은 원본 표기로 내려감
+    domestic_tracks = _apply_korean_titles(domestic_tracks, assume_domestic=True, deadline=3.0)
 
     if x_session_id:
         total = len(domestic_tracks) + len(international_tracks)

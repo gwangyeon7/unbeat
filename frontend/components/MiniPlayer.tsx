@@ -888,6 +888,9 @@ export default function MiniPlayer({
     // handleStateChange가 이 곡을 하이라이트 지점으로 점프시키지 않게 함. 화면도 펼치지 않음.
     if (mixRequest.keepCurrent) {
       highlightAppliedForVideoIdRef.current = trackVideoIdRef.current;
+      // (2026-11-22) 재생 중에 "하이라이트"를 켜면 눌러도 아무 일도 안 일어나 보인다는 문제 — 켜는 순간
+      // 지금 곡도 바로 하이라이트(후렴) 지점으로 이동시킴. 끄는 경우(highlight=false)는 그대로 둠.
+      if (mixRequest.highlight) startHighlightPlaybackRef.current?.();
       return;
     }
     // (B단계 3-4, 2026-10-25) 하단 탭 "하이라이트"/"모두 재생"은 화면을 바꾸지 않고 바로 재생만

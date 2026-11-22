@@ -1,0 +1,260 @@
+{
+ "_meta": {
+  "source": "2026-11-22 추천 목록(멜론 화면이 아니라 Claude가 대중적 인기곡 중 별칭표에 없는 곡을 골라 정리)",
+  "captured_at": "2026-11-22",
+  "note": "카탈로그에 이미 있는 곡은 제외. 아티스트/곡 표기는 build_catalog가 Last.fm으로 검증하며, 못 찾은 곡은 조용히 빠짐.",
+  "suggested_aliases_confident": {}
+ },
+ "tracks": [
+  {
+   "rank": 1,
+   "title": "첫 만남은 계획대로 되지 않아",
+   "artist": "투모로우바이투게더 (TXT)"
+  },
+  {
+   "rank": 2,
+   "title": "HEYA",
+   "artist": "IVE"
+  },
+  {
+   "rank": 3,
+   "title": "Smart",
+   "artist": "LE SSERAFIM"
+  },
+  {
+   "rank": 4,
+   "title": "UNFORGIVEN",
+   "artist": "LE SSERAFIM"
+  },
+  {
+   "rank": 5,
+   "title": "Soda Pop",
+   "artist": "Saja Boys"
+  },
+  {
+   "rank": 6,
+   "title": "Shut Down",
+   "artist": "BLACKPINK"
+  },
+  {
+   "rank": 7,
+   "title": "Lovesick Girls",
+   "artist": "BLACKPINK"
+  },
+  {
+   "rank": 8,
+   "title": "Spring Day",
+   "artist": "BTS"
+  },
+  {
+   "rank": 9,
+   "title": "Seven",
+   "artist": "Jung Kook"
+  },
+  {
+   "rank": 10,
+   "title": "Standing Next to You",
+   "artist": "Jung Kook"
+  },
+  {
+   "rank": 11,
+   "title": "너와의 모든 지금",
+   "artist": "재쓰비"
+  },
+  {
+   "rank": 12,
+   "title": "사랑하긴 했었나요 스쳐가는 인연이었나요 짧은 시간이어서 그랬나요",
+   "artist": "잔나비"
+  },
+  {
+   "rank": 13,
+   "title": "가시",
+   "artist": "버즈"
+  },
+  {
+   "rank": 14,
+   "title": "겁쟁이",
+   "artist": "버즈"
+  },
+  {
+   "rank": 15,
+   "title": "첫눈처럼 너에게 가겠다",
+   "artist": "에일리"
+  },
+  {
+   "rank": 16,
+   "title": "인생찬가",
+   "artist": "임영웅"
+  },
+  {
+   "rank": 17,
+   "title": "아이와 나의 바다",
+   "artist": "아이유"
+  },
+  {
+   "rank": 18,
+   "title": "소주 한 잔",
+   "artist": "임창정"
+  },
+  {
+   "rank": 19,
+   "title": "야생화",
+   "artist": "박효신"
+  },
+  {
+   "rank": 20,
+   "title": "봄여름가을겨울",
+   "artist": "BIGBANG"
+  },
+  {
+   "rank": 21,
+   "title": "Still Life",
+   "artist": "BIGBANG"
+  },
+  {
+   "rank": 22,
+   "title": "Loser",
+   "artist": "BIGBANG"
+  },
+  {
+   "rank": 23,
+   "title": "사이렌",
+   "artist": "선미"
+  },
+  {
+   "rank": 24,
+   "title": "보라빛 밤",
+   "artist": "선미"
+  },
+  {
+   "rank": 25,
+   "title": "Rollin'",
+   "artist": "브레이브걸스"
+  },
+  {
+   "rank": 26,
+   "title": "한숨",
+   "artist": "이하이"
+  },
+  {
+   "rank": 27,
+   "title": "Blinding Lights",
+   "artist": "The Weeknd"
+  },
+  {
+   "rank": 28,
+   "title": "Starboy",
+   "artist": "The Weeknd"
+  },
+  {
+   "rank": 29,
+   "title": "Shape of You",
+   "artist": "Ed Sheeran"
+  },
+  {
+   "rank": 30,
+   "title": "Perfect",
+   "artist": "Ed Sheeran"
+  },
+  {
+   "rank": 31,
+   "title": "As It Was",
+   "artist": "Harry Styles"
+  },
+  {
+   "rank": 32,
+   "title": "Flowers",
+   "artist": "Miley Cyrus"
+  },
+  {
+   "rank": 33,
+   "title": "Espresso",
+   "artist": "Sabrina Carpenter"
+  },
+  {
+   "rank": 34,
+   "title": "Please Please Please",
+   "artist": "Sabrina Carpenter"
+  },
+  {
+   "rank": 35,
+   "title": "BIRDS OF A FEATHER",
+   "artist": "Billie Eilish"
+  },
+  {
+   "rank": 36,
+   "title": "bad guy",
+   "artist": "Billie Eilish"
+  },
+  {
+   "rank": 37,
+   "title": "Levitating",
+   "artist": "Dua Lipa"
+  },
+  {
+   "rank": 38,
+   "title": "Anti-Hero",
+   "artist": "Taylor Swift"
+  },
+  {
+   "rank": 39,
+   "title": "Cruel Summer",
+   "artist": "Taylor Swift"
+  },
+  {
+   "rank": 40,
+   "title": "Counting Stars",
+   "artist": "OneRepublic"
+  },
+  {
+   "rank": 41,
+   "title": "Someone You Loved",
+   "artist": "Lewis Capaldi"
+  },
+  {
+   "rank": 42,
+   "title": "Heat Waves",
+   "artist": "Glass Animals"
+  },
+  {
+   "rank": 43,
+   "title": "good 4 u",
+   "artist": "Olivia Rodrigo"
+  },
+  {
+   "rank": 44,
+   "title": "vampire",
+   "artist": "Olivia Rodrigo"
+  },
+  {
+   "rank": 45,
+   "title": "Rockin' Around The Christmas Tree",
+   "artist": "Brenda Lee"
+  },
+  {
+   "rank": 46,
+   "title": "Jingle Bell Rock",
+   "artist": "Bobby Helms"
+  },
+  {
+   "rank": 47,
+   "title": "Santa Tell Me",
+   "artist": "Ariana Grande"
+  },
+  {
+   "rank": 48,
+   "title": "It's Beginning to Look a Lot Like Christmas",
+   "artist": "Michael Bublé"
+  },
+  {
+   "rank": 49,
+   "title": "Christmas Tree",
+   "artist": "V"
+  },
+  {
+   "rank": 50,
+   "title": "Snowman",
+   "artist": "Sia"
+  }
+ ]
+}

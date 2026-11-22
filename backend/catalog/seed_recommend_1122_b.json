@@ -1,0 +1,670 @@
+{
+ "_meta": {
+  "source": "2026-11-22 추천 목록 2차(Claude가 대중적 인기곡 중 별칭표에 없는 곡을 골라 정리 — 멜론 화면 아님)",
+  "captured_at": "2026-11-22",
+  "note": "카탈로그와 1차 추천(seed_recommend_1122.json)에 이미 있는 곡은 제외. 표기는 build_catalog가 Last.fm으로 검증하며 못 찾은 곡은 조용히 빠짐.",
+  "suggested_aliases_confident": {}
+ },
+ "tracks": [
+  {
+   "rank": 1,
+   "title": "그대라는 시",
+   "artist": "태연"
+  },
+  {
+   "rank": 2,
+   "title": "마음을 드려요",
+   "artist": "아이유"
+  },
+  {
+   "rank": 3,
+   "title": "비밀의 화원",
+   "artist": "아이유"
+  },
+  {
+   "rank": 4,
+   "title": "넌 감동이었어",
+   "artist": "성시경"
+  },
+  {
+   "rank": 5,
+   "title": "두 사람",
+   "artist": "성시경"
+  },
+  {
+   "rank": 6,
+   "title": "나였으면",
+   "artist": "나윤권"
+  },
+  {
+   "rank": 7,
+   "title": "보고 싶다",
+   "artist": "김범수"
+  },
+  {
+   "rank": 8,
+   "title": "취중진담",
+   "artist": "김동률"
+  },
+  {
+   "rank": 9,
+   "title": "감사",
+   "artist": "김동률"
+  },
+  {
+   "rank": 10,
+   "title": "기억의 습작",
+   "artist": "김동률"
+  },
+  {
+   "rank": 11,
+   "title": "시간을 거슬러",
+   "artist": "린"
+  },
+  {
+   "rank": 12,
+   "title": "기억을 걷는 시간",
+   "artist": "넬"
+  },
+  {
+   "rank": 13,
+   "title": "오늘도 빛나는 너에게",
+   "artist": "마크툽"
+  },
+  {
+   "rank": 14,
+   "title": "오르트구름",
+   "artist": "윤하"
+  },
+  {
+   "rank": 15,
+   "title": "유자차",
+   "artist": "브로콜리너마저"
+  },
+  {
+   "rank": 16,
+   "title": "졸업",
+   "artist": "브로콜리너마저"
+  },
+  {
+   "rank": 17,
+   "title": "앵콜요청금지",
+   "artist": "브로콜리너마저"
+  },
+  {
+   "rank": 18,
+   "title": "보편적인 노래",
+   "artist": "브로콜리너마저"
+  },
+  {
+   "rank": 19,
+   "title": "들려주고 싶었던 이야기",
+   "artist": "이승윤"
+  },
+  {
+   "rank": 20,
+   "title": "무명성 지구인",
+   "artist": "이승윤"
+  },
+  {
+   "rank": 21,
+   "title": "D-DAY",
+   "artist": "QWER"
+  },
+  {
+   "rank": 22,
+   "title": "난춘",
+   "artist": "새소년"
+  },
+  {
+   "rank": 23,
+   "title": "자몽살구클럽",
+   "artist": "한로로"
+  },
+  {
+   "rank": 24,
+   "title": "Love Lee",
+   "artist": "악동뮤지션"
+  },
+  {
+   "rank": 25,
+   "title": "DINOSAUR",
+   "artist": "악동뮤지션"
+  },
+  {
+   "rank": 26,
+   "title": "낙하",
+   "artist": "악동뮤지션"
+  },
+  {
+   "rank": 27,
+   "title": "후라이의 꿈",
+   "artist": "악동뮤지션"
+  },
+  {
+   "rank": 28,
+   "title": "거울",
+   "artist": "국카스텐"
+  },
+  {
+   "rank": 29,
+   "title": "가끔 미치도록 네가 안고 싶어질 때가 있어",
+   "artist": "소란"
+  },
+  {
+   "rank": 30,
+   "title": "Pluto",
+   "artist": "잔나비"
+  },
+  {
+   "rank": 31,
+   "title": "Into the New World",
+   "artist": "소녀시대"
+  },
+  {
+   "rank": 32,
+   "title": "Power",
+   "artist": "EXO"
+  },
+  {
+   "rank": 33,
+   "title": "위아래",
+   "artist": "EXID"
+  },
+  {
+   "rank": 34,
+   "title": "Roly-Poly",
+   "artist": "티아라"
+  },
+  {
+   "rank": 35,
+   "title": "Boy In Luv",
+   "artist": "BTS"
+  },
+  {
+   "rank": 36,
+   "title": "Blood Sweat & Tears",
+   "artist": "BTS"
+  },
+  {
+   "rank": 37,
+   "title": "Life Goes On",
+   "artist": "BTS"
+  },
+  {
+   "rank": 38,
+   "title": "Permission to Dance",
+   "artist": "BTS"
+  },
+  {
+   "rank": 39,
+   "title": "Get Up",
+   "artist": "NewJeans"
+  },
+  {
+   "rank": 40,
+   "title": "Dance The Night Away",
+   "artist": "TWICE"
+  },
+  {
+   "rank": 41,
+   "title": "FANCY",
+   "artist": "TWICE"
+  },
+  {
+   "rank": 42,
+   "title": "What is Love?",
+   "artist": "TWICE"
+  },
+  {
+   "rank": 43,
+   "title": "Feel Special",
+   "artist": "TWICE"
+  },
+  {
+   "rank": 44,
+   "title": "Talk that Talk",
+   "artist": "TWICE"
+  },
+  {
+   "rank": 45,
+   "title": "Heart Shaker",
+   "artist": "TWICE"
+  },
+  {
+   "rank": 46,
+   "title": "Red Flavor",
+   "artist": "Red Velvet"
+  },
+  {
+   "rank": 47,
+   "title": "Psycho",
+   "artist": "Red Velvet"
+  },
+  {
+   "rank": 48,
+   "title": "Feel My Rhythm",
+   "artist": "Red Velvet"
+  },
+  {
+   "rank": 49,
+   "title": "Russian Roulette",
+   "artist": "Red Velvet"
+  },
+  {
+   "rank": 50,
+   "title": "Bad Boy",
+   "artist": "Red Velvet"
+  },
+  {
+   "rank": 51,
+   "title": "눈누난나",
+   "artist": "제시"
+  },
+  {
+   "rank": 52,
+   "title": "Bohemian Rhapsody",
+   "artist": "Queen"
+  },
+  {
+   "rank": 53,
+   "title": "Don't Stop Me Now",
+   "artist": "Queen"
+  },
+  {
+   "rank": 54,
+   "title": "Believer",
+   "artist": "Imagine Dragons"
+  },
+  {
+   "rank": 55,
+   "title": "Thunder",
+   "artist": "Imagine Dragons"
+  },
+  {
+   "rank": 56,
+   "title": "Numb",
+   "artist": "Linkin Park"
+  },
+  {
+   "rank": 57,
+   "title": "In the End",
+   "artist": "Linkin Park"
+  },
+  {
+   "rank": 58,
+   "title": "Yellow",
+   "artist": "Coldplay"
+  },
+  {
+   "rank": 59,
+   "title": "Viva La Vida",
+   "artist": "Coldplay"
+  },
+  {
+   "rank": 60,
+   "title": "Fix You",
+   "artist": "Coldplay"
+  },
+  {
+   "rank": 61,
+   "title": "Take Me to Church",
+   "artist": "Hozier"
+  },
+  {
+   "rank": 62,
+   "title": "Creep",
+   "artist": "Radiohead"
+  },
+  {
+   "rank": 63,
+   "title": "Do I Wanna Know?",
+   "artist": "Arctic Monkeys"
+  },
+  {
+   "rank": 64,
+   "title": "505",
+   "artist": "Arctic Monkeys"
+  },
+  {
+   "rank": 65,
+   "title": "Sweater Weather",
+   "artist": "The Neighbourhood"
+  },
+  {
+   "rank": 66,
+   "title": "Riptide",
+   "artist": "Vance Joy"
+  },
+  {
+   "rank": 67,
+   "title": "Let Her Go",
+   "artist": "Passenger"
+  },
+  {
+   "rank": 68,
+   "title": "Love Yourself",
+   "artist": "Justin Bieber"
+  },
+  {
+   "rank": 69,
+   "title": "Sorry",
+   "artist": "Justin Bieber"
+  },
+  {
+   "rank": 70,
+   "title": "Peaches",
+   "artist": "Justin Bieber"
+  },
+  {
+   "rank": 71,
+   "title": "Shallow",
+   "artist": "Lady Gaga"
+  },
+  {
+   "rank": 72,
+   "title": "Rolling in the Deep",
+   "artist": "Adele"
+  },
+  {
+   "rank": 73,
+   "title": "Someone Like You",
+   "artist": "Adele"
+  },
+  {
+   "rank": 74,
+   "title": "Hello",
+   "artist": "Adele"
+  },
+  {
+   "rank": 75,
+   "title": "Skyfall",
+   "artist": "Adele"
+  },
+  {
+   "rank": 76,
+   "title": "All of Me",
+   "artist": "John Legend"
+  },
+  {
+   "rank": 77,
+   "title": "Thinking Out Loud",
+   "artist": "Ed Sheeran"
+  },
+  {
+   "rank": 78,
+   "title": "Photograph",
+   "artist": "Ed Sheeran"
+  },
+  {
+   "rank": 79,
+   "title": "Happier",
+   "artist": "Marshmello"
+  },
+  {
+   "rank": 80,
+   "title": "Faded",
+   "artist": "Alan Walker"
+  },
+  {
+   "rank": 81,
+   "title": "Closer",
+   "artist": "The Chainsmokers"
+  },
+  {
+   "rank": 82,
+   "title": "Something Just Like This",
+   "artist": "The Chainsmokers"
+  },
+  {
+   "rank": 83,
+   "title": "Despacito",
+   "artist": "Luis Fonsi"
+  },
+  {
+   "rank": 84,
+   "title": "Uptown Funk",
+   "artist": "Mark Ronson"
+  },
+  {
+   "rank": 85,
+   "title": "Shake It Off",
+   "artist": "Taylor Swift"
+  },
+  {
+   "rank": 86,
+   "title": "Love Story",
+   "artist": "Taylor Swift"
+  },
+  {
+   "rank": 87,
+   "title": "Blank Space",
+   "artist": "Taylor Swift"
+  },
+  {
+   "rank": 88,
+   "title": "Umbrella",
+   "artist": "Rihanna"
+  },
+  {
+   "rank": 89,
+   "title": "Diamonds",
+   "artist": "Rihanna"
+  },
+  {
+   "rank": 90,
+   "title": "We Don't Talk Anymore",
+   "artist": "Charlie Puth"
+  },
+  {
+   "rank": 91,
+   "title": "See You Again",
+   "artist": "Wiz Khalifa"
+  },
+  {
+   "rank": 92,
+   "title": "Sunflower",
+   "artist": "Post Malone"
+  },
+  {
+   "rank": 93,
+   "title": "Circles",
+   "artist": "Post Malone"
+  },
+  {
+   "rank": 94,
+   "title": "Lose Yourself",
+   "artist": "Eminem"
+  },
+  {
+   "rank": 95,
+   "title": "Save Your Tears",
+   "artist": "The Weeknd"
+  },
+  {
+   "rank": 96,
+   "title": "Die For You",
+   "artist": "The Weeknd"
+  },
+  {
+   "rank": 97,
+   "title": "Lovely",
+   "artist": "Billie Eilish"
+  },
+  {
+   "rank": 98,
+   "title": "Ocean Eyes",
+   "artist": "Billie Eilish"
+  },
+  {
+   "rank": 99,
+   "title": "Yesterday",
+   "artist": "The Beatles"
+  },
+  {
+   "rank": 100,
+   "title": "Let It Be",
+   "artist": "The Beatles"
+  },
+  {
+   "rank": 101,
+   "title": "Hey Jude",
+   "artist": "The Beatles"
+  },
+  {
+   "rank": 102,
+   "title": "Memories",
+   "artist": "Maroon 5"
+  },
+  {
+   "rank": 103,
+   "title": "Sugar",
+   "artist": "Maroon 5"
+  },
+  {
+   "rank": 104,
+   "title": "Girls Like You",
+   "artist": "Maroon 5"
+  },
+  {
+   "rank": 105,
+   "title": "Moves Like Jagger",
+   "artist": "Maroon 5"
+  },
+  {
+   "rank": 106,
+   "title": "One Dance",
+   "artist": "Drake"
+  },
+  {
+   "rank": 107,
+   "title": "God's Plan",
+   "artist": "Drake"
+  },
+  {
+   "rank": 108,
+   "title": "Montero (Call Me By Your Name)",
+   "artist": "Lil Nas X"
+  },
+  {
+   "rank": 109,
+   "title": "Old Town Road",
+   "artist": "Lil Nas X"
+  },
+  {
+   "rank": 110,
+   "title": "7 rings",
+   "artist": "Ariana Grande"
+  },
+  {
+   "rank": 111,
+   "title": "thank u, next",
+   "artist": "Ariana Grande"
+  },
+  {
+   "rank": 112,
+   "title": "Positions",
+   "artist": "Ariana Grande"
+  },
+  {
+   "rank": 113,
+   "title": "Watermelon Sugar",
+   "artist": "Harry Styles"
+  },
+  {
+   "rank": 114,
+   "title": "Adore You",
+   "artist": "Harry Styles"
+  },
+  {
+   "rank": 115,
+   "title": "Kiss Me More",
+   "artist": "Doja Cat"
+  },
+  {
+   "rank": 116,
+   "title": "Say So",
+   "artist": "Doja Cat"
+  },
+  {
+   "rank": 117,
+   "title": "Stay With Me",
+   "artist": "Sam Smith"
+  },
+  {
+   "rank": 118,
+   "title": "Unholy",
+   "artist": "Sam Smith"
+  },
+  {
+   "rank": 119,
+   "title": "Havana",
+   "artist": "Camila Cabello"
+  },
+  {
+   "rank": 120,
+   "title": "Señorita",
+   "artist": "Shawn Mendes"
+  },
+  {
+   "rank": 121,
+   "title": "Treat You Better",
+   "artist": "Shawn Mendes"
+  },
+  {
+   "rank": 122,
+   "title": "Pale Blue",
+   "artist": "Kenshi Yonezu"
+  },
+  {
+   "rank": 123,
+   "title": "ケセラセラ",
+   "artist": "Mrs. GREEN APPLE"
+  },
+  {
+   "rank": 124,
+   "title": "ライラック",
+   "artist": "Mrs. GREEN APPLE"
+  },
+  {
+   "rank": 125,
+   "title": "うっせぇわ",
+   "artist": "Ado"
+  },
+  {
+   "rank": 126,
+   "title": "スパークル",
+   "artist": "RADWIMPS"
+  },
+  {
+   "rank": 127,
+   "title": "白日",
+   "artist": "King Gnu"
+  },
+  {
+   "rank": 128,
+   "title": "死ぬのがいいわ",
+   "artist": "Fujii Kaze"
+  },
+  {
+   "rank": 129,
+   "title": "Bling-Bang-Bang-Born",
+   "artist": "Creepy Nuts"
+  },
+  {
+   "rank": 130,
+   "title": "怪獣の花唄",
+   "artist": "Vaundy"
+  },
+  {
+   "rank": 131,
+   "title": "紅蓮華",
+   "artist": "LiSA"
+  },
+  {
+   "rank": 132,
+   "title": "高嶺の花子さん",
+   "artist": "back number"
+  }
+ ]
+}

@@ -1,0 +1,250 @@
+{
+ "_meta": {
+  "source": "멜론 최신음악 화면을 사람이 직접 보고 옮겨 적은 시드 데이터(자동 수집 아님)",
+  "captured_at": "2026-11-22",
+  "note": "30위 '식인종'(19금, 참여 아티스트 목록 잘림)은 제외. 아티스트 차트 상위(리센느·빅뱅·아일릿·에이티즈·아이브·엔하이픈·TXT·아이유·A2O LITE·하츠투하츠)는 별칭표에 이미 있어 곡 시드는 따로 만들지 않음.",
+  "suggested_aliases_confident": {}
+ },
+ "tracks": [
+  {
+   "rank": 1,
+   "title": "그대 꼭 행복해요",
+   "artist": "로이킴"
+  },
+  {
+   "rank": 2,
+   "title": "주머니에 핫팩 하나",
+   "artist": "탑현, 황인혁"
+  },
+  {
+   "rank": 3,
+   "title": "November",
+   "artist": "소향"
+  },
+  {
+   "rank": 4,
+   "title": "소복이 사랑이 쌓여요",
+   "artist": "스무살"
+  },
+  {
+   "rank": 5,
+   "title": "자유낙하",
+   "artist": "슬릭 (SLEEQ)"
+  },
+  {
+   "rank": 6,
+   "title": "모퉁이",
+   "artist": "siso(시소), BünyTune (버니튠)"
+  },
+  {
+   "rank": 7,
+   "title": "갈팡질팡(City Lights)",
+   "artist": "신해솔"
+  },
+  {
+   "rank": 8,
+   "title": "Flat Out",
+   "artist": "KARDI (카디)"
+  },
+  {
+   "rank": 9,
+   "title": "옷 벗고 해",
+   "artist": "호미들"
+  },
+  {
+   "rank": 10,
+   "title": "TWO DAYS",
+   "artist": "WHOEVER"
+  },
+  {
+   "rank": 11,
+   "title": "숫자 3의 비밀",
+   "artist": "옴 (omm..)"
+  },
+  {
+   "rank": 12,
+   "title": "같이 걸을래",
+   "artist": "권연우"
+  },
+  {
+   "rank": 13,
+   "title": "덩그러니",
+   "artist": "태리 (Terry)"
+  },
+  {
+   "rank": 14,
+   "title": "평가절하의 그녀",
+   "artist": "Haeroiki (해로이키)"
+  },
+  {
+   "rank": 15,
+   "title": "바람이 부는 쪽으로",
+   "artist": "여운"
+  },
+  {
+   "rank": 16,
+   "title": "Who I Am",
+   "artist": "플라이 투 더 스카이"
+  },
+  {
+   "rank": 17,
+   "title": "너를 원해 (feat. 다이나믹듀오)",
+   "artist": "듀스 (DEUX)"
+  },
+  {
+   "rank": 18,
+   "title": "Grounded",
+   "artist": "일라잇"
+  },
+  {
+   "rank": 19,
+   "title": "나지막이",
+   "artist": "아란"
+  },
+  {
+   "rank": 20,
+   "title": "My Angel",
+   "artist": "윤사와"
+  },
+  {
+   "rank": 21,
+   "title": "Twilight Madness",
+   "artist": "안시우"
+  },
+  {
+   "rank": 22,
+   "title": "서약",
+   "artist": "진진경 (真真敬)"
+  },
+  {
+   "rank": 23,
+   "title": "Winter Party Night [윈터파리나잇]",
+   "artist": "하이디"
+  },
+  {
+   "rank": 24,
+   "title": "제비꽃",
+   "artist": "aett"
+  },
+  {
+   "rank": 25,
+   "title": "Waiting for you",
+   "artist": "지훈"
+  },
+  {
+   "rank": 26,
+   "title": "나는 나를",
+   "artist": "시은 (SIEUN)"
+  },
+  {
+   "rank": 27,
+   "title": "신이여",
+   "artist": "김우형"
+  },
+  {
+   "rank": 28,
+   "title": "Icarus",
+   "artist": "ABOUT (어바웃)"
+  },
+  {
+   "rank": 29,
+   "title": "소녀의 일기",
+   "artist": "리플리 (RIPLEY)"
+  },
+  {
+   "rank": 30,
+   "title": "행복하지 말걸 그랬어",
+   "artist": "차가을"
+  },
+  {
+   "rank": 31,
+   "title": "아무렇지 않은 오늘",
+   "artist": "박종민"
+  },
+  {
+   "rank": 32,
+   "title": "Preview (Feat. AIDEN)",
+   "artist": "JISEONG (지성)"
+  },
+  {
+   "rank": 33,
+   "title": "소멸우주",
+   "artist": "다루성"
+  },
+  {
+   "rank": 34,
+   "title": "나는 누가 위로해 주나요",
+   "artist": "인호"
+  },
+  {
+   "rank": 35,
+   "title": "몇 번의 우연",
+   "artist": "김시원"
+  },
+  {
+   "rank": 36,
+   "title": "내일은 괜찮을까요?",
+   "artist": "단칸방 로맨스"
+  },
+  {
+   "rank": 37,
+   "title": "안 오네",
+   "artist": "김용빈"
+  },
+  {
+   "rank": 38,
+   "title": "이별인가 봐 헤어지나 봐",
+   "artist": "휴이 (Huie)"
+  },
+  {
+   "rank": 39,
+   "title": "My honey, darling, mi amor",
+   "artist": "Jade (제이드)"
+  },
+  {
+   "rank": 40,
+   "title": "Go, Don't Go",
+   "artist": "앤드뉴 (Andnew)"
+  },
+  {
+   "rank": 41,
+   "title": "I Want You (JUNGWON Ver.)",
+   "artist": "엔하이픈 (ENHYPEN)"
+  },
+  {
+   "rank": 42,
+   "title": "ICONIC",
+   "artist": "CL"
+  },
+  {
+   "rank": 43,
+   "title": "Reset",
+   "artist": "펀치 (Punch)"
+  },
+  {
+   "rank": 44,
+   "title": "낮잠 잘래",
+   "artist": "여은"
+  },
+  {
+   "rank": 45,
+   "title": "가끔 우린 우리의",
+   "artist": "박건후"
+  },
+  {
+   "rank": 46,
+   "title": "yoosooji",
+   "artist": "LOBOTOME"
+  },
+  {
+   "rank": 47,
+   "title": "안녕한가요",
+   "artist": "디멜로(D'Melo)"
+  },
+  {
+   "rank": 48,
+   "title": "너 없는 하루 (Feat. IOHBOY)",
+   "artist": "김토라 (Tora)"
+  }
+ ]
+}

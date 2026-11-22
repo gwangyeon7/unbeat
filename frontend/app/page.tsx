@@ -185,6 +185,23 @@ export default function Home() {
   const [diaryError, setDiaryError] = useState<string | null>(null);
   const [diaryHistory, setDiaryHistory] = useState<DiaryHistoryEntry[]>([]);
   const [isDiaryHistoryOpen, setIsDiaryHistoryOpen] = useState(false);
+  // 감성일기 창을 닫으면 방금 본 결과와 입력을 비워서, 다시 열었을 때 이전 내용이 또 나오지 않게 함
+  // (지난 일기는 "최근 기록"에서만 볼 수 있음)
+  useEffect(() => {
+    if (isDiaryOpen) return;
+    setDiaryResult(null);
+    setDiaryError(null);
+    setDiaryText("");
+    setIsDiaryHistoryOpen(false);
+  }, [isDiaryOpen]);
+  function persistDiaryHistory(next: DiaryHistoryEntry[]) {
+    setDiaryHistory(next);
+    try {
+      localStorage.setItem(DIARY_HISTORY_KEY, JSON.stringify(next));
+    } catch (e) {
+      console.warn("[diary] 기록 저장 실패:", e);
+    }
+  }
   // (B단계 4) 결과(공감 글)가 입력창 아래라 키보드에 가려져 안 보이던 문제 — 결과가 오면 키보드를
   // 내리고 결과 위치로 스크롤해서 공감 글이 처음부터 끝까지 보이게 함.
   const diaryResultRef = useRef<HTMLDivElement | null>(null);
@@ -388,6 +405,8 @@ export default function Home() {
   // 없이 바로 signOut()을 호출해버려서, "로그인이 됐는지 안 됐는지 전혀 안 보인다"는 혼란을
   // 실제로 겪음 — 로그인됐을 때만 이메일+로그아웃 버튼이 있는 작은 바텀시트를 보여주도록 분리.
   const [isProfileSheetOpen, setIsProfileSheetOpen] = useState(false);
+  // 로그아웃 확인 창("로그아웃 하시겠습니까?") — 프로필 시트/내 프로필 화면의 로그아웃 버튼이 모두 이걸 거침
+  const [isLogoutConfirmOpen, setIsLogoutConfirmOpen] = useState(false);
   // 트랙 카드의 "+" 버튼을 누르면(1곡) 또는 재생목록 상세 화면에서 여러 곡을 체크하고 "담기"를
   // 누르면(여러 곡) 이 상태가 채워지고, 화면 중앙에 AddToPlaylistModal이 뜸 — 항상 배열로 통일.
   const [addToPlaylistTracks, setAddToPlaylistTracks] = useState<
@@ -893,10 +912,30 @@ export default function Home() {
         );
       }
       refreshPlaylists();
+      // 만들고 곡까지 담았으면 모달을 닫음(기존엔 안 닫혀서 창이 그대로 남았음)
+      setAddToPlaylistTracks(null);
+      showToast(`'${name}' 재생목록에 담았어요`);
     } catch (err) {
       setError("재생목록을 만들지 못했어요.");
     }
   }
+
+  // 로그인/로그아웃/세션 복원으로 계정이 바뀌면 계정 기준 목록(재생목록·즐겨찾기)을 다시 받음.
+  // 첫 로드 때는 토큰 복원 전이라 세션 기준(빈 목록)으로 받아졌다가, 로그인 후에도 그대로 남아
+  // "프로필엔 재생목록이 보이는데 보관함은 비어 있는" 문제가 있었음.
+  const prevUserEmailRef = useRef<string | null | undefined>(undefined);
+  useEffect(() => {
+    if (prevUserEmailRef.current === undefined) {
+      prevUserEmailRef.current = userEmail;
+      return;
+    }
+    if (prevUserEmailRef.current === userEmail) return;
+    prevUserEmailRef.current = userEmail;
+    getPlaylists().then(setPlaylists).catch(() => {});
+    getFavorites().then(setFavorites).catch(() => {});
+    getFavoriteTracks().then(setFavoriteTracks).catch(() => {});
+    getRecentPlays().then((data) => setRecentPlays(data.tracks)).catch(() => {});
+  }, [userEmail]);
 
   useEffect(() => {
     // 새로고침해도 로그인 상태가 유지되도록 Supabase가 localStorage에 저장해둔 세션을 복원.
@@ -1353,17 +1392,33 @@ export default function Home() {
     try {
       // 공감 메시지를 먼저 받아 바로 보여주고, 추천곡은 이어서 따로 채움(곡 조회가 느려도
       // "위로받기" 응답이 같이 늦어지지 않게)
-      const data = await getDiaryReflection(text, false);
-      setDiaryResult(data);
-      discoverByMood(data.moodTag)
-        .then((tracks) => {
-          setDiaryResult((prev) =>
-            prev && prev.moodTag === data.moodTag
-              ? { ...prev, domesticTracks: tracks.domesticTracks, internationalTracks: tracks.internationalTracks }
-              : prev
-          );
-        })
-        .catch((e) => console.warn("[diary] 추천곡 조회 실패:", e));
+      // 무료 서버가 깨어나는 중이거나 AI 응답이 일시적으로 실패해도 사용자가 다시 누르지 않게 자동 재시도(최대 3번)
+      let data: Awaited<ReturnType<typeof getDiaryReflection>> | null = null;
+      let lastErr: unknown = null;
+      for (let attempt = 0; attempt < 3 && !data; attempt++) {
+        try {
+          data = await getDiaryReflection(text, false);
+        } catch (e) {
+          lastErr = e;
+          await new Promise((r) => setTimeout(r, 1500));
+        }
+      }
+      if (!data) throw lastErr;
+      // 위로 문구와 추천곡이 한 번에 같이 뜨도록, 곡까지 받은 뒤에 한꺼번에 보여줌(곡 조회는 실패하면 한 번 더
+      // 시도하고, 끝내 실패하면 문구만 먼저 보여줌).
+      let moodTracks: { domesticTracks: Track[]; internationalTracks: Track[] } | null = null;
+      for (let attempt = 0; attempt < 2 && !moodTracks; attempt++) {
+        try {
+          moodTracks = await discoverByMood(data.moodTag);
+        } catch (e) {
+          console.warn("[diary] 추천곡 조회 실패:", e);
+        }
+      }
+      setDiaryResult(
+        moodTracks
+          ? { ...data, domesticTracks: moodTracks.domesticTracks, internationalTracks: moodTracks.internationalTracks }
+          : data
+      );
       const entry: DiaryHistoryEntry = {
         date: new Date().toISOString().slice(0, 10),
         at: new Date().toISOString(),
@@ -1532,8 +1587,8 @@ export default function Home() {
   const [highlightOn, setHighlightOn] = useState(false);
 
   function handleStartMix(highlight: boolean) {
-    // 이미 곡을 듣고 있는데 하이라이트를 켜면 그 곡이 끊기고 새 곡으로 넘어가서 어색했음 —
-    // 지금 곡은 끝까지 듣고, 다음 곡부터 하이라이트로 이어지게 모드만 켬.
+    // 이미 곡을 듣고 있는데 하이라이트를 켜면 새 곡으로 갈아타지 않고, 지금 곡의 하이라이트 지점으로
+    // 바로 이동한 뒤 다음 곡부터도 하이라이트로 이어지게 모드를 켬(MiniPlayer가 이동 처리).
     // 재생 중인 곡이 없으면 노래를 새로 틀지 않고 모드만 켜고 끔 — 다음에 재생하는 곡부터 적용됨
     if (highlight && !nowPlaying) {
       setHighlightOn((prev) => !prev);
@@ -2436,7 +2491,24 @@ export default function Home() {
       {/* 모바일 "보관함" 전체화면 서랍 — 즐겨찾기 아티스트/즐겨찾기 곡/내 재생목록을 데스크톱
           사이드바와 완전히 같은 내용(renderFavoriteArtists/renderLibraryPanel)으로 보여줌. */}
       {isLibraryOpen && (
-        <div className="animate-slide-up-in fixed inset-0 z-50 flex h-screen w-screen flex-col bg-black sm:hidden" style={{ paddingBottom: "var(--mini-pad, 0px)" }}>
+        <div
+          className="animate-slide-up-in fixed inset-0 z-50 flex h-screen w-screen flex-col bg-black sm:hidden"
+          style={{ paddingBottom: "var(--mini-pad, 0px)" }}
+          // 왼쪽 가장자리에서 오른쪽으로 쓸면 보관함 닫기(검색 결과 화면과 같은 제스처)
+          onTouchStart={(e) => {
+            const t = e.touches[0];
+            swipeBackRef.current = t.clientX <= 60 ? { x: t.clientX, y: t.clientY } : null;
+          }}
+          onTouchEnd={(e) => {
+            const start = swipeBackRef.current;
+            swipeBackRef.current = null;
+            if (!start) return;
+            const t = e.changedTouches[0];
+            if (t.clientX - start.x > 70 && Math.abs(t.clientY - start.y) < 60) {
+              setIsLibraryOpen(false);
+            }
+          }}
+        >
           <div className="flex items-center gap-2 border-b border-white/10 p-3">
             <button
               type="button"
@@ -3105,14 +3177,54 @@ export default function Home() {
           </button>
           <button
             type="button"
-            onClick={async () => {
-              await supabase?.auth.signOut();
-              setIsProfileSheetOpen(false);
-            }}
+            onClick={() => setIsLogoutConfirmOpen(true)}
             className="w-full rounded-md border border-white/15 px-3 py-2.5 text-sm text-white/80 hover:bg-white/10"
           >
             로그아웃
           </button>
+        </div>
+      </div>
+    )}
+
+    {/* 로그아웃 확인 — 어떤 계정에서 로그아웃하는지 보여주고, 실수로 누른 경우 취소할 수 있게 함 */}
+    {isLogoutConfirmOpen && (
+      <div
+        className="fixed inset-0 z-[80] flex items-center justify-center bg-black/70 px-6"
+        onClick={() => setIsLogoutConfirmOpen(false)}
+      >
+        <div
+          className="w-full max-w-sm rounded-2xl border border-white/10 bg-neutral-900 p-5"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <p className="text-base font-semibold">로그아웃 하시겠습니까?</p>
+          {userEmail && (
+            <p className="mt-2 break-all text-xs text-white/50">
+              현재 계정: <span className="text-white/80">{userEmail}</span>
+            </p>
+          )}
+          <div className="mt-5 flex gap-2">
+            <button
+              type="button"
+              onClick={() => setIsLogoutConfirmOpen(false)}
+              className="flex-1 rounded-md border border-white/15 px-3 py-2.5 text-sm text-white/80 hover:bg-white/10"
+            >
+              취소
+            </button>
+            <button
+              type="button"
+              onClick={async () => {
+                await supabase?.auth.signOut();
+                setIsLogoutConfirmOpen(false);
+                setIsProfileSheetOpen(false);
+                setIsPublicFeedOpen(false);
+                setViewingProfileNickname(null);
+                setProfileInfo(null);
+              }}
+              className="flex-1 rounded-md bg-accent px-3 py-2.5 text-sm font-semibold text-black hover:opacity-90"
+            >
+              로그아웃
+            </button>
+          </div>
         </div>
       </div>
     )}
@@ -3319,7 +3431,7 @@ export default function Home() {
                 {diaryResult.message}
               </p>
               <p className="mb-2 mt-3 text-xs text-white/40">
-                &quot;{diaryResult.moodLabel}&quot; 어울리는 곡
+                오늘 기분에 어울리는 곡
               </p>
               {diaryResult.domesticTracks.length > 0 && (
                 <div className="mb-2">
@@ -3372,7 +3484,14 @@ export default function Home() {
                               })
                             : entry.date}
                         </span>
-                        <span>&quot;{entry.moodLabel}&quot;</span>
+                        <button
+                          type="button"
+                          onClick={() => persistDiaryHistory(diaryHistory.filter((_, idx) => idx !== i))}
+                          aria-label="이 기록 삭제"
+                          className="rounded px-1.5 py-0.5 text-white/40 hover:bg-white/10 hover:text-red-400"
+                        >
+                          삭제
+                        </button>
                       </div>
                       {entry.text && (
                         <p className="mt-1 whitespace-pre-wrap break-words text-white/50">
@@ -3455,12 +3574,8 @@ export default function Home() {
         profileInfo={profileInfo}
         onToggleFollow={handleToggleFollow}
         onSaveBio={handleSaveBio}
-        onSignOut={async () => {
-          await supabase?.auth.signOut();
-          setIsPublicFeedOpen(false);
-          setViewingProfileNickname(null);
-          setProfileInfo(null);
-        }}
+        onSignOut={() => setIsLogoutConfirmOpen(true)}
+        accountEmail={userEmail}
       />
     )}
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useSwipeBack } from "@/lib/useSwipeBack";
 import { createPortal } from "react-dom";
 import {
   followUser,
@@ -34,6 +35,8 @@ type RankingPageProps = {
   onSaveBio: (bio: string) => void;
   // 내 프로필 화면 안의 로그아웃 버튼
   onSignOut?: () => void;
+  // 내 프로필 화면에 "현재 로그인한 계정"으로 보여줄 이메일
+  accountEmail?: string | null;
 };
 
 // 팔로워/팔로잉 목록 바텀시트 — 프로필 카드의 숫자를 누르면 열림. 목록에서 바로 팔로우/언팔로우하고,
@@ -135,12 +138,14 @@ function ProfileHeader({
   onSaveBio,
   onViewProfile,
   onSignOut,
+  accountEmail,
 }: {
   info: UserProfilePage;
   onToggleFollow: () => void;
   onSaveBio: (bio: string) => void;
   onViewProfile: (nickname: string) => void;
   onSignOut?: () => void;
+  accountEmail?: string | null;
 }) {
   const [followSheet, setFollowSheet] = useState<"followers" | "following" | null>(null);
   const [editing, setEditing] = useState(false);
@@ -154,6 +159,9 @@ function ProfileHeader({
         </span>
         <div className="min-w-0 flex-1">
           <p className="truncate text-base font-bold">{info.nickname}</p>
+          {info.isMe && accountEmail && (
+            <p className="truncate text-[11px] text-white/40">{accountEmail}</p>
+          )}
           <p className="mt-0.5 text-xs text-white/55">
             <button type="button" onClick={() => setFollowSheet("followers")} className="hover:text-white">
               팔로워 <b className="text-white/80">{info.followerCount}</b>
@@ -513,6 +521,7 @@ export default function RankingPage({
   onToggleFollow,
   onSaveBio,
   onSignOut,
+  accountEmail,
 }: RankingPageProps) {
   // (랭킹 카테고리 필터, 2026-10-10 추가) 이미 fetch된 publicPlaylists(최대 50개)를
   // 클라이언트에서 거르기만 하면 되는 순수 화면 상태라, page.tsx로 끌어올리지 않고 여기 로컬
@@ -551,6 +560,8 @@ export default function RankingPage({
           : categoryFiltered;
   const overallRank = (id: number) => publicPlaylists.findIndex((p) => p.id === id) + 1;
 
+  const swipeBack = useSwipeBack(screen === "feed" ? onClose : onBack);
+
   const title =
     screen === "tracks"
       ? currentTrackPlaylist?.name ?? "재생목록"
@@ -559,7 +570,11 @@ export default function RankingPage({
         : "인기 차트";
 
   return createPortal(
-    <div className="fixed inset-0 z-40 flex flex-col bg-neutral-950" style={{ paddingBottom: "var(--mini-pad, 0px)" }}>
+    <div
+      className="fixed inset-0 z-40 flex flex-col bg-neutral-950"
+      style={{ paddingBottom: "var(--mini-pad, 0px)" }}
+      {...swipeBack}
+    >
       <div className="flex items-center justify-between border-b border-white/10 px-6 py-4">
         <button
           type="button"
@@ -651,6 +666,7 @@ export default function RankingPage({
                   onSaveBio={onSaveBio}
                   onViewProfile={onViewProfile}
                   onSignOut={onSignOut}
+                  accountEmail={accountEmail}
                 />
               )}
               {profilePlaylists.length === 0 ? (

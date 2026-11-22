@@ -1,0 +1,280 @@
+{
+ "_meta": {
+  "source": "멜론 검색 화면 직접 옮겨 적음",
+  "captured_at": "2026-11-20",
+  "note": "YB는 멜론에서 'YB (윤도현 밴드)'로 표기. 오대천왕·시크릿 플라워·한스 밴드 곡은 다른 아티스트라 제외.",
+  "suggested_aliases_confident": {
+   "YB": [
+    "윤도현밴드",
+    "윤도현 밴드",
+    "윤도현",
+    "와이비"
+   ],
+   "달담": [
+    "달담",
+    "dalldam"
+   ]
+  }
+ },
+ "tracks": [
+  {
+   "title": "졸업",
+   "artist": "달담",
+   "artist_en": "",
+   "artist_ko": "달담",
+   "rank": 1
+  },
+  {
+   "title": "그럼에도 우리의 이름은",
+   "artist": "달담",
+   "artist_en": "",
+   "artist_ko": "달담",
+   "rank": 2
+  },
+  {
+   "title": "청록",
+   "artist": "달담",
+   "artist_en": "",
+   "artist_ko": "달담",
+   "rank": 3
+  },
+  {
+   "title": "100m",
+   "artist": "달담",
+   "artist_en": "",
+   "artist_ko": "달담",
+   "rank": 4
+  },
+  {
+   "title": "청운",
+   "artist": "달담",
+   "artist_en": "",
+   "artist_ko": "달담",
+   "rank": 5
+  },
+  {
+   "title": "여름도둑",
+   "artist": "달담",
+   "artist_en": "",
+   "artist_ko": "달담",
+   "rank": 6
+  },
+  {
+   "title": "청춘기수",
+   "artist": "달담",
+   "artist_en": "",
+   "artist_ko": "달담",
+   "rank": 7
+  },
+  {
+   "title": "반딧불이",
+   "artist": "달담",
+   "artist_en": "",
+   "artist_ko": "달담",
+   "rank": 8
+  },
+  {
+   "title": "세상이 멈췄다",
+   "artist": "달담",
+   "artist_en": "",
+   "artist_ko": "달담",
+   "rank": 9
+  },
+  {
+   "title": "무지개",
+   "artist": "달담",
+   "artist_en": "",
+   "artist_ko": "달담",
+   "rank": 10
+  },
+  {
+   "title": "흰수염고래",
+   "artist": "YB",
+   "artist_en": "",
+   "artist_ko": "YB",
+   "rank": 1
+  },
+  {
+   "title": "나는 나비",
+   "artist": "YB",
+   "artist_en": "",
+   "artist_ko": "YB",
+   "rank": 2
+  },
+  {
+   "title": "너를 보내고",
+   "artist": "YB",
+   "artist_en": "",
+   "artist_ko": "YB",
+   "rank": 3
+  },
+  {
+   "title": "박하사탕",
+   "artist": "YB",
+   "artist_en": "",
+   "artist_ko": "YB",
+   "rank": 4
+  },
+  {
+   "title": "잊을께",
+   "artist": "YB",
+   "artist_en": "",
+   "artist_ko": "YB",
+   "rank": 5
+  },
+  {
+   "title": "붉은 노을 (원곡가수 이문세)",
+   "artist": "YB",
+   "artist_en": "",
+   "artist_ko": "YB",
+   "rank": 6
+  },
+  {
+   "title": "사랑 Two",
+   "artist": "YB",
+   "artist_en": "",
+   "artist_ko": "YB",
+   "rank": 7
+  },
+  {
+   "title": "고열",
+   "artist": "유다빈밴드",
+   "artist_en": "",
+   "artist_ko": "유다빈밴드",
+   "rank": 1
+  },
+  {
+   "title": "좋지 아니한가",
+   "artist": "유다빈밴드",
+   "artist_en": "",
+   "artist_ko": "유다빈밴드",
+   "rank": 2
+  },
+  {
+   "title": "항해",
+   "artist": "유다빈밴드",
+   "artist_en": "",
+   "artist_ko": "유다빈밴드",
+   "rank": 3
+  },
+  {
+   "title": "LETTER",
+   "artist": "유다빈밴드",
+   "artist_en": "",
+   "artist_ko": "유다빈밴드",
+   "rank": 4
+  },
+  {
+   "title": "백일몽",
+   "artist": "유다빈밴드",
+   "artist_en": "",
+   "artist_ko": "유다빈밴드",
+   "rank": 5
+  },
+  {
+   "title": "불",
+   "artist": "유다빈밴드",
+   "artist_en": "",
+   "artist_ko": "유다빈밴드",
+   "rank": 6
+  },
+  {
+   "title": "오늘이야 (Good Day)",
+   "artist": "유다빈밴드",
+   "artist_en": "",
+   "artist_ko": "유다빈밴드",
+   "rank": 7
+  },
+  {
+   "title": "우리의 밤 (Feat. 유승우)",
+   "artist": "유다빈밴드",
+   "artist_en": "",
+   "artist_ko": "유다빈밴드",
+   "rank": 8
+  },
+  {
+   "title": "ONCE",
+   "artist": "유다빈밴드",
+   "artist_en": "",
+   "artist_ko": "유다빈밴드",
+   "rank": 9
+  },
+  {
+   "title": "바람",
+   "artist": "유다빈밴드",
+   "artist_en": "",
+   "artist_ko": "유다빈밴드",
+   "rank": 10
+  },
+  {
+   "title": "생각을 멈추다 보면",
+   "artist": "최유리",
+   "artist_en": "",
+   "artist_ko": "최유리",
+   "rank": 1
+  },
+  {
+   "title": "숲",
+   "artist": "최유리",
+   "artist_en": "",
+   "artist_ko": "최유리",
+   "rank": 2
+  },
+  {
+   "title": "잘 지내자, 우리",
+   "artist": "최유리",
+   "artist_en": "",
+   "artist_ko": "최유리",
+   "rank": 3
+  },
+  {
+   "title": "밤, 바다",
+   "artist": "최유리",
+   "artist_en": "",
+   "artist_ko": "최유리",
+   "rank": 4
+  },
+  {
+   "title": "그댄 행복에 살텐데 (2022)",
+   "artist": "최유리",
+   "artist_en": "",
+   "artist_ko": "최유리",
+   "rank": 5
+  },
+  {
+   "title": "동그라미",
+   "artist": "최유리",
+   "artist_en": "",
+   "artist_ko": "최유리",
+   "rank": 6
+  },
+  {
+   "title": "바람",
+   "artist": "최유리",
+   "artist_en": "",
+   "artist_ko": "최유리",
+   "rank": 7
+  },
+  {
+   "title": "외로움이라는 건",
+   "artist": "최유리",
+   "artist_en": "",
+   "artist_ko": "최유리",
+   "rank": 8
+  },
+  {
+   "title": "사랑에게",
+   "artist": "최유리",
+   "artist_en": "",
+   "artist_ko": "최유리",
+   "rank": 9
+  },
+  {
+   "title": "사랑",
+   "artist": "최유리",
+   "artist_en": "",
+   "artist_ko": "최유리",
+   "rank": 10
+  }
+ ]
+}

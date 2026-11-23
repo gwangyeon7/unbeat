@@ -2349,7 +2349,19 @@ def _apply_related_tracks(result: dict, q: str) -> dict:
 @app.get("/search")
 def search(q: str, artist: Optional[str] = None, x_session_id: Optional[str] = Header(default=None)):
     if artist and artist.strip():
-        return _with_display_names(_search_exact_pick(q.strip(), artist.strip(), x_session_id), q)
+        # (2026-11-23) 자동완성에서 "곡 + 아티스트"를 골라 들어오면 같은 곡의 버전(Acoustic/M/V/영문표기)만 줄줄이 나오고
+        # 아래가 비슷한 곡으로 안 채워지던 문제("하루하루" 빅뱅). 별칭표에 그 곡이 그 아티스트로 있으면 별칭표 결과(원곡 +
+        # 비슷한 곡 채우기)를 쓰고, 없으면 기존 결과에 변형 합치기/비슷한 곡 채우기만 적용. 실패하면 원래 결과 그대로.
+        try:
+            picked = ALIAS_CATALOG.find_artist(artist.strip())
+            cat = _search_from_catalog(q.strip(), x_session_id) if picked else None
+            if cat and cat.get("tracks"):
+                lead = ALIAS_CATALOG.find_artist(cat["tracks"][0].get("artistOfficialName") or cat["tracks"][0].get("artist") or "")
+                if lead and lead["id"] == picked["id"]:
+                    return _with_display_names(_apply_related_tracks(cat, q), q)
+        except Exception as e:
+            print(f"[catalog] 자동완성 선택 검색의 별칭표 조회 실패(무시): {e}")
+        return _with_display_names(_apply_related_tracks(_search_exact_pick(q.strip(), artist.strip(), x_session_id), q), q)
     catalog_result = _search_from_catalog(q, x_session_id)
     if catalog_result is not None:
         return _with_display_names(_apply_related_tracks(catalog_result, q), q)

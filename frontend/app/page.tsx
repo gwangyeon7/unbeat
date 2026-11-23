@@ -734,8 +734,23 @@ export default function Home() {
   }
 
   // 하단 "홈" 탭 — 검색 결과/보관함/랭킹/기록 등 어떤 화면에 있든 열려 있는 걸 모두 닫고 홈 맨 위로.
+  // 하단 탭바를 누르면 먼저 떠 있는 전체화면(보관함/재생목록 상세/아티스트/랭킹/일기)을 모두 닫음
+  function closeAllOverlays() {
+    setIsLibraryOpen(false);
+    setOpenPlaylistId(null);
+    setArtistPageName(null);
+    setIsPublicFeedOpen(false);
+    setViewingPublicPlaylistId(null);
+    setPublicPlaylistTracks(null);
+    setViewingProfileNickname(null);
+    setProfilePlaylists(null);
+    setIsDiaryOpen(false);
+    setIsProfileSheetOpen(false);
+  }
+
   function handleGoHome() {
     clearSearchResults();
+    closeAllOverlays();
     setIsLibraryOpen(false);
     setIsPublicFeedOpen(false);
     setViewingPublicPlaylistId(null);
@@ -1328,7 +1343,11 @@ export default function Home() {
   // (2026-11-22) 감성일기 창도 포함 — 일기에서 곡을 눌렀을 때 재생 바가 창 뒤에 가려져 재생되는지 알 수 없던 문제
   const isOverlayOpen = isLibraryOpen || openPlaylistId !== null || artistPageName !== null || isPublicFeedOpen || isDiaryOpen;
   useEffect(() => {
-    document.documentElement.style.setProperty("--mini-pad", isOverlayOpen && nowPlaying ? "4.5rem" : "0px");
+    // (2026-11-23) 전체화면 위에서도 하단 탭바(--tab-h)가 보이고 미니 플레이어(4.5rem)는 그 위에 쌓임 — 유튜브 뮤직처럼
+    document.documentElement.style.setProperty(
+      "--mini-pad",
+      isOverlayOpen ? (nowPlaying ? "calc(var(--tab-h) + 4.5rem)" : "var(--tab-h)") : "0px"
+    );
   }, [isOverlayOpen, nowPlaying]);
   // 아티스트 페이지 곡 조회용 정식 이름(검색 카드에서 열었을 때). 화면 제목은 artistPageName(한글 표시 이름)
   const [artistPageLookup, setArtistPageLookup] = useState<string | null>(null);
@@ -3091,14 +3110,14 @@ export default function Home() {
         유튜브 뮤직처럼 로고 옆 헤더 아이콘으로 옮기고 하단은 홈/보관함/랭킹/하이라이트 4개로
         줄임 — 탭이 너무 많다는 피드백 반영. */}
     <nav
-      className="fixed inset-x-0 bottom-0 z-30 flex h-16 items-stretch justify-between border-t border-white/10 bg-black/95 px-2 backdrop-blur sm:hidden"
+      className={`fixed inset-x-0 bottom-0 ${isOverlayOpen ? "z-[54]" : "z-30"} flex h-16 items-stretch justify-between border-t border-white/10 bg-black/95 px-2 backdrop-blur sm:hidden`}
       aria-label="하단 메뉴"
     >
       <button
         type="button"
         onClick={handleGoHome}
         className="flex flex-1 flex-col items-center justify-center gap-1 text-[11px]"
-        style={{ color: "#ff3b5c" }}
+        style={{ color: isOverlayOpen ? "rgba(255,255,255,0.7)" : "#ff3b5c" }}
       >
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-5 w-5">
           <path d="M4 11.5 12 4l8 7.5" />
@@ -3108,8 +3127,12 @@ export default function Home() {
       </button>
       <button
         type="button"
-        onClick={() => setIsLibraryOpen(true)}
-        className="flex flex-1 flex-col items-center justify-center gap-1 text-[11px] text-white/70"
+        onClick={() => {
+          closeAllOverlays();
+          setIsLibraryOpen(true);
+        }}
+        className="flex flex-1 flex-col items-center justify-center gap-1 text-[11px]"
+        style={{ color: isLibraryOpen ? "#ff3b5c" : "rgba(255,255,255,0.7)" }}
       >
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-5 w-5">
           <path d="M19 21V8a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2v13l7-4 7 4Z" />
@@ -3123,7 +3146,11 @@ export default function Home() {
           누르면 로그인 상태면 바로 내 프로필(로그아웃은 프로필 안), 아니면 로그인 모달. */}
       <button
         type="button"
-        onClick={() => (userEmail ? handleOpenMyProfile() : setIsAuthModalOpen(true))}
+        onClick={() => {
+          closeAllOverlays();
+          if (userEmail) handleOpenMyProfile();
+          else setIsAuthModalOpen(true);
+        }}
         className="flex flex-1 flex-col items-center justify-center gap-1 text-[11px] text-white/70"
       >
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-5 w-5">

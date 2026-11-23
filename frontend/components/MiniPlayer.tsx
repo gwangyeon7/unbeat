@@ -32,7 +32,7 @@ export type NowPlayingTrack = {
 };
 
 type MiniPlayerProps = {
-  // 보관함/재생목록 상세/아티스트 페이지 같은 전체화면 위에서도 하단 바가 보이게 올림(탭바도 가려져 있어 bottom-0)
+  // 보관함/재생목록 상세/아티스트 페이지 같은 전체화면 위에서도 하단 바가 보이게 올림(2026-11-23 이후 탭바도 오버레이 위에 같이 보이므로 탭바 위 bottom-16)
   raised?: boolean;
   track: NowPlayingTrack;
   onClose: () => void;
@@ -1162,7 +1162,7 @@ export default function MiniPlayer({
     // 이 collapsed bar를 bottom-16으로 올려 탭바 위에 쌓음. sm 이상은 탭바가 없으니 기존대로 bottom-0.
     <div
       className={`fixed inset-x-0 border-t border-white/10 bg-black/95 backdrop-blur ${
-        raised ? "bottom-0 z-[55]" : "bottom-16 z-30 sm:bottom-0"
+        raised ? "bottom-16 z-[55] sm:bottom-0" : "bottom-16 z-30 sm:bottom-0"
       }`}
     >
       {/* 실제 유튜브 iframe — 화면엔 안 보이게 숨겨두고 오디오 소스로만 씀 */}

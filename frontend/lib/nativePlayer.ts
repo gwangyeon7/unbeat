@@ -120,6 +120,13 @@ export function createNativePlayer(
       b.setQueue({ tracks });
     },
     destroy: () => {
+      // (2026-11-22) 하단 바의 ✕로 플레이어를 닫아도 노래가 계속 나오던 문제 — 웹의 YT.Player.destroy()는 재생까지 멈추지만,
+      // 이 네이티브 프록시는 리스너만 떼고 서비스(별도 웹뷰)의 재생은 그대로 둬서 소리가 안 꺼졌음. 닫을 땐 먼저 일시정지.
+      try {
+        b.pause().catch(() => {});
+      } catch {
+        // 브리지 호출 실패는 무시(닫는 동작 자체는 계속)
+      }
       handles.forEach((h) => h.remove());
     },
   };

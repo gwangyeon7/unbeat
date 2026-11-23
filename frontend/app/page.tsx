@@ -1325,7 +1325,8 @@ export default function Home() {
   // 예전엔 아래에 곡 몇 개만 덧붙여서 검색 결과 맨 아래 "다른 곡"과 똑같은 목록이 중복으로 나왔음.
   const [artistPageName, setArtistPageName] = useState<string | null>(null);
   // 전체화면 위에 뜨는 화면들(보관함/재생목록 상세/아티스트/공개 피드) — 이때 미니 플레이어를 위로 올려 계속 보이게 함
-  const isOverlayOpen = isLibraryOpen || openPlaylistId !== null || artistPageName !== null || isPublicFeedOpen;
+  // (2026-11-22) 감성일기 창도 포함 — 일기에서 곡을 눌렀을 때 재생 바가 창 뒤에 가려져 재생되는지 알 수 없던 문제
+  const isOverlayOpen = isLibraryOpen || openPlaylistId !== null || artistPageName !== null || isPublicFeedOpen || isDiaryOpen;
   useEffect(() => {
     document.documentElement.style.setProperty("--mini-pad", isOverlayOpen && nowPlaying ? "4.5rem" : "0px");
   }, [isOverlayOpen, nowPlaying]);
@@ -2589,7 +2590,9 @@ export default function Home() {
                 type="button"
                 onClick={() => {
                   handleOpenPublicFeed();
-                  handleViewPublicPlaylist(p.id);
+                  // (2026-11-23) TOP5 행도 재생목록이 아니라 그 사람 프로필로 연결(익명이면 재생목록)
+                  if (p.ownerNickname) handleViewProfile(p.ownerNickname);
+                  else handleViewPublicPlaylist(p.id);
                 }}
                 className="flex items-center gap-3 rounded-lg px-1 py-1.5 text-left hover:bg-white/5"
               >
@@ -3381,6 +3384,7 @@ export default function Home() {
     {isDiaryOpen && (
       <div
         className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4"
+        style={{ paddingBottom: "var(--mini-pad, 0px)" }}
         onClick={() => setIsDiaryOpen(false)}
       >
         <div

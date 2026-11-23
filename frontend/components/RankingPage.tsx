@@ -426,11 +426,15 @@ function PlaylistRankRow({
     <div
       role="button"
       tabIndex={0}
-      onClick={() => onSelectPlaylist(playlist.id)}
+      // (2026-11-23) 랭킹 행을 누르면 재생목록이 아니라 그 사람 프로필로 이동(닉네임이 없는 익명이면 재생목록으로)
+      onClick={() =>
+        playlist.ownerNickname ? onViewProfile(playlist.ownerNickname) : onSelectPlaylist(playlist.id)
+      }
       onKeyDown={(e) => {
         if (e.key === "Enter" || e.key === " ") {
           e.preventDefault();
-          onSelectPlaylist(playlist.id);
+          if (playlist.ownerNickname) onViewProfile(playlist.ownerNickname);
+          else onSelectPlaylist(playlist.id);
         }
       }}
       className="flex min-w-0 cursor-pointer items-center gap-3 rounded-md p-1.5 hover:bg-white/5"
@@ -619,7 +623,7 @@ export default function RankingPage({
           여러 열로 채워지게 함 — 곡 리스트(tracks) 화면은 원래도 텍스트 줄 나열이라 좁은 폭이
           더 읽기 편해서 그대로 둠. */}
       <div
-        className={`mx-auto w-full flex-1 overflow-y-auto px-4 pt-4 sm:px-6 ${
+        className={`mx-auto min-h-0 w-full flex-1 touch-pan-y overflow-y-auto overscroll-y-contain px-4 pt-4 sm:px-6 ${
           screen === "tracks" ? "max-w-2xl" : "max-w-6xl"
         }`}
       >

@@ -1461,7 +1461,9 @@ export default function MiniPlayer({
       {isExpanded &&
         typeof document !== "undefined" &&
         createPortal(
-        <div className="fixed inset-0 z-40 flex h-[100dvh] flex-col overflow-y-auto bg-neutral-950 lg:overflow-hidden">
+        // z-[56]: 보관함(z-50)·감성일기 창(z-50) 위에서 하단 바를 눌러도 확장 화면이 그 뒤에 가려지지 않게 함(예전 z-40은
+        // 그 화면들 뒤로 숨어서 눌러도 아무 일도 안 일어나 보였음). 재생목록 추가 창(z-60) 등 모달보다는 아래.
+        <div className="fixed inset-0 z-[56] flex h-[100dvh] flex-col overflow-y-auto bg-neutral-950 lg:overflow-hidden">
           {/* 모바일 iOS Safari에서 앨범아트/헤더 버튼이 화면 위쪽으로 잘려 안 보이던 문제 — 두 가지가
               겹친 것으로 보임: (1) 정적 100vh 기준이라 주소창이 접혔다 펴졌다 하는 모바일 브라우저에서
               실제 보이는 영역과 어긋날 수 있어 h-[100dvh](동적 뷰포트 높이)로 교체, (2) 데스크톱에서만

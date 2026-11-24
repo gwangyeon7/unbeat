@@ -19,7 +19,8 @@ type SearchBarProps = {
 };
 
 export type SearchBarHandle = {
-  openMobileSearch: () => void;
+  // clear: true면 입력창에 남은 이전 검색어와 자동완성을 비우고 연다("노래 추가"로 들어올 때)
+  openMobileSearch: (opts?: { clear?: boolean }) => void;
   // 검색 결과에서 뒤로 나왔을 때 입력창에 남아있는 이전 검색어를 비움 (피드백 #5)
   clear: () => void;
 };
@@ -76,7 +77,13 @@ const SearchBar = forwardRef<SearchBarHandle, SearchBarProps>(function SearchBar
   // 자동완성, 최근 검색 등)은 전부 이 컴포넌트 안에 그대로 두고 싶어서(이미 잘 동작하던 걸
   // 건드릴 이유가 없음) — "열어라"는 명령 하나만 받으면 충분함.
   useImperativeHandle(ref, () => ({
-    openMobileSearch: () => setIsMobileOpen(true),
+    openMobileSearch: (opts) => {
+      if (opts?.clear) {
+        setValue("");
+        setSuggestions({ tracks: [], artists: [] });
+      }
+      setIsMobileOpen(true);
+    },
     clear: () => {
       setValue("");
       setSuggestions({ tracks: [], artists: [] });

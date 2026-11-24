@@ -2279,7 +2279,7 @@ export default function Home() {
                         onClick: () => {
                           // 보관함을 닫고 검색을 바로 열어줌 — 찾은 곡의 "+"로 담음
                           setIsLibraryOpen(false);
-                          searchBarRef.current?.openMobileSearch();
+                          searchBarRef.current?.openMobileSearch({ clear: true });
                         },
                       },
                       { label: "이름 수정", onClick: () => startRenamePlaylist(playlist) },
@@ -3358,7 +3358,7 @@ export default function Home() {
               playlistOpenedFromLibraryRef.current = false;
               setOpenPlaylistId(null);
               setIsLibraryOpen(false);
-              searchBarRef.current?.openMobileSearch();
+              searchBarRef.current?.openMobileSearch({ clear: true });
             }}
             onAddSelectedToPlaylist={(tracks) =>
               handleOpenBulkAddToPlaylist(
@@ -3369,6 +3369,13 @@ export default function Home() {
             onDeleteSelected={(trackIds) => handleRemoveTracksFromPlaylist(openPlaylistId, trackIds)}
             onToggleVisibility={() => handleToggleVisibility(playlist)}
             isTogglingVisibility={isTogglingVisibility}
+            onDeletePlaylist={() => {
+              // 보관함에서 들어왔으면 삭제 후 보관함으로 복귀
+              const fromLibrary = playlistOpenedFromLibraryRef.current;
+              playlistOpenedFromLibraryRef.current = false;
+              handleDeletePlaylist(playlist.id);
+              if (fromLibrary) setIsLibraryOpen(true);
+            }}
           />
         );
       })()}

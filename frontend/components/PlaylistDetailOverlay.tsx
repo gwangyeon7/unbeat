@@ -231,9 +231,9 @@ export default function PlaylistDetailOverlay({
         >
           <div
             className="w-full max-w-lg rounded-t-2xl border border-white/10 bg-neutral-900"
-            // 하단 탭바(z-54)가 이 화면 위에 떠서 메뉴 맨 아래 항목(삭제)을 가리므로 탭바 높이만큼 띄움
+            // 하단 탭바(z-54)와 재생 중 미니 플레이어(--mini-pad에 높이 포함)가 이 화면 위에 떠서 메뉴 맨 아래 항목(삭제)을 가리므로 탭바 높이만큼 띄움
             style={{
-              paddingBottom: "calc(var(--tab-h, 0px) + 1rem)",
+              paddingBottom: "calc(var(--mini-pad, var(--tab-h, 0px)) + 1rem)",
               maxHeight: "85dvh",
               overflowY: "auto",
               overscrollBehavior: "contain",
@@ -245,15 +245,6 @@ export default function PlaylistDetailOverlay({
               <p className="truncate text-xs text-white/50">{menuTrack.artistName}</p>
             </div>
             {[
-              {
-                label: "재생",
-                onClick: () =>
-                  onPlayTrack({
-                    name: menuTrack.trackName,
-                    artist: menuTrack.artistName,
-                    image: menuTrack.imageUrl,
-                  }),
-              },
               { label: "이 곡 반복재생", onClick: () => onPlaySelected([menuTrack], true) },
               ...(onPlayNext
                 ? [

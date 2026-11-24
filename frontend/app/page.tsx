@@ -3369,13 +3369,6 @@ export default function Home() {
             onDeleteSelected={(trackIds) => handleRemoveTracksFromPlaylist(openPlaylistId, trackIds)}
             onToggleVisibility={() => handleToggleVisibility(playlist)}
             isTogglingVisibility={isTogglingVisibility}
-            onDeletePlaylist={() => {
-              // 보관함에서 들어왔으면 삭제 후 보관함으로 복귀
-              const fromLibrary = playlistOpenedFromLibraryRef.current;
-              playlistOpenedFromLibraryRef.current = false;
-              handleDeletePlaylist(playlist.id);
-              if (fromLibrary) setIsLibraryOpen(true);
-            }}
           />
         );
       })()}

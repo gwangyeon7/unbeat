@@ -26,8 +26,6 @@ type PlaylistDetailOverlayProps = {
   // 곡 ⋮ 메뉴의 "다음에 재생" / "대기열에 추가" (page.tsx가 미니 플레이어 큐에 넣음)
   onPlayNext?: (track: { name: string; artist: string; image?: string | null }) => void;
   onAddToQueue?: (track: { name: string; artist: string; image?: string | null }) => void;
-  // 헤더 ⋯ 메뉴의 "재생목록 삭제" (재생목록 자체를 지움 — 곡 하나 삭제는 곡 ⋮ 메뉴)
-  onDeletePlaylist?: () => void;
 };
 
 // 이모지 대신 글자색을 따라가는 선 아이콘만 사용
@@ -66,12 +64,9 @@ export default function PlaylistDetailOverlay({
   onAddSongs,
   onPlayNext,
   onAddToQueue,
-  onDeletePlaylist,
 }: PlaylistDetailOverlayProps) {
   // 곡 행 ⋮를 누르면 열리는 바텀시트의 대상 곡
   const [menuTrack, setMenuTrack] = useState<PlaylistTrack | null>(null);
-  // 헤더 ⋯ 메뉴(재생목록 삭제): null=닫힘, 'menu'=메뉴, 'confirm'=삭제 확인
-  const [headerMenu, setHeaderMenu] = useState<null | "menu" | "confirm">(null);
   const swipeStartRef = useRef<{ x: number; y: number } | null>(null);
   const list = tracks ?? [];
   function handleRowClick(t: PlaylistTrack) {
@@ -100,7 +95,7 @@ export default function PlaylistDetailOverlay({
       {/* 헤더: 양쪽 칸 너비를 같게(w-20) 둬서 제목이 항상 정가운데. 오른쪽엔 공개/비공개 전환만 둠 —
           예전 "선택" 버튼과 선택 모드는 없애고, 그 안에 있던 기능은 곡마다 있는 ⋮ 메뉴로 옮김. */}
       <div className="flex items-center gap-2 border-b border-white/10 px-4 py-4">
-        <div className="flex w-24 shrink-0 justify-start">
+        <div className="flex w-20 shrink-0 justify-start">
           <button
             type="button"
             onClick={onClose}
@@ -116,7 +111,7 @@ export default function PlaylistDetailOverlay({
           <p className="truncate text-sm font-semibold">{playlist.name}</p>
           <p className="text-xs text-white/40">{list.length}곡</p>
         </div>
-        <div className="flex w-24 shrink-0 items-center justify-end gap-1">
+        <div className="flex w-20 shrink-0 justify-end">
           {/* 비로그인 상태로 공개를 누르면 호출 쪽(page.tsx)이 로그인 모달을 띄움 */}
           <button
             type="button"
@@ -135,20 +130,6 @@ export default function PlaylistDetailOverlay({
             />
             {playlist.isPublic ? "공개" : "비공개"}
           </button>
-          {onDeletePlaylist && (
-            <button
-              type="button"
-              onClick={() => setHeaderMenu("menu")}
-              aria-label="더보기"
-              className="rounded-full p-1.5 text-white/60 hover:bg-white/10 hover:text-white"
-            >
-              <svg viewBox="0 0 24 24" fill="currentColor" className="h-5 w-5" aria-hidden="true">
-                <circle cx="12" cy="5" r="1.8" />
-                <circle cx="12" cy="12" r="1.8" />
-                <circle cx="12" cy="19" r="1.8" />
-              </svg>
-            </button>
-          )}
         </div>
       </div>
 
@@ -241,62 +222,6 @@ export default function PlaylistDetailOverlay({
         </div>
       </div>
 
-
-      {/* 헤더 ⋯ 메뉴 — 재생목록 삭제(한 번 더 확인) */}
-      {headerMenu && onDeletePlaylist && (
-        <div
-          className="fixed inset-0 z-[60] flex items-end justify-center bg-black/60"
-          onClick={() => setHeaderMenu(null)}
-        >
-          <div
-            className="w-full max-w-lg rounded-t-2xl border border-white/10 bg-neutral-900"
-            // 하단 탭바(z-54)가 이 화면 위에 떠서 메뉴 맨 아래 항목(삭제)을 가리므로 탭바 높이만큼 띄움
-            style={{
-              paddingBottom: "calc(var(--tab-h, 0px) + 1rem)",
-              maxHeight: "85dvh",
-              overflowY: "auto",
-              overscrollBehavior: "contain",
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="border-b border-white/10 px-5 py-4">
-              <p className="truncate text-sm font-semibold">{playlist.name}</p>
-              <p className="text-xs text-white/50">
-                {headerMenu === "confirm" ? "이 재생목록과 담긴 곡이 모두 사라져요. 되돌릴 수 없어요." : `${list.length}곡`}
-              </p>
-            </div>
-            {headerMenu === "menu" ? (
-              <button
-                type="button"
-                onClick={() => setHeaderMenu("confirm")}
-                className="block w-full px-5 py-3.5 text-left text-sm text-red-400 hover:bg-white/5"
-              >
-                재생목록 삭제
-              </button>
-            ) : (
-              <>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setHeaderMenu(null);
-                    onDeletePlaylist();
-                  }}
-                  className="block w-full px-5 py-3.5 text-left text-sm font-semibold text-red-400 hover:bg-white/5"
-                >
-                  삭제하기
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setHeaderMenu(null)}
-                  className="block w-full px-5 py-3.5 text-left text-sm text-white hover:bg-white/5"
-                >
-                  취소
-                </button>
-              </>
-            )}
-          </div>
-        </div>
-      )}
 
       {/* 곡 ⋮ 메뉴(바텀시트) — z-50이라 이 화면(z-40) 위에 뜸 */}
       {menuTrack && (

@@ -5116,6 +5116,17 @@ def discover_by_mood(tag: str, x_session_id: Optional[str] = Header(default=None
     return {"domesticTracks": domestic_tracks, "internationalTracks": international_tracks}
 
 
+@app.get("/mix-pool")
+def mix_pool(domestic: int = 24, international: int = 24):
+    """오늘의 믹스 후보 — 별칭표(메모리)에서 국내/해외 곡을 무작위로 뽑아 줌. 외부 API를 부르지 않아 빠르고
+    유튜브/Last.fm 호출 한도도 쓰지 않음. 아티스트당 2곡까지."""
+    try:
+        return ALIAS_CATALOG.random_mix(max(1, min(domestic, 60)), max(1, min(international, 60)))
+    except Exception as e:
+        print(f"[mix-pool] 별칭표에서 뽑기 실패: {e}")
+        return {"domesticTracks": [], "internationalTracks": []}
+
+
 @app.get("/chart")
 def top_chart(country: Optional[str] = None):
     """

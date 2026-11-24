@@ -1,7 +1,9 @@
-import { discoverByMood, getArtistTopTracks, getTopArtists, getTopChart, type Track } from "@/lib/api";
+import { getMixPool, type Track } from "@/lib/api";
 import type { AutoMixTrack, FavoriteTrack } from "@/lib/playlistApi";
 
-// "오늘의 믹스" 후보 풀 만들기 + 곡 고르기. 즐겨찾기만 섞으면 즐겨찾기가 적을 때 곡이 몇 개 안 되고
+// (2026-11-24) 후보를 별칭표에서 한 번에 받아 옴(/mix-pool) — 예전엔 차트·무드·아티스트 인기곡 호출 10여 개를 동시에 보내
+// 캐시가 비면 10초 가까이 걸려서 시연에 불안했음. 별칭표는 서버 메모리라 거의 즉시 응답하고 유튜브 쿼터도 안 씀.
+// (아래 설명은 예전 방식 기준) "오늘의 믹스" 후보 풀 만들기 + 곡 고르기. 즐겨찾기만 섞으면 즐겨찾기가 적을 때 곡이 몇 개 안 되고
 // 누를 때마다 같은 곡만 순서만 바뀌어서, 즐겨찾기 아티스트 인기곡 + 인기 차트(국내/글로벌)를 늘 같이
 // 풀에 넣고 거기서 무작위로 고름. 유튜브 쿼터를 쓰지 않도록 Last.fm 기반 API만 씀.
 // 비슷한 곡(/similar-tracks)은 캐시가 없을 때 느리고(15초 가까이) 한국 곡이 적으며, 결과가 비면
@@ -12,18 +14,11 @@ const MIX_SIZE = 30;
 // 국내 곡은 감성 무드(잔잔한/출퇴근길/위로/슬픔/설렘/신나는)에 직접 골라 둔 곡 목록에서 가져옴(인디·발라드·유명곡 위주).
 const DOMESTIC_TARGET = MIX_SIZE / 2;
 const INTERNATIONAL_TARGET = MIX_SIZE - DOMESTIC_TARGET;
-const MOOD_TAGS = ["chill", "driving", "study", "sad", "love", "party"];
-const MOOD_CALLS = 4; // 무드 중 무작위 4개를 골라 조회(서버에 미리 만들어 둔 곡 풀이라 빠름)
 const MUST_INCLUDE_FAVORITES = 5; // 보관함에 담은 곡이 믹스에 보이게 즐겨찾기 중 최대 5곡은 반드시 넣음
 const MAX_PER_ARTIST = 6; // 한 아티스트로 쏠리지 않게(즐겨찾기 아티스트가 1명이어도 나머지는 차트 곡으로 채워짐)
 const MIN_MIX_TRACKS = 10; // 이보다 적게 모이면 호출하는 쪽이 /playlists/auto-generate로 폴백
-const SEED_ARTISTS = 5; // 인기곡을 가져올 즐겨찾기 아티스트 수
-// 2단계: 1단계로 30곡이 안 차면 차트에 나온 아티스트 중 무작위로 골라 인기곡을 더 가져옴
-const EXPAND_ARTISTS = 4;
 // 전체 마감 — 이 안에 온 결과만으로 믹스를 만듦(캐시된 호출은 거의 0초라 대부분 금방 끝남)
 const POOL_TIMEOUT_MS = 6000;
-// Last.fm geo.getTopTracks는 ISO 코드("KR")가 아니라 나라 이름을 받음("KR"이면 400)
-const KOREA_CHART_COUNTRY = "Korea, Republic of";
 
 function shuffle<T>(items: T[]): T[] {
   const arr = [...items];
@@ -48,20 +43,6 @@ function fromFavorite(f: FavoriteTrack): AutoMixTrack {
 // 한글이 들어간 이름이면 국내 곡으로 봄(BTS/aespa처럼 영문 이름 가수는 무드 조회 결과의 국내/해외 구분을 우선 씀)
 const hasHangul = (t: AutoMixTrack) => /[가-힣]/.test(`${t.artistName}${t.trackName}`);
 
-const uniqueArtists = (names: string[]) => Array.from(new Map(names.map((n) => [norm(n), n])).values());
-
-// 호출들을 동시에 보내고, 마감 안에 끝난 것만 씀(실패/시간 초과는 무시)
-async function settle<T>(calls: Promise<T>[], deadline: Promise<never>): Promise<T[]> {
-  const results = await Promise.allSettled(calls.map((c) => Promise.race([c, deadline])));
-  const out: T[] = [];
-  for (const r of results) {
-    if (r.status === "fulfilled") out.push(r.value as T);
-  }
-  return out;
-}
-
-const topTracksOf = (artist: string) => getArtistTopTracks(artist, { limit: 10, lyricsOnly: false });
-
 export type AutoMixResult = {
   tracks: AutoMixTrack[];
   // false면 즐겨찾기가 없어서 인기곡으로만 만든 믹스
@@ -72,49 +53,26 @@ export type AutoMixResult = {
 export async function buildAutoMix(favorites: FavoriteTrack[]): Promise<AutoMixResult | null> {
   const fromFavorites = favorites.length > 0;
   const favoriteTracks = shuffle(favorites.map(fromFavorite));
-  const seedArtists = shuffle(uniqueArtists(favoriteTracks.map((t) => t.artistName))).slice(0, SEED_ARTISTS);
 
+  // 별칭표에서 국내/해외 후보를 받음(실패하거나 6초 안에 못 받으면 null -> 호출하는 쪽이 기존 방식으로 폴백)
   let timer: ReturnType<typeof setTimeout> | undefined;
-  let expired = false;
-  const deadline = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => {
-      expired = true;
-      reject(new Error("timeout"));
-    }, POOL_TIMEOUT_MS);
-  });
-
   try {
-    // 1단계(전부 동시에): 즐겨찾기 아티스트 인기곡 + 국내/글로벌 인기 차트 + 인기 아티스트 목록(2단계용)
-    // + 감성 무드 곡 풀(국내 곡을 확실히 채우기 위함)
-    const moodTags = shuffle(MOOD_TAGS).slice(0, MOOD_CALLS);
-    const [trackLists, artistLists, moodLists] = await Promise.all([
-      settle(
-        [...seedArtists.map(topTracksOf), getTopChart(KOREA_CHART_COUNTRY), getTopChart()],
-        deadline
-      ),
-      settle([getTopArtists()], deadline),
-      settle(moodTags.map((tag) => discoverByMood(tag)), deadline),
+    const pool = await Promise.race([
+      getMixPool(),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error("timeout")), POOL_TIMEOUT_MS);
+      }),
     ]);
-    const moodDomestic = moodLists.flatMap((r) => r.domesticTracks.map(fromTrack));
-    const moodInternational = moodLists.flatMap((r) => r.internationalTracks.map(fromTrack));
-    let fetched = trackLists.flatMap((r) => r.tracks.map(fromTrack));
-    let picked = pick(favoriteTracks, fetched, moodDomestic, moodInternational);
-
-    // 2단계: 30곡이 안 차면 차트/인기 아티스트 중 아직 안 쓴 아티스트 4명의 인기곡으로 채움.
-    // 1단계가 마감 안에 다 모이지 않았으면(시간이 없으니) 건너뜀.
-    if (picked.length < MIX_SIZE && !expired) {
-      const used = new Set(seedArtists.map(norm));
-      const candidates = uniqueArtists([
-        ...fetched.map((t) => t.artistName),
-        ...artistLists.flatMap((r) => r.artists.map((a) => a.name)),
-      ]).filter((a) => !used.has(norm(a)));
-      const more = await settle(shuffle(candidates).slice(0, EXPAND_ARTISTS).map(topTracksOf), deadline);
-      fetched = [...fetched, ...more.flatMap((r) => r.tracks.map(fromTrack))];
-      picked = pick(favoriteTracks, fetched, moodDomestic, moodInternational);
-    }
-
+    const picked = pick(
+      favoriteTracks,
+      [],
+      pool.domesticTracks.map(fromTrack),
+      pool.internationalTracks.map(fromTrack)
+    );
     if (picked.length < MIN_MIX_TRACKS) return null;
     return { tracks: picked, fromFavorites };
+  } catch {
+    return null;
   } finally {
     clearTimeout(timer);
   }

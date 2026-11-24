@@ -272,6 +272,37 @@ class AliasCatalog:
         return {"name": name, "artist": artist_display, "artistOfficialName": a["official"],
                 "listeners": t["listeners"], "url": t["url"], "image": image}
 
+    def random_mix(self, domestic: int, international: int, per_artist: int = 2) -> dict:
+        """오늘의 믹스용: 별칭표에서 국내/해외 곡을 무작위로 뽑음. 메모리 조회뿐이라 외부 호출이 없어 거의 0초.
+        국내 = 표시 이름이나 곡 제목에 한글이 있는 곡. 이미지가 있는 곡만(빈 카드 방지), 아티스트당 per_artist곡까지."""
+        import random
+
+        def has_hangul(text) -> bool:
+            return isinstance(text, str) and any("가" <= ch <= "힣" for ch in text)
+
+        dom_ids, intl_ids = [], []
+        for tid, t in self.tracks.items():
+            if not t.get("image") or t["artist_id"] not in self.artists:
+                continue
+            ko = has_hangul(self.display_name(t["artist_id"])) or has_hangul(t["title"]) or has_hangul(t["ko_title"])
+            (dom_ids if ko else intl_ids).append(tid)
+
+        def take(ids: list, n: int) -> list:
+            random.shuffle(ids)
+            used: dict = {}
+            out = []
+            for tid in ids:
+                aid = self.tracks[tid]["artist_id"]
+                if used.get(aid, 0) >= per_artist:
+                    continue
+                used[aid] = used.get(aid, 0) + 1
+                out.append(self._track_out(tid, lambda a, t: None))
+                if len(out) >= n:
+                    break
+            return out
+
+        return {"domesticTracks": take(dom_ids, domestic), "internationalTracks": take(intl_ids, international)}
+
     def unique_title_track(self, q: str, track_image: Callable[[str, str], Optional[str]] = lambda a, t: None) -> Optional[dict]:
         """(2026-11-18) 한글 없는 검색어(영문 제목 단독, 예: "leo")의 정규화 제목과 정확히 같은 곡이 별칭표에 딱 1곡이면
         그 곡(응답 형식), 0곡이거나 2곡 이상이면 None. 별칭 색인이 아니라서 검색을 가로채지 않고, 호출부가 파이프라인

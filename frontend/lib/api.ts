@@ -206,6 +206,11 @@ export function getTopChart(country?: string): Promise<{ tracks: Track[] }> {
   return fetchJson(`/chart${q}`);
 }
 
+// 오늘의 믹스 후보 — 별칭표(서버 메모리)에서 국내/해외 곡을 무작위로 받음. 외부 API 호출이 없어 빠름.
+export function getMixPool(): Promise<{ domesticTracks: Track[]; internationalTracks: Track[] }> {
+  return fetchJson(`/mix-pool?domestic=24&international=24`);
+}
+
 // 홈 화면 '인기 아티스트' 행용 — Last.fm 전체 서비스 인기 아티스트 랭킹
 export function getTopArtists(): Promise<{ artists: Artist[] }> {
   return fetchJson(`/chart/artists`);

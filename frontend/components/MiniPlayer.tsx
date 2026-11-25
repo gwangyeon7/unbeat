@@ -1778,7 +1778,7 @@ export default function MiniPlayer({
                           onKeyDown={(e) => {
                             if (e.key === "Enter" || e.key === " ") handleSeekToLyric(line.time);
                           }}
-                          className={`cursor-pointer text-base leading-relaxed transition-colors hover:text-white ${
+                          className={`cursor-pointer text-base leading-relaxed transition-colors [@media(hover:hover)]:hover:text-white ${
                             idx === activeLyricIndex ? "font-semibold text-white" : "text-white/35"
                           }`}
                         >

@@ -654,10 +654,31 @@ export default function MiniPlayer({
   }
 
   const syncedLines = lyrics?.syncedLyrics ? parseSyncedLyrics(lyrics.syncedLyrics) : [];
-  // 지금 재생 위치보다 시작 시각이 앞선 마지막 줄 = 지금 부르고 있는 줄
+  // 가사 싱크 보정(초): 가사 타임스탬프는 앨범 음원 기준인데 유튜브 영상은 인트로/무음이 더 길어서
+  // 가사가 소리보다 먼저 넘어가는 곡이 있음. 양수 = 가사를 그만큼 늦춤. 곡(videoId)마다 기기에 기억함.
+  const [lyricOffset, setLyricOffset] = useState(0);
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(`unbeat:lyric-offset:${track.videoId}`);
+      setLyricOffset(saved ? Number(saved) || 0 : 0);
+    } catch {
+      setLyricOffset(0);
+    }
+  }, [track.videoId]);
+  function changeLyricOffset(delta: number | null) {
+    const next = delta === null ? 0 : Math.round((lyricOffset + delta) * 10) / 10;
+    setLyricOffset(next);
+    try {
+      if (next === 0) localStorage.removeItem(`unbeat:lyric-offset:${track.videoId}`);
+      else localStorage.setItem(`unbeat:lyric-offset:${track.videoId}`, String(next));
+    } catch {
+      /* 저장 실패는 무시(보정은 이번 재생에만 적용) */
+    }
+  }
+  // 지금 재생 위치(보정 반영)보다 시작 시각이 앞선 마지막 줄 = 지금 부르고 있는 줄
   const activeLyricIndex =
     syncedLines.length > 0
-      ? syncedLines.reduce((acc, line, idx) => (line.time <= currentTime ? idx : acc), -1)
+      ? syncedLines.reduce((acc, line, idx) => (line.time + lyricOffset <= currentTime ? idx : acc), -1)
       : -1;
   const activeLyricLineRef = useRef<HTMLParagraphElement>(null);
   // 가사를 읽으려고 사용자가 직접 스크롤했을 땐, 다음 줄로 넘어갈 때마다 자동으로 다시
@@ -1130,6 +1151,7 @@ export default function MiniPlayer({
   // 같은 seekTo 호출을 재사용. 사용자가 직접 누른 이동이니 자동 스크롤 억제 타이머도 리셋해서,
   // 클릭 직후 활성 줄이 화면 밖에 있어도(예: 곡 뒷부분으로 점프) 자동 스크롤이 정상 작동하게 함.
   function handleSeekToLyric(time: number) {
+    time = Math.max(0, time + lyricOffset); // 싱크 보정 반영
     setCurrentTime(time);
     playerRef.current?.seekTo?.(time, true);
     isUserScrollingLyricsRef.current = false;
@@ -1757,6 +1779,34 @@ export default function MiniPlayer({
                     </div>
                   ) : syncedLines.length > 0 ? (
                     <div className="flex flex-col gap-3 px-4 py-6">
+                      <div className="flex items-center justify-between gap-2 text-[11px] text-white/40">
+                        <span>가사가 소리보다 빠르면 늦추세요</span>
+                        <span className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => changeLyricOffset(-0.5)}
+                            className="rounded-full border border-white/15 px-2 py-0.5 hover:bg-white/10"
+                          >
+                            −0.5초
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => changeLyricOffset(null)}
+                            className="min-w-[3.5rem] rounded-full px-2 py-0.5 text-center hover:bg-white/10"
+                            title="눌러서 초기화"
+                          >
+                            {lyricOffset > 0 ? "+" : ""}
+                            {lyricOffset}초
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => changeLyricOffset(0.5)}
+                            className="rounded-full border border-white/15 px-2 py-0.5 hover:bg-white/10"
+                          >
+                            +0.5초
+                          </button>
+                        </span>
+                      </div>
                       {syncedLines.map((line, idx) => (
                         <p
                           key={idx}

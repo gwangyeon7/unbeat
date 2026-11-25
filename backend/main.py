@@ -3942,7 +3942,7 @@ LYRICS_OVH_URL = "https://api.lyrics.ovh/v1"
 LYRICS_CACHE_TTL_SECONDS = 60 * 60 * 24 * 30  # 30일 — 한 번 등록된 가사는 사실상 안 바뀜
 
 
-def _first_lyrics_match(candidates):
+def _first_lyrics_match(candidates, duration=None):
     """
     여러 버전(라이브/리믹스/앨범별/Inst. 표기 오류 등)이 검색될 수 있는데, 인스트루멘탈이
     아니고 가사가 있는 후보 중 동기화 가사(syncedLyrics)가 있는 걸 최우선으로 고름 —
@@ -3955,7 +3955,16 @@ def _first_lyrics_match(candidates):
     바꿔서 해결.
     """
     valid = [c for c in candidates if not c.get("instrumental") and (c.get("syncedLyrics") or c.get("plainLyrics"))]
-    synced_match = next((c for c in valid if c.get("syncedLyrics")), None)
+    synced = [c for c in valid if c.get("syncedLyrics")]
+    # (2026-11-25) 같은 곡도 LRCLIB에 앨범/라이브/콘서트별로 여러 버전이 있고 버전마다 가사 시작 시각이 다름
+    # (빅뱅 "하루하루": 스튜디오 256초 vs 2014 콘서트 294초, 같은 줄이 수 초~십수 초 어긋남). 재생 중인 영상의
+    # 길이를 알면 길이가 가장 비슷한 버전을 골라 "가사가 소리보다 먼저/늦게 넘어가는" 문제를 줄임.
+    # 길이를 모르거나 후보에 길이 정보가 없으면 예전처럼 첫 번째 동기화 후보.
+    if duration and synced:
+        with_dur = [c for c in synced if isinstance(c.get("duration"), (int, float)) and c.get("duration")]
+        if with_dur:
+            return min(with_dur, key=lambda c: abs(c["duration"] - duration))
+    synced_match = synced[0] if synced else None
     return synced_match or (valid[0] if valid else None)
 
 
@@ -3966,7 +3975,7 @@ def _strip_title_annotations(title: str) -> str:
     return re.sub(r"\s+", " ", cleaned).strip()
 
 
-def _search_lrclib(params: dict):
+def _search_lrclib(params: dict, duration=None):
     # (속도 개선, 2026-10-04) 이것도 lastfm_get과 같은 이유로 타임아웃이 없었음 — 게다가
     # _lookup_lyrics는 실패할 때마다 이 함수를 최대 4번 "순차로" 재시도하므로(정확 매칭 →
     # 자유 검색 → 표기 제거 후 정확 매칭 → 자유 검색), LRCLIB이 잠깐이라도 느려지면 한 곡의
@@ -3983,7 +3992,7 @@ def _search_lrclib(params: dict):
     if res.status_code != 200:
         print(f"[lyrics] LRCLIB 요청 실패 ({res.status_code}) params={params}: {res.text[:200]}")
         return None
-    return _first_lyrics_match(res.json())
+    return _first_lyrics_match(res.json(), duration)
 
 
 def _search_lyrics_ovh(artist: str, track: str) -> Optional[str]:
@@ -4011,7 +4020,7 @@ def _lyrics_blocklist_key(artist: str, track: str) -> str:
     return f"lyrics-blocklist:{artist.lower().strip()}:{track.lower().strip()}"
 
 
-def _lookup_lyrics(artist: str, track: str) -> dict:
+def _lookup_lyrics(artist: str, track: str, duration: Optional[int] = None) -> dict:
     """
     /lyrics 엔드포인트와, "가사 있는 곡만 보여주기" 필터(_filter_tracks_with_lyrics) 둘 다
     여기서 공유. 캐시(30일)를 그대로 재사용하기 때문에, 필터링 과정에서 한 번 확인된 곡은
@@ -4048,7 +4057,9 @@ def _lookup_lyrics(artist: str, track: str) -> dict:
     # v2: lyrics.ovh 폴백(§43) 추가로 "못 찾음" 판정 로직이 바뀌어서 캐시 키 버전업 —
     # 안 그러면 예전에 "못 찾음"으로 저장된 결과가 새 폴백을 시도도 안 해보고 그대로 나감
     # ([[학습노트 36번]]과 같은 이유).
-    cache_key = f"lyrics:v2:{artist.lower().strip()}:{track.lower().strip()}"
+    # 재생 길이를 아는 요청은 길이(3초 단위로 묶음)별로 따로 캐시 — 같은 곡도 영상 길이에 따라 맞는 버전이 다름
+    duration_bucket = int(duration) // 3 if duration and duration > 0 else None
+    cache_key = f"lyrics:v3:{artist.lower().strip()}:{track.lower().strip()}:{duration_bucket}"
     cached = get_cached(cache_key)
     if cached is not None:
         return cached
@@ -4065,7 +4076,7 @@ def _lookup_lyrics(artist: str, track: str) -> dict:
         queries.append({"q": f"{artist} {cleaned_track}"})
 
     with ThreadPoolExecutor(max_workers=len(queries)) as executor:
-        results = list(executor.map(_search_lrclib, queries))
+        results = list(executor.map(lambda q: _search_lrclib(q, duration if duration and duration > 0 else None), queries))
     match = next((r for r in results if r is not None), None)
 
     if match is None:
@@ -4088,8 +4099,9 @@ def _lookup_lyrics(artist: str, track: str) -> dict:
 
 
 @app.get("/lyrics")
-def get_lyrics(artist: str, track: str):
-    return _lookup_lyrics(artist, track)
+def get_lyrics(artist: str, track: str, duration: Optional[int] = None):
+    # duration: 재생 중인 영상 길이(초). 주면 길이가 비슷한 가사 버전을 고름(선택)
+    return _lookup_lyrics(artist, track, duration)
 
 
 # "검색해서 어렵게 다시 찾아 들은 곡인데 하필 가사가 없으면 아쉽다"는 피드백으로 추가.

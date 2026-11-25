@@ -294,8 +294,10 @@ export type LyricsResult = {
 
 // 확장 재생 화면 "가사" 탭용. Genius/YouTube 둘 다 가사 원문을 못 줘서 보류했던 기능인데,
 // LRCLIB(lrclib.net)이 API 키 없이 무료로 크라우드소싱 가사를 제공한다는 걸 확인하고 붙임.
-export function getLyrics(artist: string, track: string): Promise<LyricsResult> {
+export function getLyrics(artist: string, track: string, durationSec?: number): Promise<LyricsResult> {
   const params = new URLSearchParams({ artist, track });
+  // 재생 중인 영상 길이를 같이 보내면 길이가 비슷한 가사 버전(스튜디오/라이브 등)을 골라 줌
+  if (durationSec && durationSec > 0) params.set("duration", String(Math.round(durationSec)));
   return fetchJson(`/lyrics?${params.toString()}`);
 }
 

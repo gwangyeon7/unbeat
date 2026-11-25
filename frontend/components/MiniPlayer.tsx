@@ -111,7 +111,16 @@ type LyricLine = { time: number; text: string };
 
 // LRCLIB의 syncedLyrics는 "[mm:ss.xx] 가사" 형식(LRC 포맷) 한 줄씩 이어붙인 문자열 —
 // 초 단위 숫자로 파싱해서 재생 위치(currentTime)와 비교할 수 있게 함.
-function parseSyncedLyrics(synced: string): LyricLine[] {
+// 곡별 고정 보정(초): 유튜브 영상은 스튜디오 음원 앞에 인트로가 붙어 있어 LRC 시각보다 늦게 시작하는 경우가 있음.
+// 설정 UI 없이 알려진 곡만 하드코딩 (빅뱅 "하루하루": 반주 ~10초, 첫 가사 ≈11초 / LRC 0.5~0.9초).
+function lyricOffsetSeconds(artist: string, name: string): number {
+  const a = artist.toLowerCase().replace(/\s/g, "");
+  const n = name.toLowerCase().replace(/\s/g, "");
+  if ((a.includes("빅뱅") || a.includes("bigbang")) && n.startsWith("하루하루")) return 10.1;
+  return 0;
+}
+
+function parseSyncedLyrics(synced: string, offset = 0): LyricLine[] {
   const lines: LyricLine[] = [];
   for (const raw of synced.split("\n")) {
     const match = raw.match(/^\[(\d+):(\d+(?:\.\d+)?)\]\s?(.*)$/);
@@ -120,7 +129,7 @@ function parseSyncedLyrics(synced: string): LyricLine[] {
     const seconds = Number(match[2]);
     const text = match[3].trim();
     if (text.length === 0) continue;
-    lines.push({ time: minutes * 60 + seconds, text });
+    lines.push({ time: minutes * 60 + seconds + offset, text });
   }
   return lines;
 }
@@ -159,8 +168,8 @@ type ChorusWindow = { chorusTime: number; leadInTime: number; endTime: number | 
 // null 반환 → 호출부가 고정 60초 폴백으로 안전하게 처리).
 const MIN_CHORUS_LINE_LENGTH = 8;
 
-function findChorusWindow(syncedLyrics: string): ChorusWindow | null {
-  const lines = parseSyncedLyrics(syncedLyrics);
+function findChorusWindow(syncedLyrics: string, offset = 0): ChorusWindow | null {
+  const lines = parseSyncedLyrics(syncedLyrics, offset);
   const firstSeenAt = new Map<string, number>(); // 정규화된 가사 줄 -> 그 줄의 인덱스(처음 등장)
   for (let i = 0; i < lines.length; i++) {
     const normalized = lines[i].text.trim().toLowerCase();
@@ -655,7 +664,7 @@ export default function MiniPlayer({
       .catch(() => setLyricsRequestState("idle"));
   }
 
-  const syncedLines = lyrics?.syncedLyrics ? parseSyncedLyrics(lyrics.syncedLyrics) : [];
+  const syncedLines = lyrics?.syncedLyrics ? parseSyncedLyrics(lyrics.syncedLyrics, lyricOffsetSeconds(track.artist, track.name)) : [];
   // 지금 재생 위치보다 시작 시각이 앞선 마지막 줄 = 지금 부르고 있는 줄
   const activeLyricIndex =
     syncedLines.length > 0
@@ -956,7 +965,7 @@ export default function MiniPlayer({
       // 늦게 도착한 이 응답으로 엉뚱한(새) 트랙을 건드리지 않도록 중단.
       if (trackVideoIdRef.current !== videoIdAtRequest || !playerRef.current) return;
 
-      const chorus = result?.syncedLyrics ? findChorusWindow(result.syncedLyrics) : null;
+      const chorus = result?.syncedLyrics ? findChorusWindow(result.syncedLyrics, lyricOffsetSeconds(artistAtRequest, nameAtRequest)) : null;
       const chorusValid = !!chorus && chorus.chorusTime > 0 && (!dur || chorus.chorusTime < dur);
       // 곡 앞 8% 이내나 너무 뒤쪽(75% 이후)에 잡힌 후렴은 오탐일 가능성이 커서 신뢰도 낮음으로 취급
       const chorusConfident =
